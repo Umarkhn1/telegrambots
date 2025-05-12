@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>TUIT GPA Калькулятор</title>
+        
+        <link rel="stylesheet" href="styles.css">
+        <script src="./script.js" defer></script>
+    </head>
+<body>
+    <header class="header">
+        <img src="logo.png" alt="TUIT Logo" class="logo">
+        <h1>TUIT GPA Калькулятор</h1>
+    </header>
+
+    <div class="container">
+        <label for="subjectCount" class="description">
+            🎓 <strong>Выберите количество предметов:</strong><br>
+            <span class="note">Теперь можно добавлять оценки за несколько курсов, просто увеличивая количество предметов.</span>
+        </label>
+        <input type="number" id="subjectCount" min="1" max="50" value="5" onchange="generateInputs()">
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Кредиты</th>
+                        <th>Оценка</th>
+                    </tr>
+                </thead>
+                <tbody id="courses"></tbody>
+            </table>
+        </div>
+
+        <button onclick="calculateGPA()">Рассчитать GPA</button>
+        <button class="clear-button" onclick="clearData()">Очистить</button>
+
+        <h3 id="result"></h3>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2025 TUIT GPA Калькулятор. Все права защищены.</p>
+        <p>Свяжитесь с нами в Telegram: <a href="https://t.me/umarkhn_1" target="_blank">@umarkhn_1</a></p>
+    </footer>
+
+    <script>
+        function generateInputs() {
+            let count = document.getElementById("subjectCount").value;
+            let coursesTable = document.getElementById("courses");
+            coursesTable.innerHTML = "";
+
+            for (let i = 0; i < count; i++) {
+                let row = document.createElement("tr");
+                row.innerHTML = `<td>${i + 1}</td>` +
+                                `<td>
+                                    <select class="credits">
+                                        <option value="" selected hidden> </option>
+                                        <option value="2">2</option>
+                                        <option value="4">4</option>
+                                        <option value="6">6</option>
+                                    </select>
+                                </td>` +
+                                `<td>
+                                    <select class="grade">
+                                        <option value="" selected hidden> </option>
+                                        <option value="0">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </td>`;
+                coursesTable.appendChild(row);
+            }
+            saveData();
+        }
+
+        function calculateGPA() {
+            let credits = document.querySelectorAll(".credits");
+            let grades = document.querySelectorAll(".grade");
+            
+            let totalCredits = 0, totalPoints = 0;
+
+            for (let i = 0; i < grades.length; i++) {
+                let credit = parseFloat(credits[i].value);
+                let grade = parseFloat(grades[i].value);
+                
+                if (!isNaN(credit) && credit > 0) {
+                    totalCredits += credit;
+                    totalPoints += grade * credit;
+                }
+            }
+
+            let gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+            document.getElementById("result").innerText = `Ваш GPA: ${gpa.toFixed(2)}`;
+            saveData();
+        }
+
+        function saveData() {
+            let subjectCount = document.getElementById("subjectCount").value;
+            let credits = Array.from(document.querySelectorAll(".credits")).map(e => e.value);
+            let grades = Array.from(document.querySelectorAll(".grade")).map(e => e.value);
+            localStorage.setItem("subjectCount", subjectCount);
+            localStorage.setItem("credits", JSON.stringify(credits));
+            localStorage.setItem("grades", JSON.stringify(grades));
+        }
+
+        function loadData() {
+            let subjectCount = localStorage.getItem("subjectCount") || "5";
+            document.getElementById("subjectCount").value = subjectCount;
+            generateInputs();
+
+            let credits = JSON.parse(localStorage.getItem("credits")) || [];
+            let grades = JSON.parse(localStorage.getItem("grades")) || [];
+            
+            document.querySelectorAll(".credits").forEach((e, i) => {
+                if (credits[i]) e.value = credits[i];
+            });
+            document.querySelectorAll(".grade").forEach((e, i) => {
+                if (grades[i]) e.value = grades[i];
+            });
+        }
+
+        function clearData() {
+            localStorage.removeItem("subjectCount");
+            localStorage.removeItem("credits");
+            localStorage.removeItem("grades");
+            document.getElementById("subjectCount").value = "5";
+            generateInputs();
+            document.getElementById("result").innerText = "";
+        }
+
+        document.addEventListener("DOMContentLoaded", loadData);
+    </script>
+</body>
+</html>
