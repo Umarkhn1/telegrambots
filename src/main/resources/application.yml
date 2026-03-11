@@ -1,26 +1,11 @@
 spring:
   application:
-    name: music-bot
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        jdbc:
-          batch_size: 20
-        order_inserts: true
-        order_updates: true
-  datasource:
-    url: jdbc:postgresql://localhost:5432/DrsMedia
-    driverClassName: org.postgresql.Driver
-    username: postgres
-    password: root123
-    hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
-      connection-timeout: 20000
+    name: bn-saver-bot
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
 
 # ── Telegram Bot ──────────────────────────────────────────
 telegram:
@@ -28,34 +13,26 @@ telegram:
     token: 8723216741:AAFm99BgY_8jdFeXeuT5cVCUrBkDP35kYFs
     username: bn_saver_bot
   channel:
-    username: biz_ness_uz        # username канала без @
+    username: biz_ness_uz
 
 # ── yt-dlp ────────────────────────────────────────────────
 yt-dlp:
   path: "C:\\projects\\tools\\yt-dlp.exe"
-  # Прокси для TikTok (Польша или другой незаблокированный регион)
-  # Бесплатные публичные SOCKS5:  socks5://IP:PORT
-  # Если есть свой VPN/прокси — укажи здесь:
   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754"
-
-
-
+  # Запасные (тот же логин/пароль, менять если основной упал):
+  #   socks5://xwivvutx:dr2gtzbgad7h@23.95.150.145:6114
+  #   socks5://xwivvutx:dr2gtzbgad7h@198.23.239.134:6540
+  #   socks5://xwivvutx:dr2gtzbgad7h@45.38.107.97:6014
+  #   socks5://xwivvutx:dr2gtzbgad7h@64.137.96.74:6641
+  #   socks5://xwivvutx:dr2gtzbgad7h@198.105.121.200:6462
+  #   socks5://xwivvutx:dr2gtzbgad7h@216.10.27.159:6837
+  #   socks5://xwivvutx:dr2gtzbgad7h@142.111.67.146:5611
+  #   socks5://xwivvutx:dr2gtzbgad7h@191.96.254.138:6185
 
 # ── FFmpeg ────────────────────────────────────────────────
 ffmpeg:
   timeout:
     seconds: 300
-
-# ── Spotify (опционально) ─────────────────────────────────
-spotify:
-  client:
-    id: YOUR_CLIENT_ID
-    secret: YOUR_CLIENT_SECRET
-
-# ── Shazam (опционально) ──────────────────────────────────
-shazam:
-  api:
-    key: YOUR_SHAZAM_API_KEY
 
 download:
   directory: downloads
@@ -65,8 +42,7 @@ logging:
   level:
     root: INFO
     org.example.drsmedia: DEBUG
-    org.hibernate: WARN
-    org.springframework: INFO
+    org.springframework: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
@@ -78,16 +54,3 @@ logging:
 # ── Server ────────────────────────────────────────────────
 server:
   port: 8080
-  servlet:
-    context-path: /
-
-# ── Запасные прокси TikTok (webshare.io, логин/пароль те же) ──
-# Если основной перестал работать — раскомментируй нужный:
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@23.95.150.145:6114"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@198.23.239.134:6540"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@45.38.107.97:6014"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@64.137.96.74:6641"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@198.105.121.200:6462"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@216.10.27.159:6837"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@142.111.67.146:5611"
-#   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@191.96.254.138:6185"
