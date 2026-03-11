@@ -1,0 +1,1005 @@
+2026-03-11 20:10:20 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 5880 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 20:10:20 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 20:10:21 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 20:10:21 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-03-11 20:10:22 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 20:10:22 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 20:10:22 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 20:10:22 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 20:10:22 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1297 ms
+2026-03-11 20:10:23 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 20:10:23 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 20:10:24 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@6851b296
+2026-03-11 20:10:24 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 20:10:24 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-03-11 20:10:25 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:10:25 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 20:10:26 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 20:10:27 [main] ERROR o.e.d.config.TelegramBotConfig - ❌ Ошибка регистрации
+Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:10:27 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+2026-03-11 20:10:27 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:10:27 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 20:10:27 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 20:10:27 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2026-03-11 20:10:27 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-03-11 20:10:27 [main] ERROR o.s.boot.SpringApplication - Application run failed
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:200)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	... 21 common frames omitted
+Caused by: Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	... 24 common frames omitted
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:31:56 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 7356 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 20:31:56 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 20:31:56 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 20:31:56 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 12 ms. Found 0 JPA repository interfaces.
+2026-03-11 20:31:57 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 20:31:57 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 20:31:57 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 20:31:57 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 20:31:57 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 965 ms
+2026-03-11 20:31:57 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 20:31:57 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 20:31:57 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1224e1b6
+2026-03-11 20:31:57 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 20:31:57 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-03-11 20:31:58 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:31:58 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 20:31:58 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 20:31:59 [main] ERROR o.e.d.config.TelegramBotConfig - ❌ Ошибка регистрации
+Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:31:59 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+2026-03-11 20:31:59 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:31:59 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 20:31:59 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 20:31:59 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2026-03-11 20:31:59 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-03-11 20:31:59 [main] ERROR o.s.boot.SpringApplication - Application run failed
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:200)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	... 21 common frames omitted
+Caused by: Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	... 24 common frames omitted
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:32:41 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 18764 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 20:32:41 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 20:32:41 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 20:32:41 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-03-11 20:32:41 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 20:32:41 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 20:32:41 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 20:32:42 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 20:32:42 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 872 ms
+2026-03-11 20:32:42 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 20:32:42 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 20:32:42 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1c90029b
+2026-03-11 20:32:42 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 20:32:42 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-03-11 20:32:42 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:32:42 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 20:32:43 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 20:32:43 [main] ERROR o.e.d.config.TelegramBotConfig - ❌ Ошибка регистрации
+Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:32:43 [main] WARN  o.s.b.w.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+2026-03-11 20:32:43 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:32:43 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 20:32:43 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 20:32:43 [main] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2026-03-11 20:32:43 [main] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-03-11 20:32:43 [main] ERROR o.s.boot.SpringApplication - Application run failed
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'telegramBotsApi' defined in class path resource [org/example/drsmedia/config/TelegramBotConfig.class]: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1228)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1194)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at org.example.MusicBotApplication.main(MusicBotApplication.java:9)
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [org.telegram.telegrambots.meta.TelegramBotsApi]: Factory method 'telegramBotsApi' threw exception with message: Error removing old webhook
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:200)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:89)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:169)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	... 21 common frames omitted
+Caused by: Error removing old webhook
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:113)
+	at org.telegram.telegrambots.bots.TelegramLongPollingBot.clearWebhook(TelegramLongPollingBot.java:41)
+	at org.telegram.telegrambots.meta.TelegramBotsApi.registerBot(TelegramBotsApi.java:65)
+	at org.example.drsmedia.config.TelegramBotConfig.telegramBotsApi(TelegramBotConfig.java:18)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.CGLIB$telegramBotsApi$0(<generated>)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at org.example.drsmedia.config.TelegramBotConfig$$SpringCGLIB$$0.telegramBotsApi(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:172)
+	... 24 common frames omitted
+Caused by: Error executing org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook query: [401] Unauthorized
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:19)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodBoolean.deserializeResponse(BotApiMethodBoolean.java:14)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.telegram.telegrambots.util.WebhookUtils.clearWebhook(WebhookUtils.java:108)
+	... 37 common frames omitted
+2026-03-11 20:33:01 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 10904 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 20:33:01 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 20:33:02 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 20:33:02 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-03-11 20:33:02 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 20:33:02 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 20:33:02 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 20:33:02 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 20:33:02 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 954 ms
+2026-03-11 20:33:02 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 20:33:02 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 20:33:03 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1c18ee69
+2026-03-11 20:33:03 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 20:33:03 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-03-11 20:33:03 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 20:33:03 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 20:33:03 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 20:33:07 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован!
+2026-03-11 20:33:07 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 20:33:08 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 20:33:08 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 7.442 seconds (process running for 7.847)
+2026-03-11 20:33:28 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.bot.MusicDownloaderBot - Message received from 743813399: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 20:33:28 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с instagram: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 20:33:30 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] Extracting URL: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 20:33:30 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Setting up session
+2026-03-11 20:33:30 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Downloading JSON metadata
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] DSfVHF0j51j: Downloading 1 format(s): 8
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp4
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.0% of    4.57MiB at  974.74KiB/s ETA 00:04
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at  995.40KiB/s ETA 00:04
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at    2.27MiB/s ETA 00:02
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of    4.57MiB at    3.23MiB/s ETA 00:01
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.7% of    4.57MiB at    4.96MiB/s ETA 00:00
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.3% of    4.57MiB at    7.62MiB/s ETA 00:00
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.7% of    4.57MiB at   12.29MiB/s ETA 00:00
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.4% of    4.57MiB at   12.97MiB/s ETA 00:00
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.9% of    4.57MiB at   12.45MiB/s ETA 00:00
+2026-03-11 20:33:31 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  21.8% of    4.57MiB at   17.42MiB/s ETA 00:00
+2026-03-11 20:33:32 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  43.7% of    4.57MiB at   28.12MiB/s ETA 00:00
+2026-03-11 20:33:32 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  87.4% of    4.57MiB at   12.14MiB/s ETA 00:00
+2026-03-11 20:33:32 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    4.57MiB at   11.37MiB/s ETA 00:00
+2026-03-11 20:33:32 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    4.57MiB in 00:00:00 at 6.28MiB/s   
+2026-03-11 20:33:32 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано (temp): C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp4
+2026-03-11 20:33:34 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Извлечение аудио из: drs_instagram_5201233707900515954.mp4
+2026-03-11 20:33:34 [thelinkdownloader_bot Telegram Executor] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -y -v error -i C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp4 -acodec libmp3lame -ac 2 -ar 44100 -b:a 192000 -vn C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp3
+2026-03-11 20:33:35 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Аудио успешно извлечено: C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp3
+2026-03-11 20:33:35 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удален временный файл: C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp3
+2026-03-11 20:33:35 [thelinkdownloader_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удален временный файл: C:\Users\playb\AppData\Local\Temp\drs_instagram_5201233707900515954.mp4
+2026-03-11 21:12:24 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 21:12:24 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 21:12:24 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 21:12:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 21:12:24 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 21:22:55 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 17112 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 21:22:55 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 21:22:55 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 21:22:55 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-03-11 21:22:56 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 21:22:56 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 21:22:56 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 21:22:56 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 21:22:56 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 926 ms
+2026-03-11 21:22:56 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 21:22:56 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 21:22:56 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4ffa7041
+2026-03-11 21:22:56 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 21:22:57 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 21:22:57 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 21:22:57 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 21:23:01 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 21:23:01 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 21:23:01 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 21:23:01 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 6.896 seconds (process running for 7.337)
+2026-03-11 21:23:40 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 21:23:40 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 21:26:45 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 21:27:15 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 21:27:32 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 21:32:10 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 21:32:10 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 21:32:10 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 21:32:10 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 21:32:10 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 21:32:13 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 16232 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 21:32:13 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 21:32:13 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 21:32:13 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-03-11 21:32:14 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 21:32:14 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 21:32:14 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 21:32:14 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 21:32:14 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 917 ms
+2026-03-11 21:32:14 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 21:32:14 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 21:32:14 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1a89414e
+2026-03-11 21:32:14 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 21:32:14 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 21:32:15 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 21:32:15 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 21:32:15 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 21:32:15 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 21:32:16 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 21:32:16 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.6 seconds (process running for 4.001)
+2026-03-11 21:34:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с instagram: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 21:34:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] Extracting URL: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 21:34:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Setting up session
+2026-03-11 21:34:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Downloading JSON metadata
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] DSfVHF0j51j: Downloading 1 format(s): 8
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_2027404694596878621.mp4
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.0% of    4.57MiB at  249.42KiB/s ETA 00:18
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at  598.87KiB/s ETA 00:09
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at  997.96KiB/s ETA 00:04
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of    4.57MiB at    1.83MiB/s ETA 00:02
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.7% of    4.57MiB at    3.36MiB/s ETA 00:01
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.3% of    4.57MiB at    6.83MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.7% of    4.57MiB at   11.26MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.4% of    4.57MiB at   16.60MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.9% of    4.57MiB at   24.32MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  21.8% of    4.57MiB at   28.13MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  43.7% of    4.57MiB at   27.32MiB/s ETA 00:00
+2026-03-11 21:34:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  87.4% of    4.57MiB at   29.12MiB/s ETA 00:00
+2026-03-11 21:34:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    4.57MiB at   30.43MiB/s ETA 00:00
+2026-03-11 21:34:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    4.57MiB in 00:00:00 at 22.26MiB/s  
+2026-03-11 21:34:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано (temp): C:\Users\playb\AppData\Local\Temp\drs_instagram_2027404694596878621.mp4
+2026-03-11 21:57:54 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с instagram: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 21:57:55 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] Extracting URL: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 21:57:55 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Setting up session
+2026-03-11 21:57:56 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Downloading JSON metadata
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] DSfVHF0j51j: Downloading 1 format(s): 8
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp4
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.0% of    4.57MiB at  516.16KiB/s ETA 00:09
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at  762.14KiB/s ETA 00:06
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at    1.38MiB/s ETA 00:03
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of    4.57MiB at    2.11MiB/s ETA 00:02
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.7% of    4.57MiB at    3.82MiB/s ETA 00:01
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.3% of    4.57MiB at    6.89MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.7% of    4.57MiB at    9.59MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.4% of    4.57MiB at   15.63MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.9% of    4.57MiB at   26.35MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  21.8% of    4.57MiB at   35.77MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  43.7% of    4.57MiB at   31.98MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  87.4% of    4.57MiB at   36.05MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    4.57MiB at   37.40MiB/s ETA 00:00
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    4.57MiB in 00:00:00 at 32.05MiB/s  
+2026-03-11 21:57:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано (temp): C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp4
+2026-03-11 21:58:01 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Извлечение аудио из: drs_instagram_3296920063938680070.mp4
+2026-03-11 21:58:01 [bn_saver_bot Telegram Executor] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -y -v error -i C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp4 -acodec libmp3lame -ac 2 -ar 44100 -b:a 192000 -vn C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp3
+2026-03-11 21:58:03 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Аудио успешно извлечено: C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp3
+2026-03-11 21:58:04 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удален временный файл: C:\Users\playb\AppData\Local\Temp\drs_instagram_3296920063938680070.mp3
+2026-03-11 21:58:54 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с youtube: https://youtube.com/shorts/RVBjSKGcFpg?si=v6B_Wh_mikdb9Fo_
+2026-03-11 21:58:56 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] Extracting URL: https://youtube.com/shorts/RVBjSKGcFpg?si=v6B_Wh_mikdb9Fo_
+2026-03-11 21:58:56 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] RVBjSKGcFpg: Downloading webpage
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] RVBjSKGcFpg: Downloading android vr player API JSON
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] RVBjSKGcFpg: Downloading 1 format(s): 18
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp4
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    1.61MiB at  Unknown B/s ETA Unknown
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.2% of    1.61MiB at    1.96MiB/s ETA 00:00  
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.4% of    1.61MiB at    4.57MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.9% of    1.61MiB at    5.85MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.9% of    1.61MiB at   10.69MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   3.8% of    1.61MiB at   13.65MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   7.7% of    1.61MiB at   16.53MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  15.5% of    1.61MiB at   19.83MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  31.0% of    1.61MiB at   32.08MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  62.1% of    1.61MiB at   50.77MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    1.61MiB at   62.55MiB/s ETA 00:00
+2026-03-11 21:58:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    1.61MiB in 00:00:00 at 18.83MiB/s  
+2026-03-11 21:58:58 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано (temp): C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp4
+2026-03-11 21:59:04 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Извлечение аудио из: drs_youtube_7614049776187098840.mp4
+2026-03-11 21:59:04 [bn_saver_bot Telegram Executor] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -y -v error -i C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp4 -acodec libmp3lame -ac 2 -ar 44100 -b:a 192000 -vn C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp3
+2026-03-11 21:59:04 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Аудио успешно извлечено: C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp3
+2026-03-11 21:59:05 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удален временный файл: C:\Users\playb\AppData\Local\Temp\drs_youtube_7614049776187098840.mp3
+2026-03-11 22:05:47 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с tiktok: https://www.tiktok.com/@aigptgen/video/7611989622112996616
+2026-03-11 22:05:49 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Extracting URL: https://www.tiktok.com/@aigptgen/video/7611989622112996616
+2026-03-11 22:05:49 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7611989622112996616: Downloading webpage
+2026-03-11 22:06:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [TikTok] 7611989622112996616: Unable to download webpage: Failed to perform, curl: (35) Recv failure: Connection was reset. See https://curl.se/libcurl/c/libcurl-errors.html first for more details. (caused by SSLError('Failed to perform, curl: (35) Recv failure: Connection was reset. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.')); please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+2026-03-11 22:06:09 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - Ошибка скачивания видео (exitCode=1)
+2026-03-11 22:06:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с tiktok: https://vt.tiktok.com/ZSu69mYHc/
+2026-03-11 22:06:46 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSu69mYHc/
+2026-03-11 22:06:46 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSu69mYHc: Downloading webpage
+2026-03-11 22:07:06 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [vm.tiktok] ZSu69mYHc: Unable to download webpage: HTTPSConnectionPool(host='vt.tiktok.com', port=443): Read timed out. (read timeout=20.0) (caused by TransportError("HTTPSConnectionPool(host='vt.tiktok.com', port=443): Read timed out. (read timeout=20.0)"))
+2026-03-11 22:07:06 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - Ошибка скачивания видео (exitCode=1)
+2026-03-11 22:14:34 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:15:03 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handlePrivate(MusicDownloaderBot.java:236)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:214)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:15:08 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:15:13 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handlePrivate(MusicDownloaderBot.java:236)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:214)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:16:02 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handlePrivate(MusicDownloaderBot.java:236)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:214)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:16:23 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с instagram: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 22:16:24 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] Extracting URL: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==
+2026-03-11 22:16:24 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Setting up session
+2026-03-11 22:16:25 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Downloading JSON metadata
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] DSfVHF0j51j: Downloading 1 format(s): 8
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_3006998856276148958.mp4
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.0% of    4.57MiB at  314.30KiB/s ETA 00:14
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at  717.42KiB/s ETA 00:06
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.57MiB at    1.11MiB/s ETA 00:04
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of    4.57MiB at    1.79MiB/s ETA 00:02
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.7% of    4.57MiB at    3.12MiB/s ETA 00:01
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.3% of    4.57MiB at    5.26MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.7% of    4.57MiB at    9.76MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.4% of    4.57MiB at   16.94MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.9% of    4.57MiB at   29.87MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  21.8% of    4.57MiB at   34.33MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  43.7% of    4.57MiB at   28.53MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  87.4% of    4.57MiB at   27.00MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    4.57MiB at   27.36MiB/s ETA 00:00
+2026-03-11 22:16:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    4.57MiB in 00:00:00 at 23.08MiB/s  
+2026-03-11 22:16:27 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано (temp): C:\Users\playb\AppData\Local\Temp\drs_instagram_3006998856276148958.mp4
+2026-03-11 22:18:13 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 22:18:13 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 22:18:13 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:18:13 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 22:18:13 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 22:18:17 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 14480 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 22:18:17 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 22:18:18 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 22:18:18 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-03-11 22:18:18 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 22:18:18 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 22:18:18 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 22:18:18 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 22:18:18 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 1070 ms
+2026-03-11 22:18:19 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 22:18:19 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 22:18:19 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@5c4714ef
+2026-03-11 22:18:19 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 22:18:19 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:18:19 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 22:18:20 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 22:18:21 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 22:18:21 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 22:18:21 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 22:18:21 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 4.296 seconds (process running for 4.981)
+2026-03-11 22:19:00 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 22:19:00 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:19:04 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 22:19:04 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handlePrivate(MusicDownloaderBot.java:236)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:214)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:20:25 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 743813399: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 22:20:25 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handlePrivate(MusicDownloaderBot.java:236)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:214)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:22:10 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.bot.MusicDownloaderBot - Ошибка проверки подписки для 920910551: Error executing org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember query: [400] Bad Request: member list is inaccessible
+2026-03-11 22:22:10 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:23:27 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:24:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с tiktok: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:24:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:24:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 22:25:03 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [vm.tiktok] ZSuShFF2S: Unable to download webpage: HTTPSConnectionPool(host='www.tiktok.com', port=443): Read timed out. (read timeout=20.0) (caused by TransportError("HTTPSConnectionPool(host='www.tiktok.com', port=443): Read timed out. (read timeout=20.0)"))
+2026-03-11 22:25:04 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - Ошибка скачивания видео (exitCode=1)
+2026-03-11 22:37:59 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 22:37:59 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 22:37:59 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:37:59 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 22:37:59 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 22:38:03 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 9812 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 22:38:03 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 22:38:04 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 22:38:04 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-03-11 22:38:04 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 22:38:04 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 22:38:04 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 22:38:04 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 22:38:04 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 920 ms
+2026-03-11 22:38:04 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 22:38:04 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 22:38:05 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4ffa7041
+2026-03-11 22:38:05 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 22:38:05 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:38:05 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 22:38:05 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 22:38:06 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 22:38:06 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 22:38:06 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 22:38:06 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.319 seconds (process running for 3.792)
+2026-03-11 22:38:19 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.bot.MusicDownloaderBot - Ошибка обработки апдейта
+Error executing org.telegram.telegrambots.meta.api.methods.send.SendMessage query: [400] Bad Request: can't parse entities: Character '!' is reserved and must be escaped with the preceding '\'
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponseInternal(PartialBotApiMethod.java:54)
+	at org.telegram.telegrambots.meta.api.methods.PartialBotApiMethod.deserializeResponse(PartialBotApiMethod.java:34)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:20)
+	at org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethodMessage.deserializeResponse(BotApiMethodMessage.java:15)
+	at org.telegram.telegrambots.bots.DefaultAbsSender.sendApiMethod(DefaultAbsSender.java:1115)
+	at org.telegram.telegrambots.meta.bots.AbsSender.execute(AbsSender.java:64)
+	at org.example.drsmedia.bot.MusicDownloaderBot.sendSubscribePrompt(MusicDownloaderBot.java:428)
+	at org.example.drsmedia.bot.MusicDownloaderBot.handleCallback(MusicDownloaderBot.java:309)
+	at org.example.drsmedia.bot.MusicDownloaderBot.onUpdateReceived(MusicDownloaderBot.java:193)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
+	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-11 22:38:35 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с youtube: https://youtu.be/uWQ_8CtvzoY?si=hvI4ITw-u3t1sTVQ
+2026-03-11 22:38:36 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] Extracting URL: https://youtu.be/uWQ_8CtvzoY?si=hvI4ITw-u3t1sTVQ
+2026-03-11 22:38:36 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] uWQ_8CtvzoY: Downloading webpage
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] WARNING: [youtube] No supported JavaScript runtime could be found. Only deno is enabled by default; to use another runtime add  --js-runtimes RUNTIME[:PATH]  to your command/config. YouTube extraction without a JS runtime has been deprecated, and some formats may be missing. See  https://github.com/yt-dlp/yt-dlp/wiki/EJS  for details on installing one
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [youtube] uWQ_8CtvzoY: Downloading android vr player API JSON
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] uWQ_8CtvzoY: Downloading 1 format(s): 399+140
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_youtube_2569185463205409685.f399.mp4
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    1.71MiB at  Unknown B/s ETA Unknown
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.2% of    1.71MiB at  989.92KiB/s ETA 00:01  
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.4% of    1.71MiB at    2.26MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.9% of    1.71MiB at    4.83MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.8% of    1.71MiB at    9.99MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   3.6% of    1.71MiB at   20.30MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   7.2% of    1.71MiB at   40.92MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  14.6% of    1.71MiB at   82.17MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  29.2% of    1.71MiB at   14.65MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  58.4% of    1.71MiB at    4.52MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    1.71MiB at    4.82MiB/s ETA 00:00
+2026-03-11 22:38:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    1.71MiB in 00:00:00 at 2.97MiB/s   
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_youtube_2569185463205409685.f140.m4a
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of  293.24KiB at  Unknown B/s ETA Unknown
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.0% of  293.24KiB at  Unknown B/s ETA Unknown
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.4% of  293.24KiB at  Unknown B/s ETA Unknown
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.1% of  293.24KiB at    2.85MiB/s ETA 00:00  
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.6% of  293.24KiB at    5.89MiB/s ETA 00:00
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  21.5% of  293.24KiB at   11.96MiB/s ETA 00:00
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  43.3% of  293.24KiB at   24.11MiB/s ETA 00:00
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  87.0% of  293.24KiB at   48.42MiB/s ETA 00:00
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of  293.24KiB at   18.22MiB/s ETA 00:00
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of  293.24KiB in 00:00:00 at 1.24MiB/s   
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Merger] Merging formats into "C:\Users\playb\AppData\Local\Temp\drs_youtube_2569185463205409685.mp4"
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] Deleting original file C:\Users\playb\AppData\Local\Temp\drs_youtube_2569185463205409685.f399.mp4 (pass -k to keep)
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] Deleting original file C:\Users\playb\AppData\Local\Temp\drs_youtube_2569185463205409685.f140.m4a (pass -k to keep)
+2026-03-11 22:38:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Видео успешно скачано: drs_youtube_2569185463205409685.mp4 (2048 KB)
+2026-03-11 22:39:21 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание видео с tiktok: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:39:22 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:39:22 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 22:39:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [vm.tiktok] ZSuShFF2S: Unable to download webpage: ('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None)) (caused by TransportError("('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None))"))
+2026-03-11 22:39:42 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - Ошибка скачивания видео (exitCode=1)
+2026-03-11 22:47:11 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 22:47:11 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 22:47:11 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:47:11 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 22:47:11 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 22:47:15 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 13800 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 22:47:15 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 22:47:15 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 22:47:15 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-03-11 22:47:16 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 22:47:16 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 22:47:16 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 22:47:16 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 22:47:16 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 922 ms
+2026-03-11 22:47:16 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 22:47:16 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 22:47:16 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@56b05bd7
+2026-03-11 22:47:16 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 22:47:17 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:47:17 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 22:47:17 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 22:47:18 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 22:47:18 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 22:47:18 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 22:47:18 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.277 seconds (process running for 3.714)
+2026-03-11 22:47:53 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание [tiktok]: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:47:53 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --user-agent Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 --add-header Referer:https://www.tiktok.com/ --add-header Accept-Language:en-US,en;q=0.9 --extractor-args tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262 --socket-timeout 30 --retries 5 --fragment-retries 5 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_4203590906695421173.mp4 https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:47:55 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:47:55 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 22:48:14 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [vm.tiktok] ZSuShFF2S: Unable to download webpage: ('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None)) (caused by TransportError("('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None))"))
+2026-03-11 22:48:15 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - ❌ Ошибка скачивания (exitCode=1)
+2026-03-11 22:51:23 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 22:51:23 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 22:51:23 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:51:23 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 22:51:23 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 22:51:27 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 16444 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 22:51:27 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 22:51:28 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 22:51:28 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 11 ms. Found 0 JPA repository interfaces.
+2026-03-11 22:51:28 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 22:51:28 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 22:51:28 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 22:51:28 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 22:51:28 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 958 ms
+2026-03-11 22:51:28 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 22:51:28 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 22:51:29 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@56b05bd7
+2026-03-11 22:51:29 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 22:51:29 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 22:51:29 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 22:51:29 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 22:51:30 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 22:51:30 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 22:51:30 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 22:51:30 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.548 seconds (process running for 3.932)
+2026-03-11 22:51:46 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Скачивание [tiktok]: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:51:46 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Ищем рабочий прокси для TikTok...
+2026-03-11 22:51:46 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Загружено 200 прокси из https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
+2026-03-11 22:51:56 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.services.VideoService - ⚠️ Рабочий прокси не найден — пробуем без прокси
+2026-03-11 22:51:56 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --user-agent Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 --add-header Referer:https://www.tiktok.com/ --add-header Accept-Language:en-US,en;q=0.9 --extractor-args tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262 --socket-timeout 30 --retries 3 --fragment-retries 3 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_5210307417753952894.mp4 https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:51:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 22:51:57 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 22:52:16 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [vm.tiktok] ZSuShFF2S: Unable to download webpage: ('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None)) (caused by TransportError("('Connection aborted.', ConnectionResetError(10054, '��������� ���� ������������� �������� ������������ �����������', None, 10054, None))"))
+2026-03-11 22:52:17 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.services.VideoService - TikTok скачивание упало — сбрасываем кэш прокси
+2026-03-11 22:52:17 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - ❌ Ошибка скачивания (exitCode=1)
+2026-03-11 23:02:38 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 23:02:38 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 23:02:38 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 23:02:38 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 23:02:38 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 23:02:41 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 20164 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 23:02:41 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 23:02:42 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 23:02:42 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 10 ms. Found 0 JPA repository interfaces.
+2026-03-11 23:02:42 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 23:02:42 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 23:02:42 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 23:02:42 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 23:02:42 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 924 ms
+2026-03-11 23:02:43 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 23:02:43 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 23:02:43 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1ddf42dd
+2026-03-11 23:02:43 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 23:02:43 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 23:02:43 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 23:02:43 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 23:02:44 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 23:02:44 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 23:02:44 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 23:02:44 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.287 seconds (process running for 3.74)
+2026-03-11 23:03:07 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Начинается скачивание [tiktok]: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:03:07 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Используем прокси для TikTok: socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754
+2026-03-11 23:03:07 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --proxy socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754 --user-agent Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 --add-header Referer:https://www.tiktok.com/ --add-header Accept-Language:en-US,en;q=0.9 --extractor-args tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262 --socket-timeout 30 --retries 5 --fragment-retries 5 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_11863098160934297618.mp4 https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:03:09 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:03:09 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 23:03:10 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Extracting URL: https://www.tiktok.com/@outtaline/video/7608613249705184525?_r=1&_t=ZS-94baQT6KeO0
+2026-03-11 23:03:10 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7608613249705184525: Downloading API JSON
+2026-03-11 23:03:12 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] WARNING: [TikTok] 7608613249705184525: Failed to parse JSON (caused by JSONDecodeError("Expecting value in '': line 1 column 1 (char 0)")); trying with webpage
+2026-03-11 23:03:12 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7608613249705184525: Downloading webpage
+2026-03-11 23:03:13 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [TikTok] 7608613249705184525: Video not available, status code 0; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+2026-03-11 23:03:14 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - ❌ Ошибка скачивания (exitCode=1)
+2026-03-11 23:04:27 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 23:04:27 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 23:04:27 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 23:04:27 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 23:04:27 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-03-11 23:04:30 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 8092 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-11 23:04:30 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-11 23:04:31 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-11 23:04:31 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 9 ms. Found 0 JPA repository interfaces.
+2026-03-11 23:04:31 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-03-11 23:04:31 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-11 23:04:31 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-11 23:04:31 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-11 23:04:31 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 903 ms
+2026-03-11 23:04:31 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-11 23:04:31 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-03-11 23:04:32 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@18db3b3c
+2026-03-11 23:04:32 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-03-11 23:04:32 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 23:04:32 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-11 23:04:32 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-11 23:04:33 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-11 23:04:33 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-03-11 23:04:34 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-03-11 23:04:34 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 3.881 seconds (process running for 4.315)
+2026-03-11 23:04:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Скачивание [tiktok]: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:04:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Используем ручной прокси: socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754
+2026-03-11 23:04:39 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --proxy socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754 --user-agent Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 --add-header Referer:https://www.tiktok.com/ --add-header Accept-Language:en-US,en;q=0.9 --socket-timeout 30 --retries 3 --fragment-retries 3 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_17167682406538447024.mp4 https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:04:40 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuShFF2S/
+2026-03-11 23:04:40 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuShFF2S: Downloading webpage
+2026-03-11 23:04:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Extracting URL: https://www.tiktok.com/@outtaline/video/7608613249705184525?_r=1&_t=ZS-94baQT6KeO0
+2026-03-11 23:04:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7608613249705184525: Downloading webpage
+2026-03-11 23:04:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] ERROR: [TikTok] 7608613249705184525: Video not available, status code 0; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U
+2026-03-11 23:04:44 [bn_saver_bot Telegram Executor] WARN  o.e.drsmedia.services.VideoService - TikTok скачивание упало — сбрасываем кэш прокси
+2026-03-11 23:04:44 [bn_saver_bot Telegram Executor] ERROR o.e.drsmedia.services.VideoService - ❌ Ошибка скачивания (exitCode=1)
+2026-03-11 23:05:55 [SpringApplicationShutdownHook] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-03-11 23:05:55 [tomcat-shutdown] INFO  o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-03-11 23:05:55 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-03-11 23:05:55 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-03-11 23:05:55 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
