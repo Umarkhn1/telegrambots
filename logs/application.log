@@ -209,3 +209,12 @@ java.lang.NullPointerException: Cannot invoke "String.isEmpty()" because "this.t
 	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
 	at org.telegram.telegrambots.meta.generics.LongPollingBot.onUpdatesReceived(LongPollingBot.java:27)
 	at org.telegram.telegrambots.updatesreceivers.DefaultBotSession$HandlerThread.run(DefaultBotSession.java:312)
+2026-03-12 22:46:39 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 14680 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-12 22:46:39 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-12 22:46:39 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-12 22:46:39 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-12 22:46:39 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-12 22:46:39 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-12 22:46:39 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-12 22:46:40 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-12 22:46:41 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 2.357 seconds (process running for 2.782)
