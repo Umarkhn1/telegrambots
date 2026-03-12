@@ -252,6 +252,8 @@ public class VideoService {
         cmd.add("-f");    cmd.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
         cmd.add("--merge-output-format"); cmd.add("mp4");
         cmd.add("--no-playlist");
+        // Не скачивать файлы крупнее 20 MB — защита сервера от переполнения диска
+        cmd.add("--max-filesize"); cmd.add("20m");
         cmd.add("-o");    cmd.add(outputPath);
         cmd.add(url);
         return cmd;

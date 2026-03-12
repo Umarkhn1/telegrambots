@@ -17,9 +17,9 @@ telegram:
 
 # ── yt-dlp ────────────────────────────────────────────────
 yt-dlp:
-  path: "C:\\projects\\tools\\yt-dlp.exe"
+  path: "/usr/local/bin/yt-dlp"
   tiktok-proxy: "socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754"
-  # Запасные (тот же логин/пароль, менять если основной упал):
+  # Запасные прокси (тот же логин/пароль):
   #   socks5://xwivvutx:dr2gtzbgad7h@23.95.150.145:6114
   #   socks5://xwivvutx:dr2gtzbgad7h@198.23.239.134:6540
   #   socks5://xwivvutx:dr2gtzbgad7h@45.38.107.97:6014
@@ -35,7 +35,7 @@ ffmpeg:
     seconds: 300
 
 download:
-  directory: downloads
+  directory: /tmp/drsmedia
 
 # ── Logging ───────────────────────────────────────────────
 logging:
@@ -47,7 +47,7 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
-    name: logs/application.log
+    name: /opt/drsmedia/logs/application.log
     max-size: 10MB
     max-history: 10
 

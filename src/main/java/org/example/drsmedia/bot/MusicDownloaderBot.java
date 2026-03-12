@@ -108,6 +108,10 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                 "> ⚙️ *Для работы в группе*\n" +
                         "> дайте боту права администратора\\.");
         RU.put("join_channel_btn", "📢 Вступить в канал");
+        RU.put("file_too_large",
+                "> ⚠️ *Видео слишком большое*\n" +
+                        "> Максимальный размер — 20 МБ\.\n" +
+                        "> Попробуйте другое видео или более короткий клип\.");
 
         /* =========== UZBEK LATIN =========== */
         UZ.put("lang_btn", "🇺🇿 O'zbekcha");
@@ -172,6 +176,10 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                 "> ⚙️ *Guruhda ishlashi uchun*\n" +
                         "> botga administrator huquqini bering\\.");
         UZ.put("join_channel_btn", "📢 Kanalga kirish");
+        UZ.put("file_too_large",
+                "> ⚠️ *Video juda katta*\n" +
+                        "> Maksimal hajm — 20 MB\.\n" +
+                        "> Boshqa video yoki qisqaroq klip sinab ko'ring\.");
 
         /* =========== UZBEK CYRILLIC =========== */
         UZC.put("lang_btn", "🇺🇿 Ўзбекча");
@@ -236,6 +244,10 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                 "> ⚙️ *Гуруҳда ишлаши учун*\n" +
                         "> ботга администратор ҳуқуқини беринг\\.");
         UZC.put("join_channel_btn", "📢 Каналга кириш");
+        UZC.put("file_too_large",
+                "> ⚠️ *Видео жуда катта*\n" +
+                        "> Максимал ҳажм — 20 МБ\.\n" +
+                        "> Бошқа видео ёки қисқароқ клип синаб кўринг\.");
     }
 
     // ===================== CONSTRUCTOR =====================
@@ -357,6 +369,14 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                 return;
             }
 
+            // Проверка размера — не отправляем если > 20 MB
+            if (video.length() > MAX_VIDEO_SIZE_BYTES) {
+                log.warn("Видео слишком большое: {} MB ({})", video.length() / 1024 / 1024, video.getName());
+                videoService.cleanup(video);
+                sendMd(chatId, L.get("file_too_large"));
+                return;
+            }
+
             String key = chatId + "_" + System.currentTimeMillis();
             pendingAudio.put(key, url);
 
@@ -442,12 +462,19 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
 
                 audio = videoService.extractAudio(videoFile);
                 if (audio != null) {
-                    SendAudio sa = new SendAudio();
-                    sa.setChatId(chatId.toString());
-                    sa.setAudio(new InputFile(audio));
-                    execute(sa);
-
-                    pendingAudio.remove(key);
+                    // Telegram принимает аудио до 50 MB
+                    if (audio.length() > MAX_AUDIO_SIZE_BYTES) {
+                        log.warn("Аудио слишком большое: {} MB", audio.length() / 1024 / 1024);
+                        videoService.cleanup(audio);
+                        sendMd(chatId, L.get("file_too_large"));
+                        pendingAudio.remove(key);
+                    } else {
+                        SendAudio sa = new SendAudio();
+                        sa.setChatId(chatId.toString());
+                        sa.setAudio(new InputFile(audio));
+                        execute(sa);
+                        pendingAudio.remove(key);
+                    }
                 } else {
                     sendMd(chatId, L.get("audio_error"));
                 }

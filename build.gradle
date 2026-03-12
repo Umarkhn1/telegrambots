@@ -15,41 +15,24 @@ version = '1.0.0'
 repositories {
     mavenCentral()
     maven { url 'https://jitpack.io' }
-    maven { url 'https://repo.maven.apache.org/maven2' }
 }
 
 dependencies {
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
     // Telegram Bot API
     implementation 'org.telegram:telegrambots-spring-boot-starter:6.8.0'
     implementation 'org.telegram:telegrambots:6.8.0'
 
-    // Database - PostgreSQL
-    implementation 'org.postgresql:postgresql:42.7.0'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-
     // FFmpeg Java
     implementation 'net.bramp.ffmpeg:ffmpeg:0.6.2'
 
-    // Spotify API
-    implementation 'se.michaelthelin.spotify:spotify-web-api-java:8.3.6'
-
-    // HTTP Client
-    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
-
     // JSON Processing
-    implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.0'
 
-    // JAXB API (для Java 17+)
-    implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    implementation 'com.sun.xml.bind:jaxb-impl:4.0.4'
-
-    // Logging
+    // Logging + Lombok
     implementation 'org.springframework.boot:spring-boot-starter-logging'
     implementation 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -63,5 +46,6 @@ dependencies {
 }
 
 springBoot {
-    mainClass = 'org.example.drsmedia.MusicBotApplication'
+    // Исправлен пакет — файл лежит в org.example, не в org.example.drsmedia
+    mainClass = 'org.example.MusicBotApplication'
 }
