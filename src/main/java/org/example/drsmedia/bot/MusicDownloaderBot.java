@@ -37,7 +37,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
     private String channelUsername;
 
     private final Map<Long, String> userLang = new ConcurrentHashMap<>();
-    private final Map<String, File> pendingAudio = new ConcurrentHashMap<>();
+    private final Map<String, String> pendingAudio = new ConcurrentHashMap<>();
 
     // ===================== LANG PACKS =====================
     private static final Map<String, String> RU = new HashMap<>();
@@ -358,7 +358,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             }
 
             String key = chatId + "_" + System.currentTimeMillis();
-            pendingAudio.put(key, video);
+            pendingAudio.put(key, url);
 
             SendVideo sv = new SendVideo();
             sv.setChatId(chatId.toString());
@@ -367,6 +367,8 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             sv.setParseMode("MarkdownV2");
             sv.setReplyMarkup(audioMarkup(L.get("audio_btn"), L.get("join_channel_btn"), key));
             execute(sv);
+
+            videoService.cleanup(video);
 
         } catch (Exception e) {
             log.error("Ошибка при обработке ссылки", e);
@@ -409,25 +411,58 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             String key = data.substring(6);
             String lang = userLang.getOrDefault(chatId, "ru");
             Map<String, String> L = getL(lang);
-            File videoFile = pendingAudio.get(key);
+            String url = pendingAudio.get(key);
 
-            if (videoFile == null || !videoFile.exists()) {
+            if (url == null || url.isBlank()) {
+                pendingAudio.remove(key);
                 answerCb(cb.getId(), "❌ Файл устарел. Отправьте ссылку заново.", true);
                 return;
             }
+
             answerCb(cb.getId(), "🎵 Конвертирую...", false);
             sendMd(chatId, L.get("extracting"));
 
-            File audio = videoService.extractAudio(videoFile);
-            if (audio != null) {
-                SendAudio sa = new SendAudio();
-                sa.setChatId(chatId.toString());
-                sa.setAudio(new InputFile(audio));
-                execute(sa);
-                videoService.cleanup(audio);
-            } else {
+            File videoFile = null;
+            File audio = null;
+
+            try {
+                String platform = videoService.detectPlatform(url);
+                if ("unknown".equals(platform)) {
+                    pendingAudio.remove(key);
+                    sendMd(chatId, L.get("unknown_platform"));
+                    return;
+                }
+
+                // заново скачиваем видео только для MP3
+                videoFile = videoService.downloadVideoTemp(url, platform);
+                if (videoFile == null) {
+                    sendMd(chatId, L.get("download_error"));
+                    return;
+                }
+
+                audio = videoService.extractAudio(videoFile);
+                if (audio != null) {
+                    SendAudio sa = new SendAudio();
+                    sa.setChatId(chatId.toString());
+                    sa.setAudio(new InputFile(audio));
+                    execute(sa);
+
+                    pendingAudio.remove(key);
+                } else {
+                    sendMd(chatId, L.get("audio_error"));
+                }
+            } catch (Exception e) {
+                log.error("Ошибка при конвертации аудио", e);
                 sendMd(chatId, L.get("audio_error"));
+            } finally {
+                if (audio != null && audio.exists()) {
+                    videoService.cleanup(audio);
+                }
+                if (videoFile != null && videoFile.exists()) {
+                    videoService.cleanup(videoFile);
+                }
             }
+            return;
         }
     }
 

@@ -218,3 +218,103 @@ java.lang.NullPointerException: Cannot invoke "String.isEmpty()" because "this.t
 2026-03-12 22:46:39 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
 2026-03-12 22:46:40 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
 2026-03-12 22:46:41 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 2.357 seconds (process running for 2.782)
+2026-03-12 22:53:25 [main] INFO  org.example.MusicBotApplication - Starting MusicBotApplication using Java 17.0.18 with PID 1576 (C:\Users\playb\IdeaProjects\DRSMedia\build\classes\java\main started by playb in C:\Users\playb\IdeaProjects\DRSMedia)
+2026-03-12 22:53:25 [main] INFO  org.example.MusicBotApplication - No active profile set, falling back to 1 default profile: "default"
+2026-03-12 22:53:26 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-03-12 22:53:26 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.52]
+2026-03-12 22:53:26 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-03-12 22:53:26 [main] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -version
+2026-03-12 22:53:27 [main] INFO  o.e.drsmedia.services.VideoService - FFmpeg инициализирован успешно
+2026-03-12 22:53:27 [main] INFO  o.e.d.config.TelegramBotConfig - ✅ Бот зарегистрирован успешно!
+2026-03-12 22:53:28 [main] INFO  org.example.MusicBotApplication - Started MusicBotApplication in 2.561 seconds (process running for 3.18)
+2026-03-12 22:54:05 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Скачивание [instagram]: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==%5C
+2026-03-12 22:54:05 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --user-agent Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 --add-header Referer:https://www.instagram.com/ --socket-timeout 30 --retries 3 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.mp4 https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==%5C
+2026-03-12 22:54:06 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] Extracting URL: https://www.instagram.com/reel/DSfVHF0j51j/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==%5C
+2026-03-12 22:54:06 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Setting up session
+2026-03-12 22:54:07 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Instagram] DSfVHF0j51j: Downloading JSON metadata
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] DSfVHF0j51j: Downloading 1 format(s): dash-1493125638439125v+dash-1347470790725744a
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.fdash-1493125638439125v.mp4
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.0% of    4.26MiB at  500.16KiB/s ETA 00:08
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.1% of    4.26MiB at  749.83KiB/s ETA 00:05
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.2% of    4.26MiB at    1.37MiB/s ETA 00:03
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of    4.26MiB at    2.09MiB/s ETA 00:02
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.7% of    4.26MiB at    3.79MiB/s ETA 00:01
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.4% of    4.26MiB at    6.84MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.9% of    4.26MiB at   11.27MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   5.8% of    4.26MiB at   17.79MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  11.7% of    4.26MiB at   27.73MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  23.5% of    4.26MiB at   35.66MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  47.0% of    4.26MiB at   36.28MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  93.9% of    4.26MiB at   35.00MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of    4.26MiB at   35.16MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of    4.26MiB in 00:00:00 at 23.40MiB/s  
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.fdash-1347470790725744a.m4a
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of  311.03KiB at  199.88KiB/s ETA 00:01
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   1.0% of  311.03KiB at  499.66KiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.3% of  311.03KiB at 1001.06KiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   4.8% of  311.03KiB at    1.83MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  10.0% of  311.03KiB at    3.37MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  20.3% of  311.03KiB at    6.15MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  40.8% of  311.03KiB at    9.54MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  82.0% of  311.03KiB at   15.56MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of  311.03KiB at   17.87MiB/s ETA 00:00
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of  311.03KiB in 00:00:00 at 6.33MiB/s   
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [Merger] Merging formats into "C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.mp4"
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] Deleting original file C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.fdash-1493125638439125v.mp4 (pass -k to keep)
+2026-03-12 22:54:08 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] Deleting original file C:\Users\playb\AppData\Local\Temp\drs_instagram_13093127500593605736.fdash-1347470790725744a.m4a (pass -k to keep)
+2026-03-12 22:54:09 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - ✅ Скачано: drs_instagram_13093127500593605736.mp4 (4683 KB)
+2026-03-12 22:54:10 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удалён: drs_instagram_13093127500593605736.mp4
+2026-03-12 22:54:22 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Скачивание [tiktok]: https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:22 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Используем ручной прокси: socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754
+2026-03-12 22:54:22 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --proxy socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754 --socket-timeout 30 --retries 3 --fragment-retries 3 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_9751081196971560276.mp4 https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:24 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:24 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuSAugH5: Downloading webpage
+2026-03-12 22:54:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Extracting URL: https://www.tiktok.com/@abdusaidovv7/video/7607542203795180808?_r=1&_t=ZS-94bdlX0mrq4
+2026-03-12 22:54:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7607542203795180808: Downloading webpage
+2026-03-12 22:54:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Solving JS challenge using native Python implementation
+2026-03-12 22:54:26 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7607542203795180808: Downloading webpage with challenge cookie
+2026-03-12 22:54:28 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] 7607542203795180808: Downloading 1 format(s): bytevc1_720p_141269-1
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_tiktok_9751081196971560276.mp4
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of  333.58KiB at  499.98KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.9% of  333.58KiB at  422.69KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.1% of  333.58KiB at  346.00KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   4.5% of  333.58KiB at  496.20KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   9.3% of  333.58KiB at  266.35KiB/s ETA 00:01
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  18.9% of  333.58KiB at  304.65KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  38.1% of  333.58KiB at  438.83KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  76.4% of  333.58KiB at  675.55KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of  333.58KiB at  816.67KiB/s ETA 00:00
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of  333.58KiB in 00:00:01 at 283.50KiB/s 
+2026-03-12 22:54:29 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - ✅ Скачано: drs_tiktok_9751081196971560276.mp4 (333 KB)
+2026-03-12 22:54:30 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удалён: drs_tiktok_9751081196971560276.mp4
+2026-03-12 22:54:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Скачивание [tiktok]: https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:38 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Используем ручной прокси: socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754
+2026-03-12 22:54:38 [bn_saver_bot Telegram Executor] DEBUG o.e.drsmedia.services.VideoService - Команда: C:\projects\tools\yt-dlp.exe --proxy socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754 --socket-timeout 30 --retries 3 --fragment-retries 3 -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best --merge-output-format mp4 --no-playlist -o C:\Users\playb\AppData\Local\Temp\drs_tiktok_481520186892778752.mp4 https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] Extracting URL: https://vt.tiktok.com/ZSuSAugH5/
+2026-03-12 22:54:39 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [vm.tiktok] ZSuSAugH5: Downloading webpage
+2026-03-12 22:54:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Extracting URL: https://www.tiktok.com/@abdusaidovv7/video/7607542203795180808?_r=1&_t=ZS-94bdlX0mrq4
+2026-03-12 22:54:41 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7607542203795180808: Downloading webpage
+2026-03-12 22:54:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] Solving JS challenge using native Python implementation
+2026-03-12 22:54:42 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [TikTok] 7607542203795180808: Downloading webpage with challenge cookie
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [info] 7607542203795180808: Downloading 1 format(s): bytevc1_720p_141269-1
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] Destination: C:\Users\playb\AppData\Local\Temp\drs_tiktok_481520186892778752.mp4
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] 
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.3% of  333.58KiB at   31.64KiB/s ETA 00:10
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   0.9% of  333.58KiB at   89.26KiB/s ETA 00:03
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   2.1% of  333.58KiB at  202.24KiB/s ETA 00:01
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   4.5% of  333.58KiB at  421.22KiB/s ETA 00:00
+2026-03-12 22:54:43 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]   9.3% of  333.58KiB at  273.05KiB/s ETA 00:01
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  18.9% of  333.58KiB at  352.50KiB/s ETA 00:00
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  38.1% of  333.58KiB at  470.87KiB/s ETA 00:00
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download]  76.4% of  333.58KiB at  706.72KiB/s ETA 00:00
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100.0% of  333.58KiB at  844.41KiB/s ETA 00:00
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - [yt-dlp] [download] 100% of  333.58KiB in 00:00:01 at 329.34KiB/s 
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - ✅ Скачано: drs_tiktok_481520186892778752.mp4 (333 KB)
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Извлечение аудио: drs_tiktok_481520186892778752.mp4
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  net.bramp.ffmpeg.RunProcessFunction - ffmpeg -y -v error -i C:\Users\playb\AppData\Local\Temp\drs_tiktok_481520186892778752.mp4 -acodec libmp3lame -ac 2 -ar 44100 -b:a 192000 -vn C:\Users\playb\AppData\Local\Temp\drs_tiktok_481520186892778752.mp3
+2026-03-12 22:54:44 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - ✅ Аудио готово: C:\Users\playb\AppData\Local\Temp\drs_tiktok_481520186892778752.mp3
+2026-03-12 22:54:45 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удалён: drs_tiktok_481520186892778752.mp3
+2026-03-12 22:54:45 [bn_saver_bot Telegram Executor] INFO  o.e.drsmedia.services.VideoService - Удалён: drs_tiktok_481520186892778752.mp4
