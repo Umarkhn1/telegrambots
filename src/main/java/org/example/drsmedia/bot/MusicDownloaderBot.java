@@ -39,6 +39,9 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
     private final Map<Long, String> userLang = new ConcurrentHashMap<>();
     private final Map<String, String> pendingAudio = new ConcurrentHashMap<>();
 
+    private static final long MAX_VIDEO_SIZE_BYTES = 20L * 1024 * 1024;
+    private static final long MAX_AUDIO_SIZE_BYTES = 50L * 1024 * 1024;
+
     // ===================== LANG PACKS =====================
     private static final Map<String, String> RU = new HashMap<>();
     private static final Map<String, String> UZ = new HashMap<>();
@@ -110,8 +113,8 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         RU.put("join_channel_btn", "📢 Вступить в канал");
         RU.put("file_too_large",
                 "> ⚠️ *Видео слишком большое*\n" +
-                        "> Максимальный размер — 20 МБ\.\n" +
-                        "> Попробуйте другое видео или более короткий клип\.");
+                        "> Максимальный размер — 20 МБ\\.\n" +
+                        "> Попробуйте другое видео или более короткий клип\\.");
 
         /* =========== UZBEK LATIN =========== */
         UZ.put("lang_btn", "🇺🇿 O'zbekcha");
@@ -178,8 +181,8 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZ.put("join_channel_btn", "📢 Kanalga kirish");
         UZ.put("file_too_large",
                 "> ⚠️ *Video juda katta*\n" +
-                        "> Maksimal hajm — 20 MB\.\n" +
-                        "> Boshqa video yoki qisqaroq klip sinab ko'ring\.");
+                        "> Maksimal hajm — 20 MB\\.\n" +
+                        "> Boshqa video yoki qisqaroq klip sinab ko'ring\\.");
 
         /* =========== UZBEK CYRILLIC =========== */
         UZC.put("lang_btn", "🇺🇿 Ўзбекча");
@@ -246,8 +249,8 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZC.put("join_channel_btn", "📢 Каналга кириш");
         UZC.put("file_too_large",
                 "> ⚠️ *Видео жуда катта*\n" +
-                        "> Максимал ҳажм — 20 МБ\.\n" +
-                        "> Бошқа видео ёки қисқароқ клип синаб кўринг\.");
+                        "> Максимал ҳажм — 20 МБ\\.\n" +
+                        "> Бошқа видео ёки қисқароқ клип синаб кўринг\\.");
     }
 
     // ===================== CONSTRUCTOR =====================
