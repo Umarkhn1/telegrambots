@@ -1,6 +1,7 @@
 package org.example.drsmedia.bot;
 
 import lombok.extern.slf4j.Slf4j;
+import org.example.drsmedia.services.BotTaskService;
 import org.example.drsmedia.services.VideoService;
 import org.example.drsmedia.util.UrlDetector;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,8 +39,9 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
 
     private final Map<Long, String> userLang = new ConcurrentHashMap<>();
     private final Map<String, String> pendingAudio = new ConcurrentHashMap<>();
+    private final BotTaskService botTaskService;
 
-    private static final long MAX_VIDEO_SIZE_BYTES = 20L * 1024 * 1024;
+    private static final long MAX_VIDEO_SIZE_BYTES = 50L * 1024 * 1024;
     private static final long MAX_AUDIO_SIZE_BYTES = 50L * 1024 * 1024;
 
     // ===================== LANG PACKS =====================
@@ -51,25 +53,20 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         /* =========== RUSSIAN =========== */
         RU.put("lang_btn", "🇷🇺 Русский");
         RU.put("subscribe_msg",
-                "**\\· Доступ закрыт \\·**\n\n" +
-                        "> 🔒 Чтобы использовать бота,\n" +
-                        "> подпишитесь на наш канал\\.\n\n" +
-                        "Нажмите *Подписаться*, затем *Я подписался* ✅");
+                "\\· *Доступ закрыт* \\·\n" +
+                        "> 🔒 Чтобы использовать бота подпишитесь на наш канал\\.\n" +
+                        "> Нажмите *Подписаться*, затем *Я подписался* ✅");
         RU.put("subscribe_btn", "📢 Подписаться на канал");
         RU.put("check_sub_btn", "✅ Я подписался");
         RU.put("not_subscribed", "❌ Вы ещё не подписались\\. Подпишитесь и нажмите кнопку ещё раз\\.");
         RU.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Привет\\! Я скачиваю видео\n" +
-                        "> с YouTube, TikTok и Instagram\n" +
-                        "> и конвертирую в MP3\n" +
-                        "> одним нажатием кнопки\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Привет\\! Я скачиваю видео с YouTube, TikTok и Instagram и конвертирую в MP3 одним нажатием кнопки\\.\n" +
                         "> 📥 *Что умею:*\n" +
                         "> • Скачать видео\n" +
                         "> • Конвертировать в MP3\n" +
-                        "> • Работаю в группах \\(для админов\\)\n\n" +
-                        "> 💡 *Как использовать:*\n" +
-                        "> Просто отправь ссылку\\!");
+                        "> • Работаю в группах \\(для админов\\)\n" +
+                        "> 💡 Просто отправь ссылку\\!");
         RU.put("downloading", "⏳ Скачиваю видео\\.\\.\\.");
         RU.put("extracting", "🎵 Конвертирую в MP3\\.\\.\\.");
         RU.put("unknown_platform",
@@ -78,66 +75,57 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         RU.put("download_error",
                 "> ❌ *Не удалось скачать видео*\n" +
                         "> Проверьте ссылку и попробуйте снова");
-        RU.put("audio_error",
-                "> ⚠️ Видео отправлено,\n" +
-                        "> но конвертация в MP3 не удалась");
-        RU.put("error",
-                "> ❌ Ошибка при обработке запроса");
+        RU.put("audio_error", "> ⚠️ Видео отправлено, но конвертация в MP3 не удалась");
+        RU.put("error", "> ❌ Ошибка при обработке запроса");
         RU.put("audio_btn", "🎵 Скачать MP3");
-        RU.put("video_caption",
-                "✅ *Видео готово\\!*\n\n" +
-                        "> 👇 Нажми кнопку для MP3");
+        RU.put("video_caption", "✅ *Видео готово\\!* 👇 MP3:");
         RU.put("not_url",
                 "> ❓ Это не похоже на ссылку\\.\n" +
-                        "> Отправь ссылку YouTube, TikTok\n" +
-                        "> или Instagram");
+                        "> Отправь ссылку YouTube, TikTok или Instagram");
         RU.put("change_lang_btn", "🌐 Сменить язык");
         RU.put("help_btn", "ℹ️ Помощь");
         RU.put("add_to_group_btn", "➕ Добавить в группу");
         RU.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n\n" +
-                        "> 📥 *RU:* Отправьте ссылку YouTube,\n" +
-                        "> TikTok или Instagram — скачаю видео\n" +
-                        "> и дам кнопку для MP3\\.\n\n" +
-                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram\n" +
-                        "> havolasini yuboring — video yuklayman\n" +
-                        "> va MP3 tugmasini ko'rsataman\\.\n\n" +
-                        "> ⚙️ Для работы нужны права *админа*\\.\n" +
-                        "> Ishlash uchun *admin* huquqi kerak\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n" +
+                        "> 📥 *RU:* Отправьте ссылку YouTube, TikTok или Instagram — скачаю видео и дам кнопку для MP3\\.\n" +
+                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram havolasini yuboring — video yuklayman va MP3 tugmasini ko'rsataman\\.\n" +
+                        "> ⚙️ Для работы нужны права *админа*\\. Ishlash uchun *admin* huquqi kerak\\.\n" +
                         "> 📢 *Поддержите нас и вступите в канал ниже*\\.");
         RU.put("channel_support_btn", "📢 Наш канал");
         RU.put("need_admin",
                 "> ⚙️ *Для работы в группе*\n" +
                         "> дайте боту права администратора\\.");
-        RU.put("join_channel_btn", "📢 Вступить в канал");
+        RU.put("join_channel_btn", "📢 Подписаться на канал");
         RU.put("file_too_large",
                 "> ⚠️ *Видео слишком большое*\n" +
-                        "> Максимальный размер — 20 МБ\\.\n" +
+                        "> Максимальный размер — 50 МБ\\.\n" +
                         "> Попробуйте другое видео или более короткий клип\\.");
-
+        RU.put("photo_not_supported",
+                "> 🖼 *Фото не поддерживается*\n" +
+                        "> Бот скачивает только видео и Reels\\.\n" +
+                        "> Отправьте ссылку на видео\\.");
         /* =========== UZBEK LATIN =========== */
+        UZ.put("photo_not_supported",
+                "> 🖼 *Rasm qo'llab\\-quvvatlanmaydi*\n" +
+                        "> Bot faqat video va Reels yukLaydi\\.\n" +
+                        "> Video havolasini yuboring\\.");
         UZ.put("lang_btn", "🇺🇿 O'zbekcha");
         UZ.put("subscribe_msg",
-                "**\\· Kirish yopiq \\·**\n\n" +
-                        "> 🔒 Botdan foydalanish uchun\n" +
-                        "> kanalimizga obuna bo'ling\\.\n\n" +
-                        "*Obuna bo'lish* tugmasini bosing, so'ng *Obuna bo'ldim* ✅");
+                "\\· *Kirish yopiq* \\·\n" +
+                        "> 🔒 Botdan foydalanish uchun kanalimizga obuna bo'ling\\.\n" +
+                        "> *Obuna bo'lish* tugmasini bosing, so'ng *Obuna bo'ldim* ✅");
         UZ.put("subscribe_btn", "📢 Kanalga obuna bo'lish");
         UZ.put("check_sub_btn", "✅ Obuna bo'ldim");
         UZ.put("not_subscribed", "❌ Siz hali obuna bo'lmadingiz\\. Obuna bo'lib, tugmani yana bosing\\.");
         UZ.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Salom\\! Men YouTube, TikTok\n" +
-                        "> va Instagram'dan video yuklayman\n" +
-                        "> va MP3 ga aylantiraman\n" +
-                        "> bitta tugma bilan\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Salom\\! Men YouTube, TikTok va Instagram'dan video yuklayman va MP3 ga aylantiraman bitta tugma bilan\\.\n" +
                         "> 📥 *Nima qila olaman:*\n" +
                         "> • Video yuklab olish\n" +
                         "> • MP3 ga aylantirish\n" +
-                        "> • Guruhlarda ishlaydi \\(adminlar uchun\\)\n\n" +
-                        "> 💡 *Qanday ishlatish:*\n" +
-                        "> Shunchaki havola yuboring\\!");
+                        "> • Guruhlarda ishlaydi \\(adminlar uchun\\)\n" +
+                        "> 💡 Shunchaki havola yuboring\\!");
         UZ.put("downloading", "⏳ Video yuklanmoqda\\.\\.\\.");
         UZ.put("extracting", "🎵 MP3 ga aylantirilmoqda\\.\\.\\.");
         UZ.put("unknown_platform",
@@ -146,66 +134,50 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZ.put("download_error",
                 "> ❌ *Video yuklab bo'lmadi*\n" +
                         "> Havolani tekshiring va qayta urining");
-        UZ.put("audio_error",
-                "> ⚠️ Video yuborildi,\n" +
-                        "> lekin MP3 ga aylantirib bo'lmadi");
-        UZ.put("error",
-                "> ❌ So'rovni qayta ishlashda xatolik");
+        UZ.put("audio_error", "> ⚠️ Video yuborildi, lekin MP3 ga aylantirib bo'lmadi");
+        UZ.put("error", "> ❌ So'rovni qayta ishlashda xatolik");
         UZ.put("audio_btn", "🎵 MP3 yuklab olish");
-        UZ.put("video_caption",
-                "✅ *Video tayyor\\!*\n\n" +
-                        "> 👇 MP3 uchun tugmani bosing");
+        UZ.put("video_caption", "✅ *Video tayyor\\!* 👇 MP3:");
         UZ.put("not_url",
                 "> ❓ Bu havola emas\\.\n" +
-                        "> YouTube, TikTok yoki Instagram\n" +
-                        "> havolasini yuboring");
+                        "> YouTube, TikTok yoki Instagram havolasini yuboring");
         UZ.put("change_lang_btn", "🌐 Tilni o'zgartirish");
         UZ.put("help_btn", "ℹ️ Yordam");
         UZ.put("add_to_group_btn", "➕ Guruhga qo'shish");
         UZ.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n\n" +
-                        "> 📥 *RU:* Отправьте ссылку YouTube,\n" +
-                        "> TikTok или Instagram — скачаю видео\n" +
-                        "> и дам кнопку для MP3\\.\n\n" +
-                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram\n" +
-                        "> havolasini yuboring — video yuklayman\n" +
-                        "> va MP3 tugmasini ko'rsataman\\.\n\n" +
-                        "> ⚙️ Для работы нужны права *админа*\\.\n" +
-                        "> Ishlash uchun *admin* huquqi kerak\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n" +
+                        "> 📥 *RU:* Отправьте ссылку YouTube, TikTok или Instagram — скачаю видео и дам кнопку для MP3\\.\n" +
+                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram havolasini yuboring — video yuklayman va MP3 tugmasini ko'rsataman\\.\n" +
+                        "> ⚙️ Для работы нужны права *админа*\\. Ishlash uchun *admin* huquqi kerak\\.\n" +
                         "> 📢 *Поддержите нас и вступите в канал ниже*\\.");
         UZ.put("channel_support_btn", "📢 Bizning kanal");
         UZ.put("need_admin",
                 "> ⚙️ *Guruhda ishlashi uchun*\n" +
                         "> botga administrator huquqini bering\\.");
-        UZ.put("join_channel_btn", "📢 Kanalga kirish");
+        UZ.put("join_channel_btn", "📢 Kanalga obuna bo'lish");
         UZ.put("file_too_large",
                 "> ⚠️ *Video juda katta*\n" +
-                        "> Maksimal hajm — 20 MB\\.\n" +
+                        "> Maksimal hajm — 50 MB\\.\n" +
                         "> Boshqa video yoki qisqaroq klip sinab ko'ring\\.");
 
         /* =========== UZBEK CYRILLIC =========== */
         UZC.put("lang_btn", "🇺🇿 Ўзбекча");
         UZC.put("subscribe_msg",
-                "**\\· Кириш ёпиқ \\·**\n\n" +
-                        "> 🔒 Ботдан фойдаланиш учун\n" +
-                        "> каналимизга обуна бўлинг\\.\n\n" +
-                        "*Обуна бўлиш* тугмасини босинг, сўнг *Обуна бўлдим* ✅");
+                "\\· *Кириш ёпиқ* \\·\n" +
+                        "> 🔒 Ботдан фойдаланиш учун каналимизга обуна бўлинг\\.\n" +
+                        "> *Обуна бўлиш* тугмасини босинг, сўнг *Обуна бўлдим* ✅");
         UZC.put("subscribe_btn", "📢 Каналга обуна бўлиш");
         UZC.put("check_sub_btn", "✅ Обуна бўлдим");
         UZC.put("not_subscribed", "❌ Сиз ҳали обуна бўлмадингиз\\. Обуна бўлиб, тугмани яна босинг\\.");
         UZC.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Салом\\! Мен YouTube, TikTok\n" +
-                        "> ва Instagram'дан видео юклайман\n" +
-                        "> ва MP3 га айлантираман\n" +
-                        "> битта тугма билан\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Салом\\! Мен YouTube, TikTok ва Instagram'дан видео юклайман ва MP3 га айлантираман битта тугма билан\\.\n" +
                         "> 📥 *Нима қила оламан:*\n" +
                         "> • Видео юклаб олиш\n" +
                         "> • MP3 га айлантириш\n" +
-                        "> • Гуруҳларда ишлайди \\(админлар учун\\)\n\n" +
-                        "> 💡 *Қандай ишлатиш:*\n" +
-                        "> Шунчаки ҳавола юборинг\\!");
+                        "> • Гуруҳларда ишлайди \\(админлар учун\\)\n" +
+                        "> 💡 Шунчаки ҳавола юборинг\\!");
         UZC.put("downloading", "⏳ Видео юкланмоқда\\.\\.\\.");
         UZC.put("extracting", "🎵 MP3 га айлантирилмоқда\\.\\.\\.");
         UZC.put("unknown_platform",
@@ -214,64 +186,54 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZC.put("download_error",
                 "> ❌ *Видео юклаб бўлмади*\n" +
                         "> Ҳаволани текширинг ва қайта уринг");
-        UZC.put("audio_error",
-                "> ⚠️ Видео юборилди,\n" +
-                        "> лекин MP3 га айлантириб бўлмади");
-        UZC.put("error",
-                "> ❌ Сўровни қайта ишлашда хатолик");
+        UZC.put("audio_error", "> ⚠️ Видео юборилди, лекин MP3 га айлантириб бўлмади");
+        UZC.put("error", "> ❌ Сўровни қайта ишлашда хатолик");
         UZC.put("audio_btn", "🎵 MP3 юклаб олиш");
-        UZC.put("video_caption",
-                "✅ *Видео тайёр\\!*\n\n" +
-                        "> 👇 MP3 учун тугмани босинг");
+        UZC.put("video_caption", "✅ *Видео тайёр\\!* 👇 MP3:");
         UZC.put("not_url",
                 "> ❓ Бу ҳавола эмас\\.\n" +
-                        "> YouTube, TikTok ёки Instagram\n" +
-                        "> ҳаволасини юборинг");
+                        "> YouTube, TikTok ёки Instagram ҳаволасини юборинг");
         UZC.put("change_lang_btn", "🌐 Тилни ўзгартириш");
         UZC.put("help_btn", "ℹ️ Ёрдам");
         UZC.put("add_to_group_btn", "➕ Гуруҳга қўшиш");
         UZC.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n\n" +
-                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n\n" +
-                        "> 📥 *RU:* Отправьте ссылку YouTube,\n" +
-                        "> TikTok или Instagram — скачаю видео\n" +
-                        "> и дам кнопку для MP3\\.\n\n" +
-                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram\n" +
-                        "> havolasini yuboring — video yuklayman\n" +
-                        "> va MP3 tugmasini ko'rsataman\\.\n\n" +
-                        "> ⚙️ Для работы нужны права *админа*\\.\n" +
-                        "> Ishlash uchun *admin* huquqi kerak\\.\n\n" +
+                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                        "> 👋 Привет\\! / Salom\\! / Салом\\!\n" +
+                        "> 📥 *RU:* Отправьте ссылку YouTube, TikTok или Instagram — скачаю видео и дам кнопку для MP3\\.\n" +
+                        "> 📥 *UZ:* YouTube, TikTok yoki Instagram havolasini yuboring — video yuklayman va MP3 tugmasini ko'rsataman\\.\n" +
+                        "> ⚙️ Для работы нужны права *админа*\\. Ishlash uchun *admin* huquqi kerak\\.\n" +
                         "> 📢 *Поддержите нас и вступите в канал ниже*\\.");
         UZC.put("channel_support_btn", "📢 Бизнинг канал");
         UZC.put("need_admin",
                 "> ⚙️ *Гуруҳда ишлаши учун*\n" +
                         "> ботга администратор ҳуқуқини беринг\\.");
-        UZC.put("join_channel_btn", "📢 Каналга кириш");
+        UZC.put("join_channel_btn", "📢 Каналга обуна бўлиш");
         UZC.put("file_too_large",
                 "> ⚠️ *Видео жуда катта*\n" +
-                        "> Максимал ҳажм — 20 МБ\\.\n" +
+                        "> Максимал ҳажм — 50 МБ\\.\n" +
                         "> Бошқа видео ёки қисқароқ клип синаб кўринг\\.");
+        UZC.put("photo_not_supported",
+                "> 🖼 *Расм қўллаб\\-қувватланмайди*\n" +
+                        "> Бот фақат видео ва Reels юклайди\\.\n" +
+                        "> Видео ҳаволасини юборинг\\.");
     }
 
-    // ===================== CONSTRUCTOR =====================
     public MusicDownloaderBot(
             @Value("${telegram.bot.token}") String botToken,
             @Value("${telegram.bot.username}") String botUsername,
-            VideoService videoService) {
+            VideoService videoService,
+            BotTaskService botTaskService) {
         this.botToken = botToken;
         this.botUsername = botUsername;
         this.videoService = videoService;
+        this.botTaskService = botTaskService;
     }
 
     @Override
-    public String getBotUsername() {
-        return botUsername;
-    }
+    public String getBotUsername() { return botUsername; }
 
     @Override
-    public String getBotToken() {
-        return botToken;
-    }
+    public String getBotToken() { return botToken; }
 
     // ===================== UPDATE =====================
     @Override
@@ -295,18 +257,14 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                         }
                     }
                 }
-
                 if (msg.getFrom() == null) return;
-
                 if (msg.hasText()) {
                     String url = UrlDetector.extractFirstUrl(msg.getText());
                     if (url != null) {
-                        if (!isBotAdmin(chatId)) {
-                            sendMd(chatId, RU.get("need_admin"));
-                            return;
+                        String platform = videoService.detectPlatform(url);
+                        if (!"unknown".equals(platform)) {
+                            handleUrl(chatId, url, "ru");
                         }
-                        if (!isAdmin(chatId, msg.getFrom().getId())) return;
-                        handleUrl(chatId, url, "ru");
                     }
                 }
                 return;
@@ -347,14 +305,17 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
 
         String url = UrlDetector.extractFirstUrl(text);
         if (url != null) {
-            handleUrl(chatId, url, lang);
-        } else {
-            sendMd(chatId, L.get("not_url"));
+            String platform = videoService.detectPlatform(url);
+            if ("unknown".equals(platform)) {
+                sendMd(chatId, L.get("unknown_platform"));
+            } else {
+                handleUrl(chatId, url, lang);
+            }
         }
     }
 
     // ===================== URL HANDLER =====================
-    private void handleUrl(Long chatId, String url, String lang) throws TelegramApiException {
+    private void handleUrl(Long chatId, String url, String lang) {
         Map<String, String> L = getL(lang);
         String platform = videoService.detectPlatform(url);
 
@@ -364,40 +325,15 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         }
 
         sendMd(chatId, L.get("downloading"));
-        File video = null;
-        try {
-            video = videoService.downloadVideoTemp(url, platform);
-            if (video == null) {
-                sendMd(chatId, L.get("download_error"));
-                return;
-            }
 
-            // Проверка размера — не отправляем если > 20 MB
-            if (video.length() > MAX_VIDEO_SIZE_BYTES) {
-                log.warn("Видео слишком большое: {} MB ({})", video.length() / 1024 / 1024, video.getName());
-                videoService.cleanup(video);
-                sendMd(chatId, L.get("file_too_large"));
-                return;
-            }
+        String key = chatId + "_" + System.currentTimeMillis();
 
-            String key = chatId + "_" + System.currentTimeMillis();
-            pendingAudio.put(key, url);
-
-            SendVideo sv = new SendVideo();
-            sv.setChatId(chatId.toString());
-            sv.setVideo(new InputFile(video));
-            sv.setCaption(L.get("video_caption"));
-            sv.setParseMode("MarkdownV2");
-            sv.setReplyMarkup(audioMarkup(L.get("audio_btn"), L.get("join_channel_btn"), key));
-            execute(sv);
-
-            videoService.cleanup(video);
-
-        } catch (Exception e) {
-            log.error("Ошибка при обработке ссылки", e);
-            sendMd(chatId, L.get("error"));
-            if (video != null) videoService.cleanup(video);
-        }
+        botTaskService.handleUrl(
+                this, chatId, url, lang, L,
+                audioMarkup(L.get("audio_btn"), L.get("join_channel_btn"), key),
+                key,
+                MAX_VIDEO_SIZE_BYTES
+        );
     }
 
     // ===================== CALLBACK =====================
@@ -434,65 +370,15 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             String key = data.substring(6);
             String lang = userLang.getOrDefault(chatId, "ru");
             Map<String, String> L = getL(lang);
-            String url = pendingAudio.get(key);
 
+            String url = botTaskService.getPendingUrl(key);
             if (url == null || url.isBlank()) {
-                pendingAudio.remove(key);
                 answerCb(cb.getId(), "❌ Файл устарел. Отправьте ссылку заново.", true);
                 return;
             }
 
             answerCb(cb.getId(), "🎵 Конвертирую...", false);
-            sendMd(chatId, L.get("extracting"));
-
-            File videoFile = null;
-            File audio = null;
-
-            try {
-                String platform = videoService.detectPlatform(url);
-                if ("unknown".equals(platform)) {
-                    pendingAudio.remove(key);
-                    sendMd(chatId, L.get("unknown_platform"));
-                    return;
-                }
-
-                // заново скачиваем видео только для MP3
-                videoFile = videoService.downloadVideoTemp(url, platform);
-                if (videoFile == null) {
-                    sendMd(chatId, L.get("download_error"));
-                    return;
-                }
-
-                audio = videoService.extractAudio(videoFile);
-                if (audio != null) {
-                    // Telegram принимает аудио до 50 MB
-                    if (audio.length() > MAX_AUDIO_SIZE_BYTES) {
-                        log.warn("Аудио слишком большое: {} MB", audio.length() / 1024 / 1024);
-                        videoService.cleanup(audio);
-                        sendMd(chatId, L.get("file_too_large"));
-                        pendingAudio.remove(key);
-                    } else {
-                        SendAudio sa = new SendAudio();
-                        sa.setChatId(chatId.toString());
-                        sa.setAudio(new InputFile(audio));
-                        execute(sa);
-                        pendingAudio.remove(key);
-                    }
-                } else {
-                    sendMd(chatId, L.get("audio_error"));
-                }
-            } catch (Exception e) {
-                log.error("Ошибка при конвертации аудио", e);
-                sendMd(chatId, L.get("audio_error"));
-            } finally {
-                if (audio != null && audio.exists()) {
-                    videoService.cleanup(audio);
-                }
-                if (videoFile != null && videoFile.exists()) {
-                    videoService.cleanup(videoFile);
-                }
-            }
-            return;
+            botTaskService.handleAudio(this, chatId, key, L, MAX_AUDIO_SIZE_BYTES);
         }
     }
 
@@ -529,7 +415,6 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         try {
             User me = getMe();
             if (me == null) return false;
-
             GetChatMember gcm = new GetChatMember();
             gcm.setChatId(chatId.toString());
             gcm.setUserId(me.getId());
@@ -555,9 +440,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             channelBtn.setUrl("https://t.me/" + channelUsername);
 
             InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
-            markup.setKeyboard(Collections.singletonList(
-                    Collections.singletonList(channelBtn)
-            ));
+            markup.setKeyboard(Collections.singletonList(Collections.singletonList(channelBtn)));
 
             SendMessage sm = new SendMessage();
             sm.setChatId(chatId.toString());
@@ -621,15 +504,13 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         addGroupBtn.setUrl("https://t.me/" + botUsername + "?startgroup=start");
 
         InlineKeyboardMarkup inlineMarkup = new InlineKeyboardMarkup();
-        inlineMarkup.setKeyboard(Collections.singletonList(
-                Collections.singletonList(addGroupBtn)
-        ));
+        inlineMarkup.setKeyboard(Collections.singletonList(Collections.singletonList(addGroupBtn)));
 
         SendMessage sm = new SendMessage();
         sm.setChatId(chatId.toString());
         sm.setText(L.get("greeting"));
         sm.setParseMode("MarkdownV2");
-        sm.setReplyMarkup(inlineMarkup); // кнопка теперь у основного сообщения
+        sm.setReplyMarkup(inlineMarkup);
         execute(sm);
     }
 
@@ -651,8 +532,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             dm.setChatId(chatId.toString());
             dm.setMessageId(msgId);
             execute(dm);
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
 
     private void answerCb(String cbId, String text, boolean alert) {
@@ -662,8 +542,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
             acq.setText(text);
             acq.setShowAlert(alert);
             execute(acq);
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
 
     // ===================== HELPERS =====================
@@ -675,8 +554,9 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         channelBtn.setUrl("https://t.me/" + channelUsername);
 
         InlineKeyboardMarkup m = new InlineKeyboardMarkup();
-        m.setKeyboard(Collections.singletonList(
-                Arrays.asList(audioBtn, channelBtn)
+        m.setKeyboard(Arrays.asList(
+                Collections.singletonList(audioBtn),
+                Collections.singletonList(channelBtn)
         ));
         return m;
     }

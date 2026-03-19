@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -25,22 +26,22 @@ public class VideoService {
     @Value("${ffmpeg.timeout.seconds:300}")
     private long ffmpegTimeout;
 
-    // Если задан вручную — используется только он
     @Value("${yt-dlp.tiktok-proxy:}")
     private String manualTiktokProxy;
 
     private FFmpeg ffmpeg;
     private FFmpegExecutor executor;
 
-    // Кэш рабочего прокси — не ищем заново каждый раз
+    @Value("${yt-dlp.proxy-pool:}")
+    private List<String> proxyPool;
+
+    private final AtomicInteger proxyIndex = new AtomicInteger(0);
     private final AtomicReference<String> cachedProxy = new AtomicReference<>(null);
 
-    // Источники списков прокси (PL / EU)
     private static final String PROXY_LIST_URL =
             "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt";
     private static final String PROXY_LIST_URL2 =
             "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt";
-    // TikTok test endpoint
     private static final String TIKTOK_TEST_URL = "https://www.tiktok.com/";
 
     public VideoService() {
@@ -70,7 +71,6 @@ public class VideoService {
             String outputPath = tmp.toAbsolutePath().toString();
             log.info("Скачивание [{}]: {}", platform, url);
 
-            // Для TikTok определяем прокси
             String proxy = null;
             if ("tiktok".equals(platform)) {
                 proxy = resolveProxy();
@@ -92,7 +92,6 @@ public class VideoService {
             int exitCode = process.waitFor();
             File out = new File(outputPath);
 
-            // yt-dlp может сохранить с другим расширением
             if (!out.exists() || out.length() == 0) {
                 String baseName = out.getName().replace(".mp4", "");
                 File[] cands = out.getParentFile().listFiles(
@@ -107,7 +106,6 @@ public class VideoService {
                 log.info("✅ Скачано: {} ({} KB)", out.getName(), out.length() / 1024);
                 return out;
             } else {
-                // Если TikTok упал с прокси — сбрасываем кэш, попробуем другой в следующий раз
                 if ("tiktok".equals(platform)) {
                     log.warn("TikTok скачивание упало — сбрасываем кэш прокси");
                     cachedProxy.set(null);
@@ -123,29 +121,23 @@ public class VideoService {
     }
 
     // ─────────────────────────────────────────────────────────
-    // Возвращает рабочий прокси: ручной → кэш → авто-поиск
     private String resolveProxy() {
         if (manualTiktokProxy != null && !manualTiktokProxy.isBlank()) {
-            log.info("Используем ручной прокси: {}", manualTiktokProxy);
             return manualTiktokProxy;
         }
+        if (proxyPool != null && !proxyPool.isEmpty()) {
+            int idx = proxyIndex.getAndIncrement() % proxyPool.size();
+            String proxy = proxyPool.get(idx);
+            log.info("Используем прокси из пула [{}]: {}", idx, proxy);
+            return proxy;
+        }
         String cached = cachedProxy.get();
-        if (cached != null) {
-            log.info("Используем кэшированный прокси: {}", cached);
-            return cached;
-        }
-        log.info("Ищем рабочий прокси для TikTok...");
+        if (cached != null) return cached;
         String found = findWorkingProxy();
-        if (found != null) {
-            cachedProxy.set(found);
-            log.info("✅ Найден рабочий прокси: {}", found);
-        } else {
-            log.warn("⚠️ Рабочий прокси не найден — пробуем без прокси");
-        }
+        if (found != null) cachedProxy.set(found);
         return found;
     }
 
-    // Скачивает список прокси и параллельно проверяет их
     private String findWorkingProxy() {
         List<String> proxies = new ArrayList<>();
         for (String listUrl : List.of(PROXY_LIST_URL, PROXY_LIST_URL2)) {
@@ -171,7 +163,6 @@ public class VideoService {
 
         if (proxies.isEmpty()) return null;
 
-        // Перемешиваем и берём первые 50 для проверки
         Collections.shuffle(proxies);
         List<String> batch = proxies.subList(0, Math.min(50, proxies.size()));
 
@@ -201,7 +192,6 @@ public class VideoService {
         return working;
     }
 
-    // Проверяет один SOCKS5 прокси — может ли достучаться до TikTok
     private boolean testProxy(String proxyStr) {
         try {
             String[] parts = proxyStr.split(":");
@@ -231,30 +221,39 @@ public class VideoService {
 
         switch (platform) {
             case "tiktok" -> {
-                // Только прокси — НЕ добавляем user-agent и заголовки:
-                // они ломают встроенный JS challenge solver yt-dlp
                 if (proxy != null && !proxy.isBlank()) {
                     cmd.add("--proxy"); cmd.add(proxy);
                 }
                 cmd.add("--socket-timeout"); cmd.add("30");
                 cmd.add("--retries");        cmd.add("3");
                 cmd.add("--fragment-retries"); cmd.add("3");
+                // Лучшее качество без ограничений
+                cmd.add("-f"); cmd.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
             }
             case "instagram" -> {
+                cmd.add("--proxy"); cmd.add("socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754");
+                cmd.add("--cookies"); cmd.add("/home/ubuntu/bn_saver_bot/instagram_cookies.txt");
                 cmd.add("--user-agent");
                 cmd.add("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
                 cmd.add("--add-header"); cmd.add("Referer:https://www.instagram.com/");
                 cmd.add("--socket-timeout"); cmd.add("30");
                 cmd.add("--retries");        cmd.add("3");
+                // Лучшее качество без ограничений
+                cmd.add("-f"); cmd.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
+            }
+            case "youtube" -> {
+                cmd.add("--cookies"); cmd.add("/home/ubuntu/bn_saver_bot/youtube_cookies.txt");
+                cmd.add("--socket-timeout"); cmd.add("30");
+                cmd.add("--retries");        cmd.add("3");
+                // 720p — быстро и качественно, большинство видео именно так
+                cmd.add("-f"); cmd.add("bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]");
             }
         }
 
-        cmd.add("-f");    cmd.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
         cmd.add("--merge-output-format"); cmd.add("mp4");
         cmd.add("--no-playlist");
-        // Не скачивать файлы крупнее 20 MB — защита сервера от переполнения диска
-        cmd.add("--max-filesize"); cmd.add("20m");
-        cmd.add("-o");    cmd.add(outputPath);
+        // Лимит убран — Telegram сам ограничит до 50MB при отправке
+        cmd.add("-o"); cmd.add(outputPath);
         cmd.add(url);
         return cmd;
     }
@@ -315,5 +314,8 @@ public class VideoService {
                 }
             } catch (Exception ignored) {}
         }
+    }
+    public boolean isInstagramPhoto(String url) {
+        return url.contains("instagram.com/p/");
     }
 }
