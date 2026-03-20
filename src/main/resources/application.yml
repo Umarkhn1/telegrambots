@@ -1,0 +1,33 @@
+bot:
+  token: 7849095280:AAEwiH6egmnxe_gXCjA5YhGL0EVzKGHoSKs
+  username: lmstgbot
+
+lms:
+  base-url: https://lms.tuit.uz
+  login-url: https://lms.tuit.uz/auth/login
+
+semesters:
+  - id: 49
+    name: "2025-2026 • 2-семестр"
+    emoji: "2️⃣"
+    year: "2025-2026"
+  - id: 47
+    name: "2025-2026 • 1-семестр"
+    emoji: "1️⃣"
+    year: "2025-2026"
+  - id: 45
+    name: "2024-2025 • 2-семестр"
+    emoji: "2️⃣"
+    year: "2024-2025"
+  - id: 43
+    name: "2024-2025 • 1-семестр"
+    emoji: "1️⃣"
+    year: "2024-2025"
+  - id: 41
+    name: "2023-2024 • 2-семестр"
+    emoji: "2️⃣"
+    year: "2023-2024"
+  - id: 37
+    name: "2023-2024 • 1-семестр"
+    emoji: "1️⃣"
+    year: "2023-2024"
