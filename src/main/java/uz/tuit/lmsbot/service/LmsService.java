@@ -16,6 +16,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -39,12 +41,19 @@ public class LmsService {
 
     private OkHttpClient getClient(long userId) {
         return clients.computeIfAbsent(userId, id -> new OkHttpClient.Builder()
-                .cookieJar(new InMemoryCookieJar())
+                .cookieJar(new PersistentCookieJar(sessionDir(), userId))
                 .followRedirects(true)
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .build());
+    }
+
+    private Path sessionDir() {
+        // Keep it simple and OS-safe: %USERPROFILE%\.tuit-lms-bot\sessions
+        String home = System.getProperty("user.home");
+        if (home == null || home.isBlank()) home = ".";
+        return Paths.get(home, ".tuit-lms-bot", "sessions");
     }
 
     // ─────────────────────────────────────────────
@@ -110,6 +119,10 @@ public class LmsService {
     public void logout(long userId) {
         loggedInMap.remove(userId);
         clients.remove(userId);
+        try {
+            // Also clear persistent cookies so user is fully logged out
+            new PersistentCookieJar(sessionDir(), userId).clear();
+        } catch (Exception ignored) {}
     }
 
     // ─────────────────────────────────────────────
@@ -708,6 +721,73 @@ public class LmsService {
     private String userAgent() {
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    }
+
+    // ─────────────────────────────────────────────
+    //  PROFILE (photo + password)
+    // ─────────────────────────────────────────────
+
+    public String getProfilePhotoDataUrl(long userId) {
+        try {
+            String url = config.getLms().getBaseUrl() + "/profile/password";
+            String html = getHtml(userId, url, url);
+            Document doc = Jsoup.parse(html);
+            Element img = doc.selectFirst("img[src^=data:image]");
+            if (img == null) return null;
+            String src = img.attr("src");
+            return (src != null && src.startsWith("data:image")) ? src : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public boolean changePassword(long userId, String oldPassword, String newPassword, String confirmPassword) {
+        try {
+            OkHttpClient client = getClient(userId);
+            String url = config.getLms().getBaseUrl() + "/profile/password";
+
+            // get CSRF from page
+            String html;
+            try (Response r = client.newCall(new Request.Builder()
+                    .url(url)
+                    .header("User-Agent", userAgent())
+                    .header("Referer", url)
+                    .build()).execute()) {
+                html = r.body() != null ? r.body().string() : "";
+            }
+            String csrf = extractCsrf(html);
+            if (csrf == null) return false;
+
+            RequestBody body = new FormBody.Builder()
+                    .add("_token", csrf)
+                    .add("old_password", oldPassword != null ? oldPassword : "")
+                    .add("password", newPassword != null ? newPassword : "")
+                    .add("password_confirmation", confirmPassword != null ? confirmPassword : "")
+                    .build();
+
+            Request req = new Request.Builder()
+                    .url(url)
+                    .post(body)
+                    .header("User-Agent", userAgent())
+                    .header("Referer", url)
+                    .build();
+
+            String respBody;
+            int code;
+            try (Response resp = client.newCall(req).execute()) {
+                code = resp.code();
+                respBody = resp.body() != null ? resp.body().string() : "";
+            }
+            if (code < 200 || code >= 300) return false;
+
+            String lower = respBody.toLowerCase();
+            // heuristics: success toast or no validation errors
+            if (lower.contains("toast-success") || lower.contains("успеш") || lower.contains("success")) return true;
+            if (lower.contains("invalid") || lower.contains("ошиб") || lower.contains("error")) return false;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
     // ─────────────────────────────────────────────
     //  UPLOAD ACTIVITY FILE
