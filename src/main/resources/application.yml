@@ -13,7 +13,7 @@ telegram:
     token: 8723216741:AAFm99BgY_8jdFeXeuT5cVCUrBkDP35kYFs
     username: bn_saver_bot
   channel:
-    username: biz_ness_uz
+    username: linksoft_uz
 
 # ── yt-dlp ────────────────────────────────────────────────
 yt-dlp:

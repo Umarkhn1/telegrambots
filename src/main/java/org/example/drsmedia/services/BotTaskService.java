@@ -26,9 +26,7 @@ public class BotTaskService {
 
     private final VideoService videoService;
 
-    // key → url (для MP3)
     private final Map<String, String> pendingAudio = new ConcurrentHashMap<>();
-
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(5);
 
     // ===================== HANDLE URL =====================
@@ -37,9 +35,11 @@ public class BotTaskService {
                           Map<String, String> L,
                           InlineKeyboardMarkup audioMarkupFn,
                           String audioKey,
-                          long maxVideoBytes) {
+                          long maxVideoBytes,
+                          Integer downloadingMsgId) {
 
         if ("instagram".equals(videoService.detectPlatform(url)) && videoService.isInstagramPhoto(url)) {
+            deleteMsgSafe(bot, chatId, downloadingMsgId);
             sendMd(bot, chatId, L.get("photo_not_supported"));
             return;
         }
@@ -48,6 +48,7 @@ public class BotTaskService {
         try {
             video = videoService.downloadVideoTemp(url, videoService.detectPlatform(url));
             if (video == null) {
+                deleteMsgSafe(bot, chatId, downloadingMsgId);
                 sendMd(bot, chatId, L.get("download_error"));
                 return;
             }
@@ -55,15 +56,19 @@ public class BotTaskService {
             if (video.length() > maxVideoBytes) {
                 log.warn("Видео слишком большое: {} MB", video.length() / 1024 / 1024);
                 videoService.cleanup(video);
+                deleteMsgSafe(bot, chatId, downloadingMsgId);
                 sendMd(bot, chatId, L.get("file_too_large"));
                 return;
             }
 
-            // Сохраняем URL для MP3
             pendingAudio.put(audioKey, url);
-
-            // Автоудаление через 30 минут если не нажали MP3
             scheduler.schedule(() -> pendingAudio.remove(audioKey), 30, TimeUnit.MINUTES);
+
+            // Получаем размеры для сохранения вертикального формата
+            int[] dimensions = videoService.getVideoDimensions(video);
+
+            // Удаляем "Скачиваю..." перед отправкой видео
+            deleteMsgSafe(bot, chatId, downloadingMsgId);
 
             SendVideo sv = new SendVideo();
             sv.setChatId(chatId.toString());
@@ -72,15 +77,31 @@ public class BotTaskService {
             sv.setParseMode("MarkdownV2");
             sv.setSupportsStreaming(true);
             sv.setReplyMarkup(audioMarkupFn);
+            if (dimensions != null) {
+                sv.setWidth(dimensions[0]);
+                sv.setHeight(dimensions[1]);
+            }
             bot.execute(sv);
 
             videoService.cleanup(video);
 
         } catch (Exception e) {
             log.error("Ошибка при обработке ссылки", e);
+            deleteMsgSafe(bot, chatId, downloadingMsgId);
             sendMd(bot, chatId, L.get("error"));
             if (video != null) videoService.cleanup(video);
         }
+    }
+
+    private void deleteMsgSafe(AbsSender bot, Long chatId, Integer msgId) {
+        if (msgId == null) return;
+        try {
+            org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage dm =
+                    new org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage();
+            dm.setChatId(chatId.toString());
+            dm.setMessageId(msgId);
+            bot.execute(dm);
+        } catch (Exception ignored) {}
     }
 
     // ===================== HANDLE AUDIO =====================

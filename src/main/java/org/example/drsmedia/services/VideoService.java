@@ -231,7 +231,6 @@ public class VideoService {
                 cmd.add("-f"); cmd.add("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
             }
             case "instagram" -> {
-                cmd.add("--proxy"); cmd.add("socks5://xwivvutx:dr2gtzbgad7h@31.59.20.176:6754");
                 cmd.add("--cookies"); cmd.add("/home/ubuntu/bn_saver_bot/instagram_cookies.txt");
                 cmd.add("--user-agent");
                 cmd.add("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
@@ -317,5 +316,37 @@ public class VideoService {
     }
     public boolean isInstagramPhoto(String url) {
         return url.contains("instagram.com/p/");
+    }
+
+    /**
+     * Returns [width, height] of the video file using ffprobe, or null on error.
+     * This preserves vertical/portrait orientation so Telegram won't crop it.
+     */
+    public int[] getVideoDimensions(File videoFile) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ffprobe", "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height",
+                    "-of", "csv=p=0",
+                    videoFile.getAbsolutePath()
+            );
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line = br.readLine();
+                if (line != null && line.contains(",")) {
+                    String[] parts = line.trim().split(",");
+                    int w = Integer.parseInt(parts[0].trim());
+                    int h = Integer.parseInt(parts[1].trim());
+                    log.info("Размеры видео: {}x{}", w, h);
+                    return new int[]{w, h};
+                }
+            }
+            p.waitFor();
+        } catch (Exception e) {
+            log.warn("Не удалось получить размеры видео: {}", e.getMessage());
+        }
+        return null;
     }
 }
