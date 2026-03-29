@@ -256,7 +256,15 @@ public class VideoService {
         cmd.add(url);
         return cmd;
     }
-
+    public boolean isLiveStream(String url) {
+        String u = url.toLowerCase();
+        // YouTube live
+        if (u.contains("youtube.com/live/") || u.contains("youtu.be/live/")) return true;
+        if (u.contains("youtube.com/watch") && u.contains("live")) return true;
+        // Instagram live
+        if (u.contains("instagram.com/") && u.contains("/live")) return true;
+        return false;
+    }
     // ─────────────────────────────────────────────────────────
     public File extractAudio(File videoFile) {
         try {

@@ -35,7 +35,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
     private final String botUsername;
 
     @Value("${telegram.channel.username}")
-    private String channelUsername;
+    private String channelUsername = "linksoft_uz";
 
     private final Map<Long, String> userLang = new ConcurrentHashMap<>();
     private final Map<String, String> pendingAudio = new ConcurrentHashMap<>();
@@ -105,8 +105,17 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                 "> 🖼 *Фото не поддерживается*\n" +
                         "> Бот скачивает только видео и Reels\\.\n" +
                         "> Отправьте ссылку на видео\\.");
+        RU.put("live_error",
+                "> 🔴 *Прямой эфир не поддерживается*\n" +
+                        "> Скачивание стримов недоступно\\.\n" +
+                        "> Отправьте ссылку на обычное видео\\.");
+
 
         /* =========== UZBEK LATIN =========== */
+        UZ.put("live_error",
+                "> 🔴 *Jonli efir qo'llab\\-quvvatlanmaydi*\n" +
+                        "> Strimlarni yuklab bo'lmaydi\\.\n" +
+                        "> Oddiy video havolasini yuboring\\.");
         UZ.put("photo_not_supported",
                 "> 🖼 *Rasm qo'llab\\-quvvatlanmaydi*\n" +
                         "> Bot faqat video va Reels yukLaydi\\.\n" +
@@ -163,6 +172,14 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
                         "> Boshqa video yoki qisqaroq klip sinab ko'ring\\.");
 
         /* =========== UZBEK CYRILLIC =========== */
+
+
+
+        UZC.put("live_error",
+                "> 🔴 *Жонли эфир қўллаб\\-қувватланмайди*\n" +
+                        "> Стримларни юклаб бўлмайди\\.\n" +
+                        "> Оддий видео ҳаволасини юборинг\\.");
+
         UZC.put("lang_btn", "🇺🇿 Ўзбекча");
         UZC.put("subscribe_msg",
                 "\\· *Кириш ёпиқ* \\·\n" +
@@ -326,6 +343,11 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
 
         if ("unknown".equals(platform)) {
             sendMd(chatId, L.get("unknown_platform"));
+            return;
+        }
+
+        if (videoService.isLiveStream(url)) {
+            sendMd(chatId, L.get("live_error"));
             return;
         }
 
