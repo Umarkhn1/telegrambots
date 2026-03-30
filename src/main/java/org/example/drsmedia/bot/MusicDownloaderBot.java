@@ -61,7 +61,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         RU.put("check_sub_btn", "✅ Я подписался");
         RU.put("not_subscribed", "❌ Вы ещё не подписались\\. Подпишитесь и нажмите кнопку ещё раз\\.");
         RU.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Привет\\! Я скачиваю видео с YouTube, TikTok и Instagram и конвертирую в MP3 одним нажатием кнопки\\.\n" +
                         "> 📥 *Что умею:*\n" +
                         "> • Скачать видео\n" +
@@ -87,7 +87,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         RU.put("help_btn", "ℹ️ Помощь");
         RU.put("add_to_group_btn", "➕ Добавить в группу");
         RU.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Привет\\! \n" +
                         "> 📥 Отправьте ссылку YouTube, TikTok или Instagram — скачаю видео и дам кнопку для MP3\\.\n" +
                         "> ⚙️ Для работы нужны права *админа*\\. \n" +
@@ -130,7 +130,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZ.put("check_sub_btn", "✅ Obuna bo'ldim");
         UZ.put("not_subscribed", "❌ Siz hali obuna bo'lmadingiz\\. Obuna bo'lib, tugmani yana bosing\\.");
         UZ.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Salom\\! Men YouTube, TikTok va Instagram'dan video yuklayman va MP3 ga aylantiraman bitta tugma bilan\\.\n" +
                         "> 📥 *Nima qila olaman:*\n" +
                         "> • Video yuklab olish\n" +
@@ -156,7 +156,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZ.put("help_btn", "ℹ️ Yordam");
         UZ.put("add_to_group_btn", "➕ Guruhga qo'shish");
         UZ.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Salom\\! Men YouTube, TikTok va Instagram'dan video yuklayman va MP3 ga aylantiraman bitta tugma bilan\\.\n" +
                         "> 📥 YouTube, TikTok yoki Instagram havolasini yuboring — video yuklayman va MP3 tugmasini ko'rsataman\\.\n" +
                         "> ⚙️ Ishlash uchun *admin* huquqi kerak\\.\n" +
@@ -189,7 +189,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZC.put("check_sub_btn", "✅ Обуна бўлдим");
         UZC.put("not_subscribed", "❌ Сиз ҳали обуна бўлмадингиз\\. Обуна бўлиб, тугмани яна босинг\\.");
         UZC.put("greeting",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Салом\\! Мен YouTube, TikTok ва Instagram'дан видео юклайман ва MP3 га айлантираман битта тугма билан\\.\n" +
                         "> 📥 *Нима қила оламан:*\n" +
                         "> • Видео юклаб олиш\n" +
@@ -215,7 +215,7 @@ public class MusicDownloaderBot extends TelegramLongPollingBot {
         UZC.put("help_btn", "ℹ️ Ёрдам");
         UZC.put("add_to_group_btn", "➕ Гуруҳга қўшиш");
         UZC.put("group_welcome",
-                "🎬 *BN Insta\\-TikTok\\-YouTube Saver*\n" +
+                "🎬 *LS Insta\\-TikTok\\-YouTube Saver*\n" +
                         "> 👋 Салом\\! Мен YouTube, TikTok ва Instagram'дан видео юклайман ва MP3 га айлантираман битта тугма билан\\.\n" +
                         "> 📥 YouTube, TikTok ёки Instagram ҳаволасини юборинг — видео юклайман ва MP3 тугмасини кўрсатаман\\.\n" +
                         "> ⚙️ Ишлаши учун *админ* ҳуқуқи керак\\.\n" +
