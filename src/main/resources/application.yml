@@ -10,8 +10,8 @@ spring:
 # ── Telegram Bot ──────────────────────────────────────────
 telegram:
   bot:
-    token: 8723216741:AAFm99BgY_8jdFeXeuT5cVCUrBkDP35kYFs
-    username: bn_saver_bot
+    token: 8362933811:AAGR5n3CvcM7sagfB8fRVW_45AFS4PmGdCA
+    username: ls_saver_bot
   channel:
     username: linksoft_uz
 
