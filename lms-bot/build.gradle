@@ -1,0 +1,56 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'uz.tuit'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+application {
+    mainClass = 'uz.tuit.lmsbot.Main'
+}
+
+repositories {
+    mavenCentral()
+}
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+dependencies {
+    // Telegram Bot
+    implementation 'org.telegram:telegrambots:6.9.7.1'
+
+    // HTTP Client
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // HTML Parser
+    implementation 'org.jsoup:jsoup:1.17.2'
+
+    // Jackson (JSON + YAML)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.1'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'uz.tuit.lmsbot.Main'
+    }
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveFileName = 'lms-bot.jar'
+}
