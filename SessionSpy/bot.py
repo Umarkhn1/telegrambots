@@ -26,6 +26,7 @@ import requests
 import catalog as cat
 import cinematica as cm
 import gtickets as gt
+import web
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -56,6 +57,13 @@ HOLD_SECONDS = int(os.environ.get("HOLD_SECONDS", "600"))
 DAYS_AHEAD = int(os.environ.get("DAYS_AHEAD", "21"))
 BOOK_PHONE = os.environ.get("BOOK_PHONE", "").strip()
 BOOK_EMAIL = os.environ.get("BOOK_EMAIL", "").strip()
+
+# Страничка оплаты для CINEMATICA: их сайт открывает кассу не ссылкой,
+# а отправкой формы, поэтому бот показывает свою страницу с этой формой.
+# PUBLIC_URL — адрес, по которому она видна снаружи (домен сервера или
+# туннель). Пусто — кнопка ведёт прямо в Payme, что работает не всегда.
+WEB_PORT = int(os.environ.get("WEB_PORT", "8099"))
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
 CM_LOGIN = os.environ.get("CM_LOGIN", "").strip()
 CM_PASSWORD = os.environ.get("CM_PASSWORD", "").strip()
 # На Render файловая система стирается при каждом деплое, поэтому память
@@ -1487,6 +1495,27 @@ def find_session(sub):
     return mine[0]
 
 
+def pay_url(form):
+    """Ссылка на страничку оплаты бота — если она вообще видна снаружи."""
+    order = ((form or {}).get("params") or {}).get("orderid")
+    if not PUBLIC_URL or not order:
+        return None
+    return "%s/pay/%s" % (PUBLIC_URL, order)
+
+
+def find_hold(order_id):
+    """Бронь по номеру заказа — этим ключом открывается страничка оплаты."""
+    for sub in list(STATE["subs"].values()):
+        hold = sub.get("hold") or {}
+        form = hold.get("form") or {}
+        if (form.get("params") or {}).get("orderid") == order_id:
+            return {"url": form.get("url"), "params": form.get("params"),
+                    "title": sub.get("title") or "Оплата брони",
+                    "note": "%s · %s" % (hold.get("seats") or "",
+                                         sub.get("cinema") or "")}
+    return None
+
+
 def release_hold(sub):
     """Снимает текущую бронь, чтобы места не висели зря."""
     hold = sub.get("hold")
@@ -1521,11 +1550,14 @@ def do_booking(sub, force=False):
                           "выбирать вручную." % sub["seats"])
             return
 
+        form = None
         if s["src"] == "cm":
-            pid, link = cm.book(raw["cinema_id"], raw["hall_id"], raw["id"],
-                                picked, BOOK_PHONE, BOOK_EMAIL or None,
-                                token=TOKEN_CM["v"])
+            pid, link, form = cm.book(raw["cinema_id"], raw["hall_id"], raw["id"],
+                                      picked, BOOK_PHONE, BOOK_EMAIL or None,
+                                      token=TOKEN_CM["v"])
             deadline = None
+            # у CINEMATICA оплата начинается с формы — ведём на страничку бота
+            link = pay_url(form) or link
         else:
             pid, link, deadline = gt.order(
                 raw["seance_id"], raw["cinema_id"], data.get("release_id"),
@@ -1533,17 +1565,21 @@ def do_booking(sub, force=False):
         with _lock:
             sub["hold"] = {"payment_id": pid, "url": link, "ts": time.time(),
                            "src": s["src"], "deadline": deadline,
-                           "seats": cm.seats_text(picked)}
+                           "seats": cm.seats_text(picked),
+                           "form": form}
         save_state()
 
         total = sum(float(p.get("price") or 0) for p in picked)
+        edge = ("" if cm.is_central(data, picked) else
+                "\n\n⚠️ Середина зала на этот сеанс уже разобрана — это "
+                "лучшее, что осталось рядом.")
         send(chat_id,
              "🎟 <b>Места забронированы</b>\n\n<blockquote>%s\n%s · %s\n%s · %s\n"
-             "%s\nк оплате: %s</blockquote>\n\nСсылка живёт 10 минут. Кто "
+             "%s\nк оплате: %s</blockquote>%s\n\nСсылка живёт 10 минут. Кто "
              "оплатит — нажмите кнопку, иначе забронирую заново."
              % (esc(sub["title"]), esc(s["cinema"]), esc(s["hall"]),
                 esc(d_long(s["date"])), s["time"], cm.seats_text(picked),
-                cat._money(total)),
+                cat._money(total), edge),
              [[{"text": "💳 Оплатить", "url": link}],
               [{"text": "✅ Я оплатил", "callback_data": "paid%s%s" % (SEP, sub["id"])},
                {"text": "🔁 Заново", "callback_data": "again%s%s" % (SEP, sub["id"])}]])
@@ -1654,6 +1690,13 @@ def main():
     log("бот запущен: @%s" % me.get("username"))
     register_commands()
     cm_login()
+    try:
+        web.serve(find_hold, WEB_PORT)
+        log("страничка оплаты на порту %d%s"
+            % (WEB_PORT, " → " + PUBLIC_URL if PUBLIC_URL else
+               " (PUBLIC_URL не задан — снаружи не видна)"))
+    except Exception as e:
+        log("страничку оплаты не поднял:", e)
     POOL.submit(warmup)
     threading.Thread(target=watch_loop, daemon=True).start()
     threading.Thread(target=booking_loop, daemon=True).start()

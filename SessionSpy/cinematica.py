@@ -154,6 +154,13 @@ def _free_blocks(seats, vacant, count, step):
     return out
 
 
+def _row_num(seats):
+    try:
+        return int(str(seats[0]["row"]).strip())
+    except (ValueError, TypeError, IndexError, KeyError):
+        return None
+
+
 def _num_center(block):
     return sum(int(s["number"]) for s in block) / float(len(block))
 
@@ -201,11 +208,12 @@ def pick_anchored(data, count, rows_pref, center, tolerance=3):
 
     # 2) те же ряды, но с небольшим смещением вбок
     # 3) если и там середина занята — соседние ряды, от ближнего к дальнему
-    # уходим недалеко: ряд-другой в сторону — ещё середина зала,
-    # а первый ряд у экрана серединой уже не назовёшь
+    # если и в любимых рядах середина занята — уходим глубже в зал:
+    # сначала ряды за якорем, и только потом ближе к экрану
+    anchor = rows_pref[0]
     others = sorted((n for n in by_num
-                     if n not in rows_pref and abs(n - rows_pref[0]) <= 3),
-                    key=lambda n: (abs(n - rows_pref[0]), -n))
+                     if n not in rows_pref and abs(n - anchor) <= 3),
+                    key=lambda n: (0 if n > anchor else 1, abs(n - anchor)))
     for rn in list(rows_pref) + others:
         best, best_dev = None, None
         for block in _free_blocks(by_num.get(rn) or [], vacant, count, step):
@@ -227,6 +235,17 @@ def pick_seats(data, count, rows_pref=None, center=None):
         got = pick_anchored(data, count, rows_pref, center)
         if got:
             return got
+        # ближе к экрану, чем любимые ряды, не садимся: лучше глубже и сбоку,
+        # чем в третьем ряду по центру
+        got = _pick_geometric(data, count, min_row=min(rows_pref))
+        if got:
+            return got
+
+    return _pick_geometric(data, count)
+
+
+def _pick_geometric(data, count, min_row=None):
+    """Середина зала по геометрии: центр ряда и ~62 % глубины от экрана."""
 
     scheme = data.get("scheme") or {}
     vacant = {str(v["id"]): v for v in data.get("vacant_seats", [])}
@@ -244,6 +263,8 @@ def pick_seats(data, count, rows_pref=None, center=None):
     best, best_cost = None, None
     for depth, row in enumerate(rows):
         ss = row["seats"]
+        if min_row is not None and _row_num(ss) is not None and _row_num(ss) < min_row:
+            continue
         # Центр считаем по самому ряду: у gtickets ряды разной длины
         # выровнены по краю, и общий центр зала там врёт. Боковые ложи
         # за проходом в расчёт не берём — центр по самой длинной группе.
@@ -266,6 +287,26 @@ def pick_seats(data, count, rows_pref=None, center=None):
                 best_cost, best = cost, block
 
     return _fmt(best, vacant) if best else None
+
+
+def is_central(data, picked, limit=2.5):
+    """Правда ли выбранные места около середины своего ряда.
+
+    Нужно, чтобы честно предупредить: середина разобрана, взяли что было.
+    """
+    scheme = data.get("scheme") or {}
+    step = _step(scheme)
+    ids = {str(s["id"]) for s in picked or []}
+    for row in scheme.get("rows", []):
+        ss = sorted(row.get("seats", []), key=lambda s: s["x"])
+        block = [s for s in ss if str(s["id"]) in ids]
+        if len(block) != len(ids):
+            continue
+        main = _main_group(ss, step)
+        center_x = (main[0]["x"] + main[-1]["x"]) / 2.0
+        bx = sum(s["x"] for s in block) / float(len(block))
+        return abs(bx - center_x) / float(step) <= limit
+    return True
 
 
 def seats_text(picked):
@@ -319,9 +360,11 @@ def book(cinema_id, hall_id, repertory_id, picked, phone, email, token=None):
     if d.get("result") != 0:
         raise RuntimeError(d.get("message") or "не удалось забронировать")
     params = d.get("params") or {}
-    # ticket_url — это страница «после оплаты»; открывать её саму бесполезно
+    # ticket_url — это страница «после оплаты», открывать её саму бесполезно.
+    # Настоящая оплата начинается с отправки params формой на d["url"] —
+    # этим занимается страничка бота (web.py).
     link = payme_link(params) or params.get("ticket_url")
-    return d.get("payment_id"), link
+    return d.get("payment_id"), link, {"url": d.get("url"), "params": params}
 
 
 def payment_status(payment_id, token=None):
