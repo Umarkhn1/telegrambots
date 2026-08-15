@@ -1,0 +1,444 @@
+<title>Афиша и напоминалки</title>
+<style>
+  :root {
+    --ground: #EEF1F0;
+    --surface: #FFFFFF;
+    --surface-2: #E4E9E7;
+    --ink: #0F1E1A;
+    --muted: #576B65;
+    --line: #CBD5D1;
+    --accent: #C8560A;
+    --accent-soft: #F8E6D8;
+    --deep-soft: #DCE7E3;
+    --seat-free: #C6CFCC;
+    --seat-taken: #1D4A41;
+    --seat-pick: #E1670A;
+    --shadow: 0 1px 2px rgba(15, 30, 26, .06), 0 8px 24px rgba(15, 30, 26, .05);
+    --display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0C1513;
+      --surface: #141F1C;
+      --surface-2: #1B2926;
+      --ink: #E6EDEA;
+      --muted: #94A8A2;
+      --line: #263632;
+      --accent: #F5811F;
+      --accent-soft: #3A2312;
+      --deep-soft: #172B27;
+      --seat-free: #354944;
+      --seat-taken: #64B5A3;
+      --seat-pick: #F5811F;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0C1513;
+    --surface: #141F1C;
+    --surface-2: #1B2926;
+    --ink: #E6EDEA;
+    --muted: #94A8A2;
+    --line: #263632;
+    --accent: #F5811F;
+    --accent-soft: #3A2312;
+    --deep-soft: #172B27;
+    --seat-free: #354944;
+    --seat-taken: #64B5A3;
+    --seat-pick: #F5811F;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4rem) clamp(1.1rem, 4vw, 2rem) 4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(2rem, 7vw, 2.9rem);
+    line-height: 1.05;
+    letter-spacing: -.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { color: var(--muted); font-size: 1.08rem; margin: 0; }
+
+  .handle {
+    font-family: var(--mono);
+    font-size: .95rem;
+    background: var(--deep-soft);
+    border: 1px solid var(--line);
+    padding: .3rem .6rem;
+    border-radius: 4px;
+    align-self: flex-start;
+  }
+
+  section { display: flex; flex-direction: column; gap: 1rem; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.4rem;
+    letter-spacing: -.01em;
+    margin: 0;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid var(--ink);
+    text-wrap: balance;
+  }
+
+  p { margin: 0; }
+  strong { font-weight: 600; }
+
+  ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: .5rem; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--surface-2);
+    padding: .12em .38em;
+    border-radius: 3px;
+  }
+
+  /* Экраны идут строго по порядку — поэтому пронумерованы */
+  .steps { display: flex; flex-direction: column; counter-reset: step; }
+  .step {
+    display: grid;
+    grid-template-columns: 2.1rem 1fr;
+    gap: .15rem 1rem;
+    padding: .9rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .step:last-child { border-bottom: none; }
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    font-family: var(--mono);
+    font-size: .8rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    width: 1.7rem;
+    height: 1.7rem;
+    display: grid;
+    place-items: center;
+    margin-top: .2rem;
+  }
+  .step b { font-family: var(--display); font-weight: 600; font-size: 1.05rem; }
+  .step p { grid-column: 2; color: var(--muted); font-size: .97rem; }
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 0 6px 6px 0;
+    padding: .85rem 1.1rem;
+    font-size: .97rem;
+  }
+  .note b { font-family: var(--display); }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .94rem; }
+  th, td { text-align: left; padding: .6rem .9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    font-weight: 400;
+    background: var(--surface-2);
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .hall {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+    align-items: center;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .hall-rows { display: flex; flex-direction: column; gap: 3px; }
+  .hall-row { display: flex; gap: 3px; align-items: center; }
+  .rowno {
+    font-family: var(--mono);
+    font-size: .62rem;
+    color: var(--muted);
+    width: 1.1rem;
+    text-align: right;
+    flex: none;
+  }
+  .seat { width: 11px; height: 11px; border-radius: 2px; background: var(--seat-free); flex: none; }
+  .seat.taken { background: var(--seat-taken); }
+  .seat.pick { background: var(--seat-pick); }
+  .seat.pick2 { background: var(--seat-pick); opacity: .42; }
+  .screen {
+    margin-top: .3rem;
+    width: 78%;
+    height: 5px;
+    border-radius: 40%;
+    background: linear-gradient(90deg, transparent, var(--muted), transparent);
+  }
+  .screen-label {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .22em;
+    color: var(--muted);
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .8rem; color: var(--muted); }
+  .legend span { display: flex; align-items: center; gap: .4rem; }
+
+
+  .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+  .way {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    box-shadow: var(--shadow);
+  }
+  .way-tag {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--accent);
+    text-wrap: balance;
+  }
+  .way p { font-size: .95rem; }
+  .way-when { color: var(--muted); font-style: italic; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 1.1rem;
+    color: var(--muted);
+    font-size: .88rem;
+  }
+
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .seat { width: 8px; height: 8px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Инструкция</div>
+    <h1>Афиша и напоминалки</h1>
+    <p class="lede">Бот следит за расписанием кинотеатров Ташкента и пишет
+      в чат, как только появляются нужные сеансы. Ничего печатать не надо —
+      всё кнопками.</p>
+    <div class="handle">@session_spy_bot</div>
+  </header>
+
+  <section>
+    <h2>С чего начать</h2>
+    <p>Напишите боту <code>/start</code> один раз. Внизу появится меню
+      из четырёх кнопок — дальше только они.</p>
+    <div class="tablewrap">
+      <table>
+        <tr><th>Кнопка</th><th>Что делает</th></tr>
+        <tr><td>🎬 Новая напоминалка</td><td>Выбрать фильм и включить уведомления</td></tr>
+        <tr><td>🔔 Мои напоминалки</td><td>Что включено сейчас, там же «Отключить»</td></tr>
+        <tr><td>🧪 Проверить</td><td>Показывает, как будет выглядеть уведомление</td></tr>
+        <tr><td>❓ Как это работает</td><td>Короткая подсказка прямо в чате</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Как включить напоминалку</h2>
+    <div class="steps">
+      <div class="step"><b>Выбираете раздел</b>
+        <p><b>Сегодня в кино</b> — фильм уже идёт.
+          <b>Скоро в кино</b> — фильм ещё не вышел, сеансов нет вообще.</p>
+      </div>
+      <div class="step"><b>Выбираете фильм</b>
+        <p>Придёт постер с описанием. Список листается стрелками внизу.</p>
+      </div>
+      <div class="step"><b>Выбираете кинотеатр</b>
+        <p>Рядом написано, сколько у него сеансов на этот фильм.</p>
+      </div>
+      <div class="step"><b>Смотрите сеансы</b>
+        <p>Каждый день отдельным блоком: время, зал, цена и сколько мест свободно.</p>
+      </div>
+      <div class="step"><b>Жмёте «Уведомить о новых сеансах»</b>
+        <p>И выбираете, чего именно ждёте — об этом ниже.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Два способа ждать</h2>
+    <p>На этом шаге бот предложит выбор. Разница простая.</p>
+
+    <div class="ways">
+      <div class="way">
+        <div class="way-tag">📣 Любые новые сеансы и изменения</div>
+        <p>Бот следит за кинотеатром целиком. Напишет и когда откроют новый
+          день, и когда просто добавят ещё один сеанс на день, который уже
+          в продаже.</p>
+        <p class="way-when">Берите, если хотите сходить, а когда — неважно.</p>
+      </div>
+      <div class="way">
+        <div class="way-tag">📅 Конкретная дата</div>
+        <p>Бот ждёт только этот день и молчит про остальные. Напишет, как
+          только на него откроют билеты.</p>
+        <p class="way-when">Берите, если свободны в конкретный день.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>Почему в списке нет завтра и послезавтра.</b> Бот предлагает только
+      те дни, на которые сеансов ещё нет. На ближайшие билеты уже продаются —
+      вы их видели экраном раньше, ждать там нечего.
+    </div>
+
+    <p>После даты бот спросит про зал и время. Это необязательно: не выберете —
+      придут все сеансы этого дня. Выберете — придут только те, что подходят.</p>
+  </section>
+
+  <section>
+    <h2>Что придёт в чат</h2>
+    <ul>
+      <li>Сообщение «Появились сеансы» со временем, залом, ценой и свободными местами.</li>
+      <li>В группе — отметка всех участников с просьбой забронировать.</li>
+      <li>Дальше напоминание раз в час, пока кто-нибудь не сходит. Максимум
+        двенадцать раз, потом бот отстанет сам.</li>
+      <li>Под каждым сообщением есть кнопка «Отключить».</li>
+    </ul>
+    <p>Напоминалок можно включить сколько угодно — на разные фильмы
+      и кинотеатры сразу.</p>
+  </section>
+
+  <section>
+    <h2>Автобронь</h2>
+    <p>Это когда бот сам занимает места, чтобы их не разобрали, пока вы
+      собираетесь. Работает только у владельца бота и только в CINEMATICA.</p>
+    <p>Появится, если выбрать всё сразу: <strong>день, зал, время
+      и сколько мест</strong>. Тогда бот спросит количество.</p>
+    <ul>
+      <li>Сеанс открылся — бот занял места и прислал ссылку на оплату.</li>
+      <li>Ссылка живёт 10 минут.</li>
+      <li>Оплатили — нажмите <strong>«Я оплатил»</strong>, и бот успокоится.</li>
+      <li>Не успели — забронирует заново и пришлёт новую ссылку.</li>
+    </ul>
+    <div class="note">
+      <b>Брони настоящие.</b> Пока они висят, эти места не может купить никто
+      другой. Купили билеты — выключите напоминалку.
+    </div>
+    <p>В кинотеатрах gtickets автоброни нет: их сайт не показывает схему зала,
+      выбрать конкретные места там не получится.</p>
+  </section>
+
+  <section>
+    <h2>Какие места он берёт</h2>
+    <p>Самую середину. Для двоих в IMAX это ряд 7, места 13 и 14. Нужно
+      четыре — добавит соседние, 12 и 15, чтобы все сидели вместе.</p>
+
+    <div class="hall">
+      <div class="hall-rows" id="hall"></div>
+      <div class="screen"></div>
+      <div class="screen-label">ЭКРАН</div>
+      <div class="legend">
+        <span><i class="seat"></i> свободно</span>
+        <span><i class="seat taken"></i> занято</span>
+        <span><i class="seat pick"></i> берёт на двоих</span>
+        <span><i class="seat pick2"></i> добавит для четверых</span>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <tr><th>Зал</th><th>Любимые места</th><th>Если заняты</th></tr>
+        <tr><td>PEPSI IMAX</td><td>ряд 7, места 13–14</td><td>ряд 8, потом ряд 6</td></tr>
+        <tr><td>AVALON ATMOS</td><td>ряд 5, места 10–11</td><td>ряд 6, потом ряд 4</td></tr>
+        <tr><td>Обычные залы</td><td>ряд 4, места 4–6</td><td>ряд 5</td></tr>
+      </table>
+    </div>
+
+    <p>Если середину разобрали во всех этих рядах, бот возьмёт места как можно
+      ближе к центру. В угол зала не уйдёт — лучше промолчит и предложит
+      выбрать вручную.</p>
+  </section>
+
+  <section>
+    <h2>Если что-то пошло не так</h2>
+    <div class="tablewrap">
+      <table>
+        <tr><th>Что видно</th><th>Что делать</th></tr>
+        <tr><td>Бот не отвечает</td><td>Он выключен — попросите владельца запустить</td></tr>
+        <tr><td>В группе никого не отмечает</td><td>Бота надо сделать администратором группы</td></tr>
+        <tr><td>Не спрашивает про количество мест</td><td>Не выбраны день, зал и время, либо выбран кинотеатр gtickets</td></tr>
+        <tr><td>Уведомления надоели</td><td>«🔔 Мои напоминалки» → «Отключить»</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Кинотеатры: CINEMATICA, Riviera, Premier, Parus, Next, Magic, Compass,
+    CinemaPlex, Sergeli. Расписание и свободные места приходят прямо с сайтов.
+  </footer>
+</div>
+
+<script>
+  // Схема PEPSI IMAX: 12 рядов, первый — ближайший к экрану.
+  const ROWS = 12, SEATS = 25, PICK = [13, 14], PICK4 = [12, 15];
+  const TAKEN = new Set(["3-9", "3-10", "4-12", "5-14", "6-11", "6-16", "8-8",
+    "9-17", "9-18", "10-13", "11-6", "2-20", "12-22", "7-21", "5-4"]);
+  const hall = document.getElementById("hall");
+  for (let r = ROWS; r >= 1; r--) {
+    const row = document.createElement("div");
+    row.className = "hall-row";
+    const no = document.createElement("span");
+    no.className = "rowno";
+    no.textContent = r;
+    row.appendChild(no);
+    for (let n = 1; n <= SEATS; n++) {
+      const s = document.createElement("i");
+      s.className = "seat";
+      if (r === 7 && PICK.includes(n)) s.classList.add("pick");
+      else if (r === 7 && PICK4.includes(n)) s.classList.add("pick2");
+      else if (TAKEN.has(r + "-" + n)) s.classList.add("taken");
+      row.appendChild(s);
+    }
+    hall.appendChild(row);
+  }
+</script>
