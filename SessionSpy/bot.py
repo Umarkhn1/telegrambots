@@ -803,7 +803,8 @@ def free_dates(ss, cinema_id):
     return out
 
 
-def show_dates(chat_id, message_id, is_photo, kind, m, ss, cinema_id, page=0):
+def show_dates(chat_id, message_id, is_photo, kind, m, ss, cinema_id, page=0,
+               user_id=None):
     h = mid_hash(m["key"])
     base = SEP.join(["d", kind, h, cinema_id])
     days = free_dates(ss, cinema_id)
@@ -830,7 +831,8 @@ def show_dates(chat_id, message_id, is_photo, kind, m, ss, cinema_id, page=0):
          "в расписании, и новый сеанс на дне, который уже открыт.\n\n"
          "<b>Конкретная дата</b> — только про неё. В списке дни, которых "
          "в расписании ещё нет: то, что уже в продаже, вы видели "
-         "экраном раньше.</blockquote>\n\nЧего ждём?" % esc(m["title"]), kb)
+         "экраном раньше.</blockquote>\n\nЧего ждём?%s"
+         % (esc(m["title"]), book_hint(user_id, "конкретную дату")), kb)
 
 
 def halls_of(ss, cinema_id):
@@ -841,7 +843,15 @@ def halls_of(ss, cinema_id):
     return out
 
 
-def show_halls(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date):
+def book_hint(user_id, need):
+    """Владельцу подсказываем, чего не хватает для автоброни."""
+    if not is_owner(user_id):
+        return ""
+    return "\n\n🎟 Для автоброни выберите %s." % need
+
+
+def show_halls(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date,
+               user_id=None):
     h = mid_hash(m["key"])
     base = SEP.join(["h", kind, h, cinema_id, date])
     kb = [[{"text": "Любой зал", "callback_data": base + SEP + "all"}]]
@@ -853,11 +863,13 @@ def show_halls(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date):
     kb.append([{"text": "‹ назад", "callback_data": SEP.join(["cfg", kind, h, cinema_id])}])
     render(chat_id, message_id, is_photo,
          "🔔 <b>%s</b> · %s\n\n<blockquote>Залы взяты из тех сеансов, что "
-         "этот кинотеатр ставил раньше. Зал — по желанию.</blockquote>"
-         % (esc(m["title"]), esc("любая дата" if date == "any" else d_long(date))), kb)
+         "этот кинотеатр ставил раньше. Зал — по желанию.</blockquote>%s"
+         % (esc(m["title"]), esc("любая дата" if date == "any" else d_long(date)),
+            book_hint(user_id, "конкретный зал")), kb)
 
 
-def show_times(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date, hall):
+def show_times(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date,
+               hall, user_id=None):
     h = mid_hash(m["key"])
     base = SEP.join(["tm", kind, h, cinema_id, date, hall])
     times = sorted({s["time"] for s in ss if s["cinema_id"] == cinema_id
@@ -875,10 +887,11 @@ def show_times(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date, hall
                 "callback_data": SEP.join(["d", kind, h, cinema_id, date])}])
     render(chat_id, message_id, is_photo,
          "🔔 <b>%s</b> · %s · %s\n\n<blockquote>Время тоже по желанию: "
-         "не выберете — пришлю все сеансы этой даты.</blockquote>"
+         "не выберете — пришлю все сеансы этой даты.</blockquote>%s"
          % (esc(m["title"]),
             esc("любая дата" if date == "any" else d_long(date)),
-            esc(halls_of(ss, cinema_id).get(hall, "любой зал"))), kb)
+            esc(halls_of(ss, cinema_id).get(hall, "любой зал")),
+            book_hint(user_id, "конкретное время")), kb)
 
 
 def show_seats(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date, hall, tm):
@@ -960,6 +973,7 @@ def on_callback(cb):
     remember_user(chat_id, user)
     is_photo = bool(msg.get("photo"))
     answer(cb["id"])
+    log("нажатие %s от %s" % (data, uid))
 
     p = data.split(SEP)
     step = p[0]
@@ -1021,11 +1035,11 @@ def on_callback(cb):
             show_sessions(chat_id, mid, is_photo, kind, m, ss, p[3])
         elif step == "cfg":
             show_dates(chat_id, mid, is_photo, kind, m, ss, p[3],
-                       int(p[4]) if len(p) > 4 else 0)
+                       int(p[4]) if len(p) > 4 else 0, uid)
         elif step == "d":
-            show_halls(chat_id, mid, is_photo, kind, m, ss, p[3], p[4])
+            show_halls(chat_id, mid, is_photo, kind, m, ss, p[3], p[4], uid)
         elif step == "h":
-            show_times(chat_id, mid, is_photo, kind, m, ss, p[3], p[4], p[5])
+            show_times(chat_id, mid, is_photo, kind, m, ss, p[3], p[4], p[5], uid)
         elif step == "tm":
             cinema_id, date, hall, tm = p[3], p[4], p[5], p[6]
             can_book = (is_owner(uid) and date != "any"
