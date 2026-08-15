@@ -1140,6 +1140,27 @@ def on_callback(cb):
                 release_hold(sub)
             edit(chat_id, mid, "Подписка отключена." if sub else "Уже отключена.", [])
             return
+        if step == "free":
+            if not is_owner(uid):
+                answer(cb["id"], "Бронью управляет только владелец бота")
+                return
+            sub = STATE["subs"].get(p[1])
+            if not sub or not sub.get("hold"):
+                answer(cb["id"], "Бронь уже снята")
+                return
+            seats = sub["hold"].get("seats") or ""
+            s = find_session(sub)
+            release_hold(sub)
+            with _lock:
+                sub["hold"] = None
+            save_state()
+            link = session_url(sub, s) if s else None
+            send(chat_id,
+                 "🔓 Бронь снята — места <b>%s</b> снова свободны.\n\n"
+                 "<blockquote>Успейте занять их на сайте: выберите те же "
+                 "места и оплатите как обычно.</blockquote>" % esc(seats),
+                 [[{"text": "🎬 Открыть сеанс", "url": link}]] if link else None)
+            return
         if step in ("paid", "again"):
             if not is_owner(uid):
                 answer(cb["id"], "Бронью управляет только владелец бота")
@@ -1495,6 +1516,18 @@ def find_session(sub):
     return mine[0]
 
 
+def session_url(sub, s):
+    """Страница выбора мест на cinematica.uz — тот же адрес, что у сайта."""
+    if s["src"] != "cm":
+        return None
+    pub = (sub.get("srcs") or {}).get("cm")
+    r = s["raw"]
+    if not pub:
+        return None
+    return "https://cinematica.uz/movies/%s/%s/%s/%s/%s/" % (
+        pub, r["cinema_id"], r["hall_id"], r["movie_id"], r["id"])
+
+
 def pay_url(form):
     """Ссылка на страничку оплаты бота — если она вообще видна снаружи."""
     order = ((form or {}).get("params") or {}).get("orderid")
@@ -1525,6 +1558,19 @@ def release_hold(sub):
         gt.cancel_order(hold["payment_id"], BOOK_PHONE)
     else:
         cm.cancel(hold["payment_id"], token=TOKEN_CM["v"])
+
+
+def pay_keyboard(sub, s, link):
+    """Кнопки под бронью. У CINEMATICA оплата пока капризная, поэтому рядом
+    лежит запасной ход: снять бронь и купить те же места руками на сайте."""
+    kb = [[{"text": "💳 Оплатить", "url": link}]]
+    site = session_url(sub, s)
+    if site:
+        kb.append([{"text": "🔓 Снять бронь и купить на сайте",
+                    "callback_data": "free%s%s" % (SEP, sub["id"])}])
+    kb.append([{"text": "✅ Я оплатил", "callback_data": "paid%s%s" % (SEP, sub["id"])},
+               {"text": "🔁 Заново", "callback_data": "again%s%s" % (SEP, sub["id"])}])
+    return kb
 
 
 def do_booking(sub, force=False):
@@ -1580,9 +1626,7 @@ def do_booking(sub, force=False):
              % (esc(sub["title"]), esc(s["cinema"]), esc(s["hall"]),
                 esc(d_long(s["date"])), s["time"], cm.seats_text(picked),
                 cat._money(total), edge),
-             [[{"text": "💳 Оплатить", "url": link}],
-              [{"text": "✅ Я оплатил", "callback_data": "paid%s%s" % (SEP, sub["id"])},
-               {"text": "🔁 Заново", "callback_data": "again%s%s" % (SEP, sub["id"])}]])
+             pay_keyboard(sub, s, link))
         log("бронь %s: %s" % (sub["title"], cm.seats_text(picked)))
     except Exception as e:
         log("booking error:", e)
