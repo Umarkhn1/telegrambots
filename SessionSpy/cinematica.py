@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 import threading
 import time
 
@@ -277,6 +278,26 @@ def seats_text(picked):
 
 # ------------------------------------------------------------ бронирование
 
+# Сайт не отдаёт ссылку на оплату: он скрытой формой постит заказ на свой
+# шлюз, а тот уже открывает Payme. Кнопка в Telegram так не умеет, поэтому
+# ссылку на кассу Payme собираем сами — данные те же, что шлюз кладёт в чек.
+PAYME = "https://checkout.paycom.uz/"
+PAYME_MERCHANT = os.environ.get("PAYME_MERCHANT", "654ca0fc41a367e34fca5c48")
+PAYME_CALLBACK = "https://cinematica.gtickets.uz/Payme/Result?orderid=%s"
+
+
+def payme_link(params):
+    """Касса Payme для созданной брони. Сумма в чеке — в тийинах."""
+    order = (params or {}).get("orderid")
+    amount = (params or {}).get("amount")
+    if not order or not amount:
+        return None
+    fields = "m=%s;ac.orderid=%s;a=%d;c=%s;l=ru" % (
+        PAYME_MERCHANT, order, int(round(float(amount) * 100)),
+        PAYME_CALLBACK % order)
+    return PAYME + base64.b64encode(fields.encode("utf-8")).decode("ascii")
+
+
 def book(cinema_id, hall_id, repertory_id, picked, phone, email, token=None):
     """Создаёт бронь и возвращает (payment_id, ссылка на оплату).
 
@@ -298,7 +319,8 @@ def book(cinema_id, hall_id, repertory_id, picked, phone, email, token=None):
     if d.get("result") != 0:
         raise RuntimeError(d.get("message") or "не удалось забронировать")
     params = d.get("params") or {}
-    link = params.get("ticket_url") or params.get("return_url")
+    # ticket_url — это страница «после оплаты»; открывать её саму бесполезно
+    link = payme_link(params) or params.get("ticket_url")
     return d.get("payment_id"), link
 
 
