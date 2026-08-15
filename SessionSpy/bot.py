@@ -218,7 +218,8 @@ def tg(method, **params):
                 API + method, data=body,
                 headers={"Content-Type": "application/json"}, timeout=(6, read))
             out = json.loads(r.content.decode("utf-8"))
-            if not out.get("ok"):
+            # «message is not modified» — обычный двойной клик, не ошибка
+            if not out.get("ok") and "not modified" not in str(out.get("description")):
                 log("telegram %s -> %s" % (method, str(out)[:200]))
             return out
         except Exception as e:
@@ -803,7 +804,8 @@ def show_venues(chat_id, message_id, is_photo, kind, m, ss):
            movie_info(m, 700) + "\n\nВыберите кинотеатр:", kb, m.get("poster"))
 
 
-def show_sessions(chat_id, message_id, is_photo, kind, m, ss, cinema_id):
+def show_sessions(chat_id, message_id, is_photo, kind, m, ss, cinema_id,
+                  user_id=None):
     mine = [s for s in ss if s["cinema_id"] == cinema_id]
     venue = mine[0]["cinema"] if mine else venue_title(cinema_id)
     h = mid_hash(m["key"])
@@ -813,6 +815,10 @@ def show_sessions(chat_id, message_id, is_photo, kind, m, ss, cinema_id):
         kb.append(vb)
     kb.append([{"text": "🔔 Уведомить о новых сеансах",
                 "callback_data": SEP.join(["cfg", kind, h, cinema_id])}])
+    if is_owner(user_id):
+        # владельцу — та же настройка, но сразу видно, что там есть автобронь
+        kb.append([{"text": "🎟 Автобронь: дата → зал → время",
+                    "callback_data": SEP.join(["cfg", kind, h, cinema_id])}])
     kb.append([{"text": "‹ назад", "callback_data": SEP.join(["v", kind, h])}])
     if not mine:
         render(chat_id, message_id, is_photo,
@@ -1159,7 +1165,7 @@ def on_callback(cb):
         if step == "v":
             show_venues(chat_id, mid, is_photo, kind, m, ss)
         elif step == "s":
-            show_sessions(chat_id, mid, is_photo, kind, m, ss, p[3])
+            show_sessions(chat_id, mid, is_photo, kind, m, ss, p[3], uid)
         elif step == "cfg":
             show_dates(chat_id, mid, is_photo, kind, m, ss, p[3],
                        int(p[4]) if len(p) > 4 else 0, uid)
