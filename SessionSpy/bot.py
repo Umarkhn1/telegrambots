@@ -238,8 +238,17 @@ def send(chat_id, text, keyboard=None, preview=False):
     return (r.get("result") or {}).get("message_id") if r.get("ok") else None
 
 
+def clip(text, limit):
+    """Обрезка по целой строке: половина тега ломает разметку Telegram."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    nl = cut.rfind("\n")
+    return (cut[:nl] if nl > limit // 2 else cut.rsplit("<", 1)[0]).rstrip() + "\n…"
+
+
 def send_photo(chat_id, photo, caption, keyboard=None):
-    p = {"chat_id": chat_id, "photo": photo, "caption": caption[:1024],
+    p = {"chat_id": chat_id, "photo": photo, "caption": clip(caption, 1024),
          "parse_mode": "HTML"}
     if keyboard:
         p["reply_markup"] = {"inline_keyboard": keyboard}
@@ -466,6 +475,7 @@ def card(title, venue, ss, with_free=True):
         by_date.setdefault(s["date"], []).append(s)
 
     i = 0
+    blocks = []
     for date in sorted(by_date, key=d_key):
         rows = []
         for s in by_date[date]:
@@ -480,11 +490,27 @@ def card(title, venue, ss, with_free=True):
             if n is not None:
                 bits.append("свободно %d" % n)
             rows.append("%s <b>%s</b> · %s" % (dot, bits[0], " · ".join(bits[1:])))
-        out.append("\n<b>%s</b>\n<blockquote>%s</blockquote>"
-                   % (esc(d_long(date)), "\n".join(rows)))
+        blocks.append("\n<b>%s</b>\n<blockquote>%s</blockquote>"
+                      % (esc(d_long(date)), "\n".join(rows)))
 
-    text = "\n".join(out)
-    return text if len(text) <= 4000 else text[:3900] + "\n…"
+    # режем по целым дням: обрывок посреди тега Telegram не примет
+    size = len("\n".join(out))
+    for n, b in enumerate(blocks):
+        if size + len(b) + 1 > 3800 and n:
+            out.append("\n…и ещё %d %s — покажу в напоминании."
+                       % (len(blocks) - n, _days_word(len(blocks) - n)))
+            break
+        out.append(b)
+        size += len(b) + 1
+    return "\n".join(out)
+
+
+def _days_word(n):
+    if n % 10 == 1 and n % 100 != 11:
+        return "день"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return "дня"
+    return "дней"
 
 
 # --------------------------------------------------------------- подписки
@@ -593,7 +619,7 @@ def render(chat_id, message_id, is_photo, text, kb, photo=None):
     if want_photo == is_photo:
         if want_photo:
             tg("editMessageCaption", chat_id=chat_id, message_id=message_id,
-               caption=text[:1024], parse_mode="HTML",
+               caption=clip(text, 1024), parse_mode="HTML",
                reply_markup={"inline_keyboard": kb})
         else:
             edit(chat_id, message_id, text, kb)
