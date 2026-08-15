@@ -387,6 +387,13 @@ def cached(key, ttl, fn):
     return val
 
 
+def is_warm(key, ttl):
+    """Лежит ли ответ в кэше — чтобы не мигать заглушкой на быстром шаге."""
+    with _cache_lock:
+        hit = _cache.get(key)
+    return bool(hit) and time.time() - hit[0] < ttl
+
+
 def movies(kind):
     return cached("movies:%s" % kind, 300, lambda: cat.movies(kind))
 
@@ -593,6 +600,15 @@ def render(chat_id, message_id, is_photo, text, kb, photo=None):
     if want_photo and send_photo(chat_id, photo, text, kb):
         return
     send(chat_id, text, kb)
+
+
+def busy(chat_id, message_id, is_photo, text):
+    """Заглушка на время долгого запроса — экран не должен молчать."""
+    if is_photo:
+        tg("editMessageCaption", chat_id=chat_id, message_id=message_id,
+           caption=text, parse_mode="HTML")
+    else:
+        edit(chat_id, message_id, text, [])
 
 
 def kb_categories():
@@ -926,8 +942,8 @@ def on_callback(cb):
         if step == "noop":
             return
         if step == "cat":
-            if len(p) < 3:
-                edit(chat_id, mid, "Собираю афишу обоих сайтов…", [])
+            if not is_warm("movies:%s" % p[1], 300):
+                busy(chat_id, mid, is_photo, "🎬 Собираю афишу обоих сайтов…")
             show_movies(chat_id, mid, is_photo, p[1], int(p[2]) if len(p) > 2 else 0)
             return
         if step == "vid":
@@ -965,10 +981,13 @@ def on_callback(cb):
         if not m:
             edit(chat_id, mid, "Фильм пропал из афиши.", kb_categories())
             return
+        if not is_warm("ss:%s:all" % m["key"], 60):
+            busy(chat_id, mid, is_photo,
+                 "🎬 <b>%s</b>\n\nСобираю сеансы по кинотеатрам…"
+                 % html.escape(m["title"]))
         ss = sessions(m)
 
         if step == "v":
-            show_movie_info(chat_id, m)
             show_venues(chat_id, mid, is_photo, kind, m, ss)
         elif step == "s":
             show_sessions(chat_id, mid, is_photo, kind, m, ss, p[3])
