@@ -505,6 +505,14 @@ def card(title, venue, ss, with_free=True):
     return "\n".join(out)
 
 
+def _seats_word(n):
+    if n % 10 == 1 and n % 100 != 11:
+        return "место"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return "места"
+    return "мест"
+
+
 def _days_word(n):
     if n % 10 == 1 and n % 100 != 11:
         return "день"
@@ -528,7 +536,7 @@ def find_movie(kind, h):
 
 
 def new_sub(chat_id, movie, kind, venue, date=None, hall_id=None, hall=None,
-            time_=None, seats=None, owner=None):
+            time_=None, seats=None, owner=None, want_time=None):
     with _lock:
         sid = str(STATE["next_id"])
         STATE["next_id"] += 1
@@ -548,6 +556,8 @@ def new_sub(chat_id, movie, kind, venue, date=None, hall_id=None, hall=None,
             "hall_id": hall_id,
             "hall": hall,
             "time": time_,
+            # ориентир: сеансов ещё нет, возьмём ближайший к этому часу
+            "want_time": want_time,
             "seats": seats,
             "seen": [],
             "reminders": 0,
@@ -565,7 +575,7 @@ def sub_movie(sub):
 
 
 def sub_matches(sub, s):
-    if s["cinema_id"] != sub["cinema_id"]:
+    if sub.get("cinema_id") and s["cinema_id"] != sub["cinema_id"]:
         return False
     if sub.get("date") and s["date"] != sub["date"]:
         return False
@@ -580,16 +590,25 @@ def sub_title(sub):
     bits = [sub["title"], sub["cinema"]]
     bits.append(d_short(sub["date"]) if sub.get("date") else "любая новая дата")
     bits.append(sub.get("hall") or "все залы")
-    bits.append(sub.get("time") or "все сеансы")
+    if sub.get("time"):
+        bits.append(sub["time"])
+    elif sub.get("want_time"):
+        bits.append("ближе к %s" % sub["want_time"])
+    else:
+        bits.append("все сеансы")
     if sub.get("seats"):
         bits.append("автобронь на %d" % sub["seats"])
     return " · ".join(bits)
 
 
 def booking_ready(sub):
-    """Автобронь доступна только владельцу — чужая бронь ломает сеанс другим."""
+    """Автобронь доступна только владельцу — чужая бронь ломает сеанс другим.
+
+    Нужны дата и зал. Время не обязательно: у фильма из «скоро» сеансов
+    ещё нет, там бот берёт ближайший к ориентиру.
+    """
     return bool(sub.get("seats") and sub.get("date") and sub.get("hall_id")
-                and sub.get("time") and is_owner(sub.get("owner")))
+                and is_owner(sub.get("owner")))
 
 
 # ------------------------------------------------------------------- мастер
@@ -754,13 +773,20 @@ def show_venues(chat_id, message_id, is_photo, kind, m, ss):
     """Постер с описанием и список кинотеатров — одним сообщением."""
     vs = cat.venues(ss)
     if not vs:
-        kb = [[{"text": "🔔 Уведомить, когда появятся сеансы",
+        # расписание ещё не открыто — показываем все площадки города,
+        # чтобы можно было ждать конкретный кинотеатр и бронировать в нём
+        kb = [[{"text": "🔔 Любой кинотеатр",
                 "callback_data": SEP.join(["n", kind, mid_hash(m["key"]),
-                                           "any", "any", "all", "all", "0"])}],
-              [{"text": "‹ назад", "callback_data": "cat" + SEP + kind}]]
+                                           "any", "any", "all", "all", "0"])}]]
+        for v in all_venues():
+            kb.append([{"text": ("⭐ " if v["src"] == "cm" else "") + short(v["title"], 30),
+                        "callback_data": SEP.join(["s", kind, mid_hash(m["key"]),
+                                                   v["cinema_id"]])}])
+        kb.append([{"text": "‹ назад", "callback_data": "cat" + SEP + kind}])
         render(chat_id, message_id, is_photo,
-               movie_info(m, 700) + "\n\nСеансов пока нет ни в одном кинотеатре.",
-               kb, m.get("poster"))
+               movie_info(m, 700) + "\n\n<blockquote>Расписание ещё не открыто. "
+               "Выберите кинотеатр — скажу, как только он поставит сеансы."
+               "</blockquote>", kb, m.get("poster"))
         return
     kb = []
     for v in vs:
@@ -779,7 +805,7 @@ def show_venues(chat_id, message_id, is_photo, kind, m, ss):
 
 def show_sessions(chat_id, message_id, is_photo, kind, m, ss, cinema_id):
     mine = [s for s in ss if s["cinema_id"] == cinema_id]
-    venue = mine[0]["cinema"] if mine else cinema_id
+    venue = mine[0]["cinema"] if mine else venue_title(cinema_id)
     h = mid_hash(m["key"])
     kb = []
     vb = video_button(m)
@@ -788,6 +814,12 @@ def show_sessions(chat_id, message_id, is_photo, kind, m, ss, cinema_id):
     kb.append([{"text": "🔔 Уведомить о новых сеансах",
                 "callback_data": SEP.join(["cfg", kind, h, cinema_id])}])
     kb.append([{"text": "‹ назад", "callback_data": SEP.join(["v", kind, h])}])
+    if not mine:
+        render(chat_id, message_id, is_photo,
+               "🎬 <b>%s</b>\n📍 %s\n\n<blockquote>Этот кинотеатр ещё не "
+               "поставил сеансы. Включите напоминалку — сообщу, как только "
+               "они появятся.</blockquote>" % (esc(m["title"]), esc(venue)), kb)
+        return
     render(chat_id, message_id, is_photo, card(m["title"], venue, mine), kb)
 
 
@@ -843,6 +875,72 @@ def halls_of(ss, cinema_id):
     return out
 
 
+_HALLS = {"map": {}, "ts": 0}
+
+
+def build_hall_index(limit=8):
+    """Залы кинотеатров по текущему расписанию — нескольких фильмов хватает,
+    чтобы собрать почти все залы города."""
+    found = dict(_HALLS["map"])
+    for m in movies("t")[:limit]:
+        try:
+            ss = sessions(m, ttl=900)
+        except Exception:
+            continue
+        for s in ss:
+            if s.get("hall"):
+                found.setdefault(s["cinema_id"], {})[str(s["hall_id"])] = s["hall"]
+    with _lock:
+        _HALLS["map"], _HALLS["ts"] = found, time.time()
+    return found
+
+
+def cinema_halls(cinema_id):
+    """Залы кинотеатра, когда у самого фильма сеансов ещё нет."""
+    # на пустом кэше берём немного фильмов, чтобы нажатие не ждало долго:
+    # полный индекс собирается фоном на старте
+    if not _HALLS["map"] or time.time() - _HALLS["ts"] > 6 * 3600:
+        build_hall_index(6)
+    if cinema_id not in _HALLS["map"]:
+        build_hall_index(20)   # кинотеатра не было в первых фильмах — ищем шире
+    return _HALLS["map"].get(cinema_id, {})
+
+
+def all_venues():
+    return cached("venues", 3600, cat.all_venues)
+
+
+def venue_title(cinema_id):
+    for v in all_venues():
+        if v["cinema_id"] == cinema_id:
+            return v["title"]
+    return cinema_id
+
+
+def halls_for(ss, cinema_id):
+    return halls_of(ss, cinema_id) or cinema_halls(cinema_id)
+
+
+PREF_TIMES = ["10:00", "13:00", "16:00", "19:00", "21:00", "23:00"]
+
+
+def minutes(hhmm):
+    try:
+        h, m = hhmm.split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        return 0
+
+
+def split_time(tm):
+    """Кнопка времени: точное время, ориентир «~19:00» или «любое»."""
+    if not tm or tm == "all":
+        return None, None
+    if tm.startswith("~"):
+        return None, tm[1:]
+    return tm, None
+
+
 def book_hint(user_id, need):
     """Владельцу подсказываем, чего не хватает для автоброни."""
     if not is_owner(user_id):
@@ -855,7 +953,7 @@ def show_halls(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date,
     h = mid_hash(m["key"])
     base = SEP.join(["h", kind, h, cinema_id, date])
     kb = [[{"text": "Любой зал", "callback_data": base + SEP + "all"}]]
-    for hid, name in sorted(halls_of(ss, cinema_id).items(), key=lambda kv: kv[1]):
+    for hid, name in sorted(halls_for(ss, cinema_id).items(), key=lambda kv: kv[1]):
         kb.append([{"text": short(name, 30), "callback_data": base + SEP + hid}])
     vb = video_button(m)
     if vb:
@@ -874,10 +972,14 @@ def show_times(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date,
     base = SEP.join(["tm", kind, h, cinema_id, date, hall])
     times = sorted({s["time"] for s in ss if s["cinema_id"] == cinema_id
                     and (hall == "all" or str(s["hall_id"]) == hall)})
-    kb = [[{"text": "Любое время", "callback_data": base + SEP + "all"}]]
+    # у фильма из «скоро» сеансов ещё нет — тогда спрашиваем ориентир
+    guess = not times
+    kb = [[{"text": "Любое время" if not guess else "Любое — первый сеанс",
+            "callback_data": base + SEP + "all"}]]
     row = []
-    for t in times:
-        row.append({"text": t, "callback_data": base + SEP + t})
+    for t in (PREF_TIMES if guess else times):
+        row.append({"text": ("≈ " + t) if guess else t,
+                    "callback_data": base + SEP + (("~" + t) if guess else t)})
         if len(row) == 4:
             kb.append(row)
             row = []
@@ -885,13 +987,18 @@ def show_times(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date,
         kb.append(row)
     kb.append([{"text": "‹ назад",
                 "callback_data": SEP.join(["d", kind, h, cinema_id, date])}])
+    note = ("Расписание этого фильма ещё не открыто, поэтому точных сеансов "
+            "нет. Выберите желаемое время — когда сеансы появятся, возьму "
+            "ближайший к нему."
+            if guess else
+            "Время по желанию: не выберете — пришлю все сеансы этой даты.")
     render(chat_id, message_id, is_photo,
-         "🔔 <b>%s</b> · %s · %s\n\n<blockquote>Время тоже по желанию: "
-         "не выберете — пришлю все сеансы этой даты.</blockquote>%s"
+         "🔔 <b>%s</b> · %s · %s\n\n<blockquote>%s</blockquote>%s"
          % (esc(m["title"]),
             esc("любая дата" if date == "any" else d_long(date)),
-            esc(halls_of(ss, cinema_id).get(hall, "любой зал")),
-            book_hint(user_id, "конкретное время")), kb)
+            esc(halls_for(ss, cinema_id).get(hall, "любой зал")), note,
+            book_hint(user_id, "зал и дату — время можно любое")
+            if hall == "all" or date == "any" else ""), kb)
 
 
 def show_seats(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date, hall, tm):
@@ -905,31 +1012,44 @@ def show_seats(chat_id, message_id, is_photo, kind, m, ss, cinema_id, date, hall
     warn = ("" if BOOK_PHONE else
             "\n\n⚠️ Сейчас автобронь не заработает: в <code>.env</code> пустой "
             "<code>BOOK_PHONE</code>.")
+    exact, want = split_time(tm)
+    if exact:
+        when = exact
+        rule = "Возьму сеанс в %s." % exact
+    elif want:
+        when = "≈ " + want
+        rule = "Точных сеансов ещё нет — возьму тот, что окажется ближе к %s." % want
+    else:
+        when = "любое время"
+        rule = "Возьму первый сеанс этого дня в выбранном зале."
     render(chat_id, message_id, is_photo,
          "🎟 <b>%s</b> · %s · %s · %s\n\n"
-         "<blockquote>Автобронь: как только сеанс появится, бот займёт места "
+         "<blockquote>%s Как только сеанс появится, бот займёт места "
          "в середине зала и пришлёт ссылку на оплату. Ссылка живёт 10 минут — "
          "если никто не оплатит, бот забронирует заново.</blockquote>\n"
          "Сколько мест бронировать?%s"
          % (esc(m["title"]),
-            esc(d_long(date)), esc(halls_of(ss, cinema_id).get(hall, "зал")),
-            esc(tm), warn), kb)
+            esc(d_long(date)), esc(halls_for(ss, cinema_id).get(hall, "зал")),
+            esc(when), rule, warn), kb)
 
 
 def finish(chat_id, message_id, is_photo, user_id, kind, m, ss, cinema_id,
            date="any", hall="all", tm="all", seats=0):
     vs = cat.venues(ss)
-    venue = next((v for v in vs if v["cinema_id"] == cinema_id), None)
+    if cinema_id == "any":     # ждём сеансы в любом кинотеатре обоих сетей
+        venue = {"src": None, "cinema_id": None, "title": "любой кинотеатр"}
+    else:
+        venue = next((v for v in vs if v["cinema_id"] == cinema_id), None)
     if not venue:
         venue = {"src": "cm" if cinema_id == "cm" else "gt",
-                 "cinema_id": cinema_id, "title": cat.CM_LABEL
-                 if cinema_id == "cm" else "кинотеатр"}
+                 "cinema_id": cinema_id, "title": venue_title(cinema_id)}
 
+    exact, want = split_time(tm)
     sub = new_sub(chat_id, m, kind, venue,
                   date=None if date == "any" else date,
                   hall_id=None if hall == "all" else hall,
-                  hall=None if hall == "all" else halls_of(ss, cinema_id).get(hall),
-                  time_=None if tm == "all" else tm,
+                  hall=None if hall == "all" else halls_for(ss, cinema_id).get(hall),
+                  time_=exact, want_time=want,
                   seats=seats if (seats and is_owner(user_id)) else None,
                   owner=user_id)
 
@@ -947,6 +1067,13 @@ def finish(chat_id, message_id, is_photo, user_id, kind, m, ss, cinema_id,
         text += "Сеансы на эту дату уже есть — сообщу, если добавят ещё."
     else:
         text += "Сеансов на эту дату пока нет — сообщу, как только появятся."
+    if sub.get("seats"):
+        text += ("\n\n🎟 Автобронь на %d %s: %s"
+                 % (sub["seats"], _seats_word(sub["seats"]),
+                    "возьму сеанс ближе к %s" % sub["want_time"]
+                    if sub.get("want_time") else
+                    "возьму сеанс в %s" % sub["time"] if sub.get("time") else
+                    "возьму первый сеанс этого дня"))
     kb = []
     vb = video_button(sub)
     if vb:
@@ -1037,20 +1164,22 @@ def on_callback(cb):
             show_dates(chat_id, mid, is_photo, kind, m, ss, p[3],
                        int(p[4]) if len(p) > 4 else 0, uid)
         elif step == "d":
+            if not halls_of(ss, p[3]) and p[3] not in _HALLS["map"]:
+                busy(chat_id, mid, is_photo, "🏛 Собираю список залов…")
             show_halls(chat_id, mid, is_photo, kind, m, ss, p[3], p[4], uid)
         elif step == "h":
             show_times(chat_id, mid, is_photo, kind, m, ss, p[3], p[4], p[5], uid)
         elif step == "tm":
             cinema_id, date, hall, tm = p[3], p[4], p[5], p[6]
-            can_book = (is_owner(uid) and date != "any"
-                        and hall != "all" and tm != "all")
+            # время не обязательно: у фильма из «скоро» его ещё не существует
+            can_book = is_owner(uid) and date != "any" and hall != "all"
             if can_book:
                 show_seats(chat_id, mid, is_photo, kind, m, ss, cinema_id, date, hall, tm)
             else:
                 finish(chat_id, mid, is_photo, uid, kind, m, ss, cinema_id, date, hall, tm)
         elif step == "n":
             if p[3] == "any":          # фильм совсем без сеансов
-                finish(chat_id, mid, is_photo, uid, kind, m, ss, "cm", "any", "all", "all", 0)
+                finish(chat_id, mid, is_photo, uid, kind, m, ss, "any", "any", "all", "all", 0)
             else:
                 if not is_owner(uid):
                     answer(cb["id"], "Автобронь доступна только владельцу")
@@ -1289,12 +1418,19 @@ def cm_login():
 
 
 def find_session(sub):
+    """Сеанс под бронь. Есть ориентир — берём ближайший к нему по времени,
+    иначе самый ранний из подходящих."""
     m = sub_movie(sub)
     drop_sessions(m, sub["src"])
-    for s in sessions(m, sub["src"]):
-        if sub_matches(sub, s):
-            return s
-    return None
+    mine = [s for s in sessions(m, sub["src"]) if sub_matches(sub, s)]
+    if not mine:
+        return None
+    want = sub.get("want_time")
+    if want:
+        mine.sort(key=lambda s: (abs(minutes(s["time"]) - minutes(want)), s["time"]))
+    else:
+        mine.sort(key=lambda s: s["time"])
+    return mine[0]
 
 
 def release_hold(sub):
@@ -1445,6 +1581,9 @@ def warmup():
         cat.tashkent_cinemas()
         for kind in ("t", "s"):
             log("прогрев %s: %d фильмов" % (kind, len(movies(kind))))
+        idx = build_hall_index(20)
+        log("индекс залов: %d кинотеатров, %d залов"
+            % (len(idx), sum(len(v) for v in idx.values())))
     except Exception as e:
         log("прогрев не удался:", e)
 

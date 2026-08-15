@@ -228,6 +228,19 @@ def venues(ss):
     return out
 
 
+def all_venues():
+    """Все ташкентские площадки — нужны фильму из «скоро», у которого
+    сеансов ещё нет ни в одном кинотеатре."""
+    out = [{"src": "cm", "cinema_id": "cm", "title": CM_LABEL}]
+    allowed = tashkent_cinemas()
+    for c in gt.cinemas():
+        if allowed is not None and c["id"] not in allowed:
+            continue
+        out.append({"src": "gt", "cinema_id": "gt%s" % c["id"],
+                    "title": (c.get("title") or "").strip()})
+    return out
+
+
 def scheme(s):
     """Схема зала сеанса — одинаковая структура для обоих сайтов."""
     if s["src"] == "cm":
