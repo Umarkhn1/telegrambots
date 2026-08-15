@@ -153,6 +153,13 @@ REMIND = [
 ]
 
 
+if sys.stdout is None or sys.stderr is None:
+    # запуск через pythonw: консоли нет, print() падал бы и рвал поток
+    _logfile = open(os.path.join(STATE_DIR, "bot.log"), "a", encoding="utf-8",
+                    buffering=1)
+    sys.stdout = sys.stderr = _logfile
+
+
 def log(*a):
     print(datetime.now().strftime("[%H:%M:%S]"), *a, flush=True)
 
