@@ -167,9 +167,13 @@ def _fmt(block, vacant):
     return out
 
 
-def pick_anchored(data, count, rows_pref, center, tolerance=1.5):
-    """Места вокруг заданного центра ряда: сначала точное попадание в
-    приоритетных рядах, потом ближайшее в том же порядке рядов.
+def pick_anchored(data, count, rows_pref, center, tolerance=3):
+    """Места вокруг заданного центра ряда.
+
+    Порядок такой: точное попадание в любимых рядах, затем небольшое
+    смещение вбок в тех же рядах, затем те же места в соседних рядах.
+    Середина важнее ряда: если центр ряда 7 разобран, бот уходит в ряд 8,
+    а не садится с краю седьмого.
 
     rows_pref — номера рядов по убыванию желания, напр. [7, 8, 6].
     center    — номер центрального места (13.5 = между 13 и 14).
@@ -194,8 +198,14 @@ def pick_anchored(data, count, rows_pref, center, tolerance=1.5):
             if abs(_num_center(block) - center) < 0.01:
                 return _fmt(block, vacant)
 
-    # 2) ближайшие к центру в первом же ряду, где вообще есть блок
-    for rn in rows_pref:
+    # 2) те же ряды, но с небольшим смещением вбок
+    # 3) если и там середина занята — соседние ряды, от ближнего к дальнему
+    # уходим недалеко: ряд-другой в сторону — ещё середина зала,
+    # а первый ряд у экрана серединой уже не назовёшь
+    others = sorted((n for n in by_num
+                     if n not in rows_pref and abs(n - rows_pref[0]) <= 3),
+                    key=lambda n: (abs(n - rows_pref[0]), -n))
+    for rn in list(rows_pref) + others:
         best, best_dev = None, None
         for block in _free_blocks(by_num.get(rn) or [], vacant, count, step):
             dev = abs(_num_center(block) - center)
@@ -248,8 +258,9 @@ def pick_seats(data, count, rows_pref=None, center=None):
             bx = sum(s["x"] for s in block) / float(count)
             d_side = abs(bx - center_x) / float(step)          # в креслах
             d_row = depth - ideal_row                          # в рядах
-            # сидеть дальше от экрана приятнее, чем ближе
-            cost = d_side * 1.0 + (d_row * 1.2 if d_row >= 0 else -d_row * 1.9)
+            # край ряда хуже, чем чужой ряд: середина важнее глубины,
+            # поэтому боковое отклонение весит вдвое
+            cost = d_side * 2.0 + (d_row * 1.2 if d_row >= 0 else -d_row * 1.9)
             if best_cost is None or cost < best_cost:
                 best_cost, best = cost, block
 
