@@ -169,6 +169,9 @@ def log(*a):
 _lock = threading.RLock()
 STATE = {"chats": {}, "subs": {}, "next_id": 1, "offset": 0, "videos": {}}
 POOL = ThreadPoolExecutor(max_workers=6)
+# отдельный постоянный пул под опрос свободных мест: потоки живут долго,
+# соединения к сайтам остаются открытыми и не платят за рукопожатие TLS
+SEATS_POOL = ThreadPoolExecutor(max_workers=10, thread_name_prefix="seats")
 
 
 def load_state():
@@ -417,8 +420,7 @@ def free_map(ss, limit=45):
     if not ss:
         return {}
     try:
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            got = list(ex.map(free_seats, ss))
+        got = list(SEATS_POOL.map(free_seats, ss))
     except Exception:
         got = [free_seats(s) for s in ss]
     return {s["sid"]: n for s, n in zip(ss, got)}
@@ -1396,6 +1398,17 @@ def selftest():
                [s for s in ss if s["cinema_id"] == v["cinema_id"]][:6]))
 
 
+def warmup():
+    """Прогрев на старте: афиша ложится в кэш, соединения к сайтам
+    открываются заранее — первое нажатие не ждёт рукопожатия TLS."""
+    try:
+        cat.tashkent_cinemas()
+        for kind in ("t", "s"):
+            log("прогрев %s: %d фильмов" % (kind, len(movies(kind))))
+    except Exception as e:
+        log("прогрев не удался:", e)
+
+
 def main():
     if "--selftest" in sys.argv:
         selftest()
@@ -1408,6 +1421,7 @@ def main():
     log("бот запущен: @%s" % me.get("username"))
     register_commands()
     cm_login()
+    POOL.submit(warmup)
     threading.Thread(target=watch_loop, daemon=True).start()
     threading.Thread(target=booking_loop, daemon=True).start()
     poll_telegram()

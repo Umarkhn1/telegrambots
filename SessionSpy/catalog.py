@@ -18,6 +18,13 @@ import gtickets as gt
 
 CM_LABEL = "CINEMATICA"
 
+# Пулы живут всё время работы процесса: потоки переиспользуются, а вместе
+# с ними и открытые соединения к сайтам. Свежий поток платит за рукопожатие
+# TLS около секунды — на семи датах это разница между 2 с и 0.4 с.
+# Пула два, чтобы верхняя задача не ждала свободного места под вложенную.
+_TOP = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cat-top")
+_IO = ThreadPoolExecutor(max_workers=8, thread_name_prefix="cat-io")
+
 
 # ------------------------------------------------------------------ фильмы
 
@@ -85,11 +92,10 @@ def _gt_movies(kind):
 
 def movies(kind):
     """Афиша обоих сайтов, склеенная по названию."""
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        a = ex.submit(_cm_movies, kind)
-        b = ex.submit(_gt_movies, kind)
-        cm_list = _safe(a)
-        gt_list = _safe(b)
+    a = _TOP.submit(_cm_movies, kind)
+    b = _TOP.submit(_gt_movies, kind)
+    cm_list = _safe(a)
+    gt_list = _safe(b)
 
     merged = {}
     for src, lst in (("cm", cm_list), ("gt", gt_list)):
@@ -168,27 +174,26 @@ def _gt_sessions(movie_id, days=None):
             return day, {}
 
     allowed = tashkent_cinemas()
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        for day, d in ex.map(one, days):
-            for c in (d.get("cinemas") or []):
-                if allowed is not None and c.get("id") not in allowed:
-                    continue
-                for s in (c.get("seances") or []):
-                    dt = s.get("datetime") or {}
-                    hall = s.get("hall") or {}
-                    price = s.get("price") or {}
-                    out.append({
-                        "src": "gt",
-                        "sid": "gt:%s" % s["id"],
-                        "cinema_id": "gt%s" % c["id"],
-                        "cinema": c.get("title") or "",
-                        "hall_id": str(hall.get("id")),
-                        "hall": hall.get("title") or "",
-                        "date": dt.get("date") or day,
-                        "time": dt.get("time") or "",
-                        "price": (price.get("min_text") or "") + " сум",
-                        "raw": {"seance_id": s["id"], "cinema_id": c["id"]},
-                    })
+    for day, d in _IO.map(one, days):
+        for c in (d.get("cinemas") or []):
+            if allowed is not None and c.get("id") not in allowed:
+                continue
+            for s in (c.get("seances") or []):
+                dt = s.get("datetime") or {}
+                hall = s.get("hall") or {}
+                price = s.get("price") or {}
+                out.append({
+                    "src": "gt",
+                    "sid": "gt:%s" % s["id"],
+                    "cinema_id": "gt%s" % c["id"],
+                    "cinema": c.get("title") or "",
+                    "hall_id": str(hall.get("id")),
+                    "hall": hall.get("title") or "",
+                    "date": dt.get("date") or day,
+                    "time": dt.get("time") or "",
+                    "price": (price.get("min_text") or "") + " сум",
+                    "raw": {"seance_id": s["id"], "cinema_id": c["id"]},
+                })
     return out
 
 
@@ -202,14 +207,13 @@ def _money(v):
 def sessions(movie, only_src=None):
     """Все сеансы фильма по обоим сайтам."""
     jobs = []
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        if "cm" in movie["src"] and only_src in (None, "cm"):
-            jobs.append(ex.submit(_cm_sessions, movie["src"]["cm"]))
-        if "gt" in movie["src"] and only_src in (None, "gt"):
-            jobs.append(ex.submit(_gt_sessions, movie["src"]["gt"]))
-        out = []
-        for j in jobs:
-            out += _safe(j)
+    if "cm" in movie["src"] and only_src in (None, "cm"):
+        jobs.append(_TOP.submit(_cm_sessions, movie["src"]["cm"]))
+    if "gt" in movie["src"] and only_src in (None, "gt"):
+        jobs.append(_TOP.submit(_gt_sessions, movie["src"]["gt"]))
+    out = []
+    for j in jobs:
+        out += _safe(j)
     return out
 
 
