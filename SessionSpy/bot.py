@@ -587,7 +587,7 @@ def render(chat_id, message_id, is_photo, text, kb, photo=None):
                caption=text[:1024], parse_mode="HTML",
                reply_markup={"inline_keyboard": kb})
         else:
-            render(chat_id, message_id, is_photo, text, kb)
+            edit(chat_id, message_id, text, kb)
         return
     tg("deleteMessage", chat_id=chat_id, message_id=message_id)
     if want_photo and send_photo(chat_id, photo, text, kb):
