@@ -1233,6 +1233,49 @@ def send_menu(chat_id):
     show_hello(chat_id)
 
 
+# Живая проверка автоброни: реальный сеанс, реальная бронь, реальная ссылка.
+TEST_BOOKING = {"movie": 956, "cinema": "cm", "time": "15:10", "seats": 6}
+
+
+def cmd_book_test(chat_id, user_id):
+    """Бронирует места на настоящем сеансе — так видно, что фича работает.
+
+    Бронь настоящая: место занимается на сайте на 10 минут. Поэтому
+    доступна только владельцу, как и обычная автобронь.
+    """
+    cfg = TEST_BOOKING
+    send(chat_id, "🧪 <b>Проверка автоброни</b>\n\n<blockquote>Беру настоящий "
+                  "сеанс: фильм %s, %s, %s, %d мест. Бронь живая — места "
+                  "займутся на сайте.</blockquote>"
+                  % (cfg["movie"], cat.CM_LABEL, cfg["time"], cfg["seats"]))
+    m = next((x for x in movies("t") if x["src"].get("cm") == cfg["movie"]), None)
+    if not m:
+        send(chat_id, "Фильма %s нет в сегодняшней афише." % cfg["movie"])
+        return
+    ss = [s for s in sessions(m, "cm")
+          if s["cinema_id"] == cfg["cinema"] and s["time"] == cfg["time"]]
+    if not ss:
+        send(chat_id, "Сеанса в %s сегодня нет." % cfg["time"])
+        return
+    s = sorted(ss, key=lambda x: x["date"])[0]
+    venue = {"src": "cm", "cinema_id": "cm", "title": cat.CM_LABEL}
+    sub = new_sub(chat_id, m, "t", venue, date=s["date"], hall_id=s["hall_id"],
+                  hall=s["hall"], time_=s["time"], seats=cfg["seats"],
+                  owner=user_id)
+    with _lock:
+        sub["seen"] = [x["sid"] for x in ss]
+    save_state()
+    send(chat_id, "Сеанс найден: <b>%s</b> · %s · %s\nБронирую %d мест "
+                  "в середине зала…"
+                  % (esc(s["hall"]), esc(d_long(s["date"])), s["time"], cfg["seats"]))
+    do_booking(sub)
+    send(chat_id, "Готово. Бронь ведёт себя как обычная: не оплатите — "
+                  "через 10 минут забронирую заново. Чтобы прекратить, "
+                  "нажмите «Отключить».",
+         [[{"text": "🛑 Отключить проверку",
+            "callback_data": "off%s%s" % (SEP, sub["id"])}]])
+
+
 def cmd_test(chat_id):
     """Показывает, как выглядит уведомление, на реальном ближайшем сеансе."""
     send(chat_id, "🧪 Проверка. Дальше — то же самое, что придёт при новых сеансах.")
@@ -1282,6 +1325,7 @@ def on_message(m):
 
     text = (m.get("text") or "").strip()
     cmd = text.split()[0].split("@")[0].lower() if text else ""
+    uid = (m.get("from") or {}).get("id")
 
     if cmd == "/start":
         if chat.get("type") != "private":
@@ -1296,7 +1340,11 @@ def on_message(m):
     elif cmd == "/help" or text.startswith("❓"):
         send(chat_id, HELP)
     elif cmd == "/test" or text.startswith("🧪"):
-        POOL.submit(cmd_test, chat_id)
+        # владельцу — живая проверка автоброни, остальным пример уведомления
+        if is_owner(uid):
+            POOL.submit(cmd_book_test, chat_id, uid)
+        else:
+            POOL.submit(cmd_test, chat_id)
     elif cmd == "/menu":
         send_menu(chat_id)
     save_state()
