@@ -74,12 +74,33 @@ public class Main {
     private static final int KEEPALIVE_MINUTES = 14;
 
     /**
+     * Окно активности в местном времени контейнера (TZ сервиса), например «7-1» —
+     * с 07:00 до 01:00. Вне окна пинги прекращаются, сервис засыпает и перестаёт
+     * тратить бесплатные часы Render. Пусто — работаем круглосуточно.
+     */
+    private static boolean withinActiveHours() {
+        String window = System.getenv("KEEPALIVE_HOURS");
+        if (window == null || window.isBlank()) return true;
+        try {
+            String[] p = window.split("-");
+            int from = Integer.parseInt(p[0].trim());
+            int to   = Integer.parseInt(p[1].trim());
+            int hour = java.time.LocalTime.now().getHour();
+            // from > to means the window wraps over midnight (7-1 = 07:00…01:00).
+            return from <= to ? hour >= from && hour < to : hour >= from || hour < to;
+        } catch (Exception e) {
+            System.err.println("[Main] KEEPALIVE_HOURS=" + window + " не разобрано: " + e.getMessage());
+            return true;
+        }
+    }
+
+    /**
      * Бесплатный веб-сервис Render засыпает после 15 минут без входящих запросов,
      * а спящий бот перестаёт забирать апдейты. Поэтому раз в 14 минут дёргаем
      * собственный публичный адрес (RENDER_EXTERNAL_URL Render подставляет сам).
      *
-     * Оговорка: это спасает только пока процесс жив — разбудить уже уснувший
-     * сервис изнутри нельзя, для этого нужен внешний пингер.
+     * Оговорки: разбудить уже уснувший сервис изнутри нельзя — для этого нужен
+     * внешний пингер; и вне KEEPALIVE_HOURS мы намеренно даём сервису уснуть.
      */
     private static void startKeepAlive() {
         String url = System.getenv("KEEPALIVE_URL");
@@ -99,6 +120,10 @@ public class Main {
                 });
 
         ses.scheduleAtFixedRate(() -> {
+            if (!withinActiveHours()) {
+                System.out.println("😴 keepalive пропущен: вне окна активности, даём сервису уснуть");
+                return;
+            }
             try {
                 java.net.http.HttpResponse<Void> resp = client.send(
                         java.net.http.HttpRequest.newBuilder(target)
@@ -111,6 +136,8 @@ public class Main {
             }
         }, KEEPALIVE_MINUTES, KEEPALIVE_MINUTES, java.util.concurrent.TimeUnit.MINUTES);
 
-        System.out.println("💓 Keepalive: " + target + " каждые " + KEEPALIVE_MINUTES + " мин");
+        String window = System.getenv("KEEPALIVE_HOURS");
+        System.out.println("💓 Keepalive: " + target + " каждые " + KEEPALIVE_MINUTES + " мин"
+                + (window == null || window.isBlank() ? " (круглосуточно)" : ", окно " + window));
     }
 }
