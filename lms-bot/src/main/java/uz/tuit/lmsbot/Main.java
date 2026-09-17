@@ -52,8 +52,15 @@ public class Main {
                             new java.net.InetSocketAddress(Integer.parseInt(port)), 0);
             http.createContext("/", exchange -> {
                 byte[] body = "ok".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(200, body.length);
-                try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(body); }
+                // Health-check Render ходит методом HEAD, а на HEAD тело слать нельзя:
+                // длина ответа должна быть -1, иначе JDK пишет WARNING в лог.
+                boolean head = "HEAD".equalsIgnoreCase(exchange.getRequestMethod());
+                exchange.sendResponseHeaders(200, head ? -1 : body.length);
+                if (!head) {
+                    try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(body); }
+                } else {
+                    exchange.close();
+                }
             });
             http.setExecutor(null);
             http.start();
