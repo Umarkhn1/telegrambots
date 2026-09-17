@@ -6,16 +6,12 @@ import lombok.Data;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.InputStream;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 @Data
 public class AppConfig {
 
     private BotConfig bot = new BotConfig();
     private LmsConfig lms = new LmsConfig();
-    private List<SemesterConfig> semesters;
 
     private static AppConfig instance;
 
@@ -36,16 +32,6 @@ public class AppConfig {
         } catch (Exception e) {
             throw new RuntimeException("Failed to load application.yml: " + e.getMessage(), e);
         }
-    }
-
-    public Map<Integer, String> getSemesterMap() {
-        Map<Integer, String> map = new LinkedHashMap<>();
-        if (semesters != null) {
-            for (SemesterConfig s : semesters) {
-                map.put(s.getId(), s.getName());
-            }
-        }
-        return map;
     }
 
     @Data

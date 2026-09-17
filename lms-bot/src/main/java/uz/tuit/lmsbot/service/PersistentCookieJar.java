@@ -57,14 +57,18 @@ public class PersistentCookieJar implements CookieJar {
     @NotNull
     @Override
     public synchronized List<Cookie> loadForRequest(@NotNull HttpUrl url) {
-        String host = url.host();
-        List<Cookie> cookies = new ArrayList<>(store.getOrDefault(host, Collections.emptyList()));
-
+        // Матчим по правилам cookie (домен + path + secure), а не по точному хосту:
+        // иначе кука с domain=.egov.uz, выставленная sso.egov.uz, не доезжает
+        // до id.egov.uz и OneID-цепочка теряет часть состояния.
         long now = System.currentTimeMillis();
-        cookies.removeIf(c -> c.expiresAt() <= now);
-        store.put(host, cookies);
-        // Don't persist every request; it's fine.
-        return cookies;
+        List<Cookie> result = new ArrayList<>();
+        for (List<Cookie> list : store.values()) {
+            list.removeIf(c -> c.expiresAt() <= now);
+            for (Cookie c : list) {
+                if (c.matches(url)) result.add(c);
+            }
+        }
+        return result;
     }
 
     public synchronized void clear() {

@@ -13,10 +13,11 @@ public class Main {
 
         AppConfig config = AppConfig.load();
 
-        if ("YOUR_TELEGRAM_BOT_TOKEN".equals(config.getBot().getToken())) {
-            System.err.println("❌ BOT_TOKEN not configured!");
-            System.err.println("   Option 1: export BOT_TOKEN=your_token");
-            System.err.println("   Option 2: edit src/main/resources/application.yml");
+        String token = config.getBot().getToken();
+        if (token == null || token.isBlank() || "YOUR_TELEGRAM_BOT_TOKEN".equals(token)) {
+            System.err.println("❌ BOT_TOKEN не задан!");
+            System.err.println("   Локально:    BOT_TOKEN=... java -jar build/libs/lms-bot.jar");
+            System.err.println("   На хостинге: переменная окружения BOT_TOKEN у сервиса");
             System.exit(1);
         }
 
@@ -25,6 +26,7 @@ public class Main {
 
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         botsApi.registerBot(bot);
+        bot.applyBotCommands();
 
         // ✅ НОВОЕ: чистая остановка всех потоков при Ctrl+C или kill
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -33,5 +35,30 @@ public class Main {
         }));
 
         System.out.println("✅ Bot is running! Username: @" + config.getBot().getUsername());
+
+        // Хостинги вроде Render считают веб-сервис упавшим, если он не слушает $PORT.
+        // Боту порт не нужен (long polling), поэтому поднимаем его только когда
+        // переменная задана — как health-check и как способ не дать сервису уснуть.
+        startHealthServer();
+    }
+
+    private static void startHealthServer() {
+        String port = System.getenv("PORT");
+        if (port == null || port.isBlank()) return;
+        try {
+            com.sun.net.httpserver.HttpServer http =
+                    com.sun.net.httpserver.HttpServer.create(
+                            new java.net.InetSocketAddress(Integer.parseInt(port)), 0);
+            http.createContext("/", exchange -> {
+                byte[] body = "ok".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(body); }
+            });
+            http.setExecutor(null);
+            http.start();
+            System.out.println("🌐 Health endpoint on :" + port);
+        } catch (Exception e) {
+            System.err.println("[Main] health server: " + e.getMessage());
+        }
     }
 }

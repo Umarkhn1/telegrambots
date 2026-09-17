@@ -30,6 +30,20 @@ public class LmsService {
 
     private final Map<Long, OkHttpClient> clients     = new ConcurrentHashMap<>();
     private final Map<Long, Boolean>      loggedInMap = new ConcurrentHashMap<>();
+    private final Map<Long, PersistentCookieJar> jars  = new ConcurrentHashMap<>();
+
+    /** Диагностика HTTP-слоя. По умолчанию выключена: в лог попадают куки и токены. */
+    private static final boolean DEBUG = "true".equalsIgnoreCase(System.getenv("LMS_DEBUG"));
+
+    static void dbg(String fmt, Object... args) {
+        if (DEBUG) System.out.println("[LMS-DBG] " + String.format(fmt, args));
+    }
+
+    private static String snip(String s) {
+        if (s == null) return "null";
+        String one = s.replaceAll("\s+", " ").trim();
+        return one.length() > 220 ? one.substring(0, 220) + "..." : one;
+    }
 
     public LmsService(AppConfig config) {
         this.config = config;
@@ -41,7 +55,7 @@ public class LmsService {
 
     private OkHttpClient getClient(long userId) {
         return clients.computeIfAbsent(userId, id -> new OkHttpClient.Builder()
-                .cookieJar(new PersistentCookieJar(sessionDir(), userId))
+                .cookieJar(jars.compute(userId, (k, v) -> new PersistentCookieJar(sessionDir(), userId)))
                 .followRedirects(true)
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -62,6 +76,9 @@ public class LmsService {
 
     public boolean login(long userId, String login, String password) {
         try {
+            // Как и в OneID: входим всегда с чистого jar, иначе живая сессия
+            // предыдущего аккаунта переживает вход и данные приходят чужие.
+            resetSession(userId);
             OkHttpClient client = getClient(userId);
             String loginUrl = config.getLms().getLoginUrl();
 
@@ -103,11 +120,316 @@ public class LmsService {
                     || responseBody.contains("page-sidebar")
                     || responseBody.contains("Студент");
 
+            dbg("LMS-LOGIN u=%d final=%s success=%s len=%d", userId, finalUrl, success, responseBody.length());
+            dbg("LMS-LOGIN cookies u=%d -> %s", userId, cookieDump(userId));
+
             loggedInMap.put(userId, success);
+            if (success) invalidateSemesters(userId);
             return success;
 
         } catch (Exception e) {
             System.err.println("[LmsService] Login error: " + e.getMessage());
+            return false;
+        }
+    }
+
+
+    // ─────────────────────────────────────────────
+    //  ONEID (id.egov.uz) AUTH
+    // ─────────────────────────────────────────────
+
+    private static final String ONEID_API = "https://id.egov.uz/api/";
+    private static final String ONEID_SSO_CLIENT = "https://sso.egov.uz/sso/oauth/client";
+    private static final MediaType JSON_UTF8 = MediaType.parse("application/json; charset=utf-8");
+
+    /** token_id + client_id текущей OneID-сессии пользователя. */
+    private static class OneIdSession {
+        String tokenId;
+        String clientId;
+        String jwt;
+    }
+
+    private final Map<Long, OneIdSession> oneIdSessions = new ConcurrentHashMap<>();
+
+    /** Результат шага OneID-авторизации. */
+    public static class OneIdResult {
+        public enum Status { OK, NEED_SMS, ERROR }
+        public final Status status;
+        public final String message;
+        private OneIdResult(Status s, String m) { this.status = s; this.message = m; }
+        static OneIdResult ok()              { return new OneIdResult(Status.OK, null); }
+        static OneIdResult needSms()         { return new OneIdResult(Status.NEED_SMS, null); }
+        static OneIdResult error(String msg) { return new OneIdResult(Status.ERROR, msg); }
+    }
+
+    /**
+     * Шаг 1. Открывает LMS-эндпоинт /login/oneid тем же cookie jar, что и обычный вход,
+     * и достаёт из финального URL id.egov.uz параметры token_id / client_id.
+     */
+    private OneIdSession oneIdStart(long userId) throws Exception {
+        // Старая сессия LMS перехватывает /login/oneid и редиректит сразу на /dashboard,
+        // из-за чего token_id не выдаётся. Поэтому вход всегда начинаем с чистого jar.
+        resetSession(userId);
+        OkHttpClient client = getClient(userId);
+        Request req = new Request.Builder()
+                .url(config.getLms().getBaseUrl() + "/login/oneid")
+                .header("User-Agent", userAgent())
+                .build();
+        String finalUrl;
+        try (Response resp = client.newCall(req).execute()) {
+            finalUrl = resp.request().url().toString();
+            if (resp.body() != null) resp.body().string();
+        }
+        dbg("ONEID start u=%d final=%s", userId, finalUrl);
+        HttpUrl url = HttpUrl.parse(finalUrl);
+        if (url == null) throw new IllegalStateException("OneID: bad redirect url");
+        OneIdSession s = new OneIdSession();
+        s.tokenId  = url.queryParameter("token_id");
+        s.clientId = url.queryParameter("client_id");
+        if (s.tokenId == null || s.clientId == null)
+            throw new IllegalStateException("OneID: token_id/client_id not found in " + finalUrl);
+        oneIdSessions.put(userId, s);
+        return s;
+    }
+
+    private Request.Builder oneIdReq(String path) {
+        return new Request.Builder()
+                .url(ONEID_API + path)
+                .header("User-Agent", userAgent())
+                .header("Accept", "application/json")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header("X-Origin", "web-client")
+                .header("Accept-Language", "ru")
+                .header("Origin", "https://id.egov.uz")
+                .header("Referer", "https://id.egov.uz/");
+    }
+
+    /** Достаёт человекочитаемую ошибку из тела ответа OneID. */
+    private String oneIdError(String body) {
+        try {
+            JsonNode n = mapper.readTree(body);
+            String msg = n.path("message").asText(null);
+            if (msg != null && !msg.isBlank()) return msg;
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /**
+     * Шаг 2. Логин по паролю OneID. Возвращает OK (можно завершать),
+     * NEED_SMS (нужен код из СМС) либо ERROR с текстом от OneID.
+     */
+    public OneIdResult oneIdLogin(long userId, String login, String password) {
+        try {
+            oneIdStart(userId);
+            OneIdSession s = oneIdSessions.get(userId);
+
+            String payload = mapper.createObjectNode()
+                    .put("login", login)
+                    .put("password", password)
+                    .toString();
+
+            Request req = oneIdReq("identity/auth/login")
+                    .header("X-Authorization-Method", "LOGINPASSMETHOD")
+                    .post(RequestBody.create(payload, JSON_UTF8))
+                    .build();
+
+            String body;
+            int code;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                code = resp.code();
+                body = resp.body() != null ? resp.body().string() : "";
+            }
+
+            dbg("ONEID login u=%d code=%d len=%d", userId, code, body.length());
+            if (code >= 400) return OneIdResult.error(oneIdError(body));
+
+            JsonNode json = mapper.readTree(body);
+            if (json.hasNonNull("token")) {
+                s.jwt = json.get("token").asText();
+                return OneIdResult.ok();
+            }
+            if (json.path("code").asInt(-1) == 2) return OneIdResult.needSms();
+            return OneIdResult.error(oneIdError(body));
+
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID login error: " + e.getMessage());
+            return OneIdResult.error(null);
+        }
+    }
+
+    /** Шаг 2b. Подтверждение входа кодом из СМС (когда OneID вернул code=2). */
+    public OneIdResult oneIdConfirm(long userId, String login, String smsCode) {
+        try {
+            OneIdSession s = oneIdSessions.get(userId);
+            if (s == null) return OneIdResult.error(null);
+
+            String payload = mapper.createObjectNode()
+                    .put("login", login)
+                    .put("code", smsCode)
+                    .toString();
+
+            Request req = oneIdReq("identity/auth/login/confirm")
+                    .post(RequestBody.create(payload, JSON_UTF8))
+                    .build();
+
+            String body;
+            int code;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                code = resp.code();
+                body = resp.body() != null ? resp.body().string() : "";
+            }
+            if (code >= 400) return OneIdResult.error(oneIdError(body));
+
+            JsonNode json = mapper.readTree(body);
+            if (json.hasNonNull("token")) {
+                s.jwt = json.get("token").asText();
+                return OneIdResult.ok();
+            }
+            return OneIdResult.error(oneIdError(body));
+
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID confirm error: " + e.getMessage());
+            return OneIdResult.error(null);
+        }
+    }
+
+    /**
+     * Шаг 3. Обменивает JWT OneID на one_code через sso/v1/generate и дергает
+     * callbackUrl LMS тем же cookie jar — после этого сессия LMS авторизована.
+     */
+    public boolean oneIdFinish(long userId) {
+        try {
+            OneIdSession s = oneIdSessions.get(userId);
+            if (s == null || s.jwt == null) return false;
+
+            String payload = mapper.createObjectNode()
+                    .put("uuid", s.tokenId)
+                    .put("scope", s.clientId)
+                    .toString();
+
+            Request gen = oneIdReq("sso/v1/generate")
+                    .header("Authorization", "Bearer " + s.jwt)
+                    .post(RequestBody.create(payload, JSON_UTF8))
+                    .build();
+
+            String body;
+            try (Response resp = getClient(userId).newCall(gen).execute()) {
+                body = resp.body() != null ? resp.body().string() : "";
+                if (!resp.isSuccessful()) {
+                    System.err.println("[LmsService] OneID generate failed: " + body);
+                    return false;
+                }
+            }
+
+            dbg("ONEID generate u=%d body=%s", userId, snip(body));
+            JsonNode json = mapper.readTree(body);
+            String callbackUrl = json.path("callbackUrl").asText(null);
+            String oneCode     = json.path("code").asText(null);
+            String state       = json.path("state").asText("");
+            if (callbackUrl == null || oneCode == null) return false;
+
+            HttpUrl cb = HttpUrl.parse(callbackUrl);
+            if (cb == null) return false;
+            HttpUrl target = cb.newBuilder()
+                    .addQueryParameter("code", oneCode)
+                    .addQueryParameter("state", state)
+                    .build();
+
+            Request cbReq = new Request.Builder()
+                    .url(target)
+                    .header("User-Agent", userAgent())
+                    .header("Referer", "https://id.egov.uz/")
+                    .build();
+
+            String finalUrl, html;
+            try (Response resp = getClient(userId).newCall(cbReq).execute()) {
+                finalUrl = resp.request().url().toString();
+                html     = resp.body() != null ? resp.body().string() : "";
+            }
+
+            boolean success = finalUrl.contains("/dashboard")
+                    || html.contains("page-sidebar")
+                    || html.contains("Студент");
+
+            dbg("ONEID callback u=%d target=%s final=%s success=%s len=%d",
+                    userId, target, finalUrl, success, html.length());
+            dbg("ONEID cookies u=%d -> %s", userId, cookieDump(userId));
+
+            oneIdSessions.remove(userId);
+            loggedInMap.put(userId, success);
+            if (success) invalidateSemesters(userId);
+            return success;
+
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID finish error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Имя вуза-клиента OneID для показа пользователю (может вернуть null). */
+    public String oneIdClientName(long userId) {
+        try {
+            OneIdSession s = oneIdSessions.get(userId);
+            if (s == null) return null;
+            Request req = new Request.Builder()
+                    .url(ONEID_SSO_CLIENT + "?clientId=" + s.clientId + "&tokenId=" + s.tokenId)
+                    .header("User-Agent", userAgent())
+                    .build();
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "";
+                return mapper.readTree(body).path("name").asText(null);
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Короткий дамп cookie для lms.tuit.uz — нужен для диагностики сессии. */
+    String cookieDump(long userId) {
+        PersistentCookieJar jar = jars.get(userId);
+        if (jar == null) return "<no jar>";
+        StringBuilder sb = new StringBuilder();
+        for (okhttp3.Cookie c : jar.loadForRequest(HttpUrl.parse(config.getLms().getBaseUrl() + "/"))) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(c.name()).append('=')
+              .append(c.value().length() > 12 ? c.value().substring(0, 12) + "~" : c.value());
+        }
+        return sb.length() == 0 ? "<empty>" : sb.toString();
+    }
+
+    /** Сбрасывает cookie jar пользователя, не трогая остальное состояние бота. */
+    private void resetSession(long userId) {
+        clients.remove(userId);
+        loggedInMap.remove(userId);
+        invalidateSemesters(userId);
+        try {
+            new PersistentCookieJar(sessionDir(), userId).clear();
+        } catch (Exception ignored) {}
+    }
+
+    /**
+     * Проверяет сохранённые cookie: если сессия LMS ещё жива — помечает пользователя
+     * как авторизованного. Нужно после перезапуска бота, т.к. loggedInMap живёт в памяти.
+     */
+    public boolean restoreSession(long userId) {
+        try {
+            // /dashboard без сессии отдаёт 404 (не редирект!), поэтому проверяем
+            // /student/info: без сессии он уводит на /auth/login с формой пароля.
+            Request req = new Request.Builder()
+                    .url(config.getLms().getBaseUrl() + "/student/info")
+                    .header("User-Agent", userAgent())
+                    .build();
+            String finalUrl, html;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                finalUrl = resp.request().url().toString();
+                html     = resp.body() != null ? resp.body().string() : "";
+            }
+            boolean ok = !finalUrl.contains("/auth/login")
+                    && !html.contains("name=\"password\"")
+                    && finalUrl.contains("/student/info");
+            if (ok) loggedInMap.put(userId, true);
+            return ok;
+        } catch (Exception e) {
             return false;
         }
     }
@@ -119,6 +441,8 @@ public class LmsService {
     public void logout(long userId) {
         loggedInMap.remove(userId);
         clients.remove(userId);
+        oneIdSessions.remove(userId);
+        invalidateSemesters(userId);
         try {
             // Also clear persistent cookies so user is fully logged out
             new PersistentCookieJar(sessionDir(), userId).clear();
@@ -130,6 +454,8 @@ public class LmsService {
     // ─────────────────────────────────────────────
 
     public List<Course> getMyCourses(long userId, int semesterId) {
+        // id семестра известен только после разбора страницы LMS; -1 значит «ещё не знаем».
+        if (semesterId <= 0) return Collections.emptyList();
         try {
             String url = config.getLms().getBaseUrl()
                     + "/student/my-courses/data?"
@@ -184,6 +510,7 @@ public class LmsService {
     // ─────────────────────────────────────────────
 
     public List<AttendanceRecord> getAttendance(long userId, int subjectId, int semesterId, String subjectFilter) {
+        if (semesterId <= 0) return Collections.emptyList();
         try {
             String url = config.getLms().getBaseUrl()
                     + "/student/attendance/data?"
@@ -250,6 +577,30 @@ public class LmsService {
     //  ACTIVITIES (HTML parse with Jsoup)
     // ─────────────────────────────────────────────
 
+    /** Значение из блока сводки: в тексте сначала подпись, затем само число. */
+    private static String summaryBoxValue(Element box) {
+        Element val = box.selectFirst(".sc-summary-value");
+        if (val != null) return val.text().trim();
+        String[] parts = box.text().trim().split("\\s+");
+        return parts.length > 0 ? parts[parts.length - 1] : "";
+    }
+
+    /** «—», «-» и пустая строка означают «балла ещё нет». */
+    private static String normalizeScore(String raw) {
+        if (raw == null) return null;
+        String v = raw.replace('\u2014', '-').replace('\u2013', '-').trim();
+        if (v.isEmpty() || v.equals("-")) return null;
+        return v;
+    }
+
+    /** Убирает служебный префикс «Критерий:» из строки критериев. */
+    private static String cleanCriteria(String raw) {
+        if (raw == null) return null;
+        String v = raw.replaceAll("\\s+", " ").trim();
+        v = v.replaceFirst("(?iu)^(критерий|критерии|mezon|mezonlar)\\s*:?\\s*", "");
+        return v.isEmpty() ? null : v;
+    }
+
     public CourseSummary getActivities(long userId, int courseId) {
         try {
             String url     = config.getLms().getBaseUrl() + "/student/my-courses/show/" + courseId;
@@ -260,12 +611,23 @@ public class LmsService {
 
             CourseSummary summary = new CourseSummary();
 
-            Elements scoreCells = doc.select("table.table-bordered td h4");
-            if (scoreCells.size() >= 4) {
-                summary.setEarned(scoreCells.get(0).text().trim());
-                summary.setMaxScore(scoreCells.get(1).text().trim());
-                summary.setProgress(scoreCells.get(2).text().trim());
-                summary.setGrade(scoreCells.get(3).text().trim());
+            // Новая вёрстка: четыре блока .sc-summary-box («Набранные баллы»,
+            // «Макс. балл», «Успеваемость», «Текущая оценка»).
+            // Старая — h4 внутри table.table-bordered, держим запасным вариантом.
+            Elements boxes = doc.select(".sc-summary-box");
+            if (boxes.size() >= 4) {
+                summary.setEarned(summaryBoxValue(boxes.get(0)));
+                summary.setMaxScore(summaryBoxValue(boxes.get(1)));
+                summary.setProgress(summaryBoxValue(boxes.get(2)));
+                summary.setGrade(summaryBoxValue(boxes.get(3)));
+            } else {
+                Elements scoreCells = doc.select("table.table-bordered td h4");
+                if (scoreCells.size() >= 4) {
+                    summary.setEarned(scoreCells.get(0).text().trim());
+                    summary.setMaxScore(scoreCells.get(1).text().trim());
+                    summary.setProgress(scoreCells.get(2).text().trim());
+                    summary.setGrade(scoreCells.get(3).text().trim());
+                }
             }
 
             List<Activity> activities = new ArrayList<>();
@@ -297,20 +659,34 @@ public class LmsService {
 
                 act.setDeadline(cells.get(3).text().trim());
 
-                Elements scoreButtons = cells.get(4).select("button");
-                if (scoreButtons.size() >= 2) {
-                    act.setEarnedScore(scoreButtons.get(0).text().trim());
-                    act.setMaxScore(scoreButtons.get(1).text().trim());
+                // Балл теперь <div class="sc-score">4 <span class="sc-max">/ 6</span></div>.
+                // Раньше это были две <button>, из-за чего во всех заданиях стояло «—/—».
+                Element scoreEl = cells.get(4).selectFirst(".sc-score");
+                if (scoreEl != null) {
+                    Element maxEl  = scoreEl.selectFirst(".sc-max");
+                    String maxText = maxEl != null ? maxEl.text().trim() : "";
+                    String earned  = scoreEl.text().trim();
+                    if (!maxText.isEmpty() && earned.endsWith(maxText))
+                        earned = earned.substring(0, earned.length() - maxText.length()).trim();
+                    act.setEarnedScore(normalizeScore(earned));
+                    act.setMaxScore(normalizeScore(maxText.replace("/", "")));
+                } else {
+                    Elements scoreButtons = cells.get(4).select("button");
+                    if (scoreButtons.size() >= 2) {
+                        act.setEarnedScore(normalizeScore(scoreButtons.get(0).text()));
+                        act.setMaxScore(normalizeScore(scoreButtons.get(1).text()));
+                    }
                 }
 
-                // col 5: uploaded file (btn-primary) — student yuklagan fayl
-                Element uploadedLink = cells.get(5).selectFirst("a.btn-primary[href]");
-                if (uploadedLink != null) {
-                    String href = uploadedLink.attr("href");
-                    if (!href.isEmpty() && !href.equals("#")) {
-                        act.setUploadedFileUrl(href);
-                        act.setUploadedFileName(uploadedLink.text().trim());
-                    }
+                // В колонке «Файл» либо ссылка на сданную работу, либо кнопка отправки.
+                // Класс ссылки сменился с btn-primary на btn-default, а btn-primary
+                // теперь у самой кнопки загрузки — отсюда «ничего не загружено».
+                for (Element link : cells.get(5).select("a[href]")) {
+                    String href = link.attr("href").trim();
+                    if (href.isEmpty() || href.equals("#") || link.hasClass("js-btn-upload")) continue;
+                    act.setUploadedFileUrl(href);
+                    act.setUploadedFileName(link.text().trim());
+                    break;
                 }
 
                 // activityId: only from upload button (.js-btn-upload[data-id])
@@ -319,6 +695,16 @@ public class LmsService {
                     act.setActivityId(uploadBtn.attr("data-id"));
                 } else {
                     act.setActivityId(null);
+                }
+
+                // Критерии лежат отдельной строкой таблицы сразу под заданием.
+                if (rowIdx + 1 < rows.size()) {
+                    Element next = rows.get(rowIdx + 1);
+                    if (next.select("td").size() < 6) {
+                        Element crit = next.selectFirst(".sc-criteria-list");
+                        if (crit == null) crit = next.selectFirst("td");
+                        if (crit != null) act.setCriteria(cleanCriteria(crit.text()));
+                    }
                 }
 
                 activities.add(act);
@@ -339,6 +725,8 @@ public class LmsService {
     // ─────────────────────────────────────────────
 
     public List<ScheduleEvent> getSchedule(long userId, int semesterId) {
+        // id семестра известен только после разбора страницы LMS; -1 значит «ещё не знаем».
+        if (semesterId <= 0) return Collections.emptyList();
         try {
             OkHttpClient client = getClient(userId);
             Request request = new Request.Builder()
@@ -372,37 +760,257 @@ public class LmsService {
     //  STUDY PLAN
     // ─────────────────────────────────────────────
 
+    /** «I», «VIII» → 1, 8. Возвращает -1, если это не римское число. */
+    private static int romanToInt(String roman) {
+        if (roman == null) return -1;
+        String r = roman.trim().toUpperCase();
+        if (r.isEmpty() || !r.matches("[IVXLC]+")) return -1;
+        Map<Character, Integer> val = Map.of('I', 1, 'V', 5, 'X', 10, 'L', 50, 'C', 100);
+        int total = 0;
+        for (int i = 0; i < r.length(); i++) {
+            int cur = val.get(r.charAt(i));
+            int next = i + 1 < r.length() ? val.get(r.charAt(i + 1)) : 0;
+            total += cur < next ? -cur : cur;
+        }
+        return total;
+    }
+
+    /** Первое целое число в строке; null, если чисел нет («—», пустая ячейка). */
+    private static Integer firstInt(String text) {
+        if (text == null) return null;
+        Matcher m = Pattern.compile("\\d+").matcher(text);
+        return m.find() ? Integer.valueOf(m.group()) : null;
+    }
+
     public List<StudyPlanSubject> getStudyPlan(long userId) {
         try {
             String html = getHtml(userId,
                     config.getLms().getBaseUrl() + "/student/study-plan",
                     config.getLms().getBaseUrl() + "/student/study-plan");
-            Document doc = Jsoup.parse(html);
-            List<StudyPlanSubject> subjects = new ArrayList<>();
-            Elements cards = doc.select("div.card");
-            int semesterNum = 0;
-            for (Element card : cards) {
-                Element title = card.selectFirst("p.font-18");
-                if (title == null) continue;
-                semesterNum++;
-                Elements rows = card.select("tbody tr");
-                for (Element row : rows) {
-                    Elements cols = row.select("td");
-                    if (cols.size() < 3) continue;
-                    StudyPlanSubject s = new StudyPlanSubject();
-                    s.setName(cols.get(0).text().trim());
-                    try { s.setCredits(Integer.parseInt(cols.get(1).text().trim())); }
-                    catch (Exception ex) { s.setCredits(0); }
-                    String gradeStr = cols.get(2).text().trim();
-                    s.setGrade(gradeStr.isEmpty() ? null : Integer.parseInt(gradeStr));
-                    s.setSemester(semesterNum);
-                    subjects.add(s);
-                }
-            }
+            List<StudyPlanSubject> subjects = parseStudyPlan(html);
+            dbg("STUDY-PLAN u=%d subjects=%d", userId, subjects.size());
             return subjects;
         } catch (Exception e) {
             System.err.println("[LmsService] StudyPlan error: " + e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    static List<StudyPlanSubject> parseStudyPlan(String html) {
+            Document doc = Jsoup.parse(html);
+            List<StudyPlanSubject> subjects = new ArrayList<>();
+
+            // Вёрстка LMS: .semester-card с римским номером семестра в .semester-num.
+            // Старый макет (div.card + p.font-18) держим как запасной вариант.
+            Elements cards = doc.select("div.semester-card");
+            boolean legacy = cards.isEmpty();
+            if (legacy) cards = doc.select("div.card");
+
+            int fallbackNum = 0;
+            for (Element card : cards) {
+                int semester;
+                if (legacy) {
+                    if (card.selectFirst("p.font-18") == null) continue;
+                    semester = ++fallbackNum;
+                } else {
+                    Element num = card.selectFirst(".semester-num");
+                    int parsed = num != null ? romanToInt(num.text()) : -1;
+                    if (parsed < 0 && num != null) {
+                        Integer arabic = firstInt(num.text());
+                        parsed = arabic != null ? arabic : -1;
+                    }
+                    semester = parsed > 0 ? parsed : ++fallbackNum;
+                    fallbackNum = Math.max(fallbackNum, semester);
+                }
+
+                for (Element row : card.select("tbody tr")) {
+                    Elements cols = row.select("td");
+                    if (cols.size() < 3) continue;
+
+                    Element nameEl   = row.selectFirst("td.td-subject");
+                    Element creditEl = row.selectFirst("td.td-credit");
+                    Element gradeEl  = row.selectFirst("td.td-grade");
+                    if (nameEl   == null) nameEl   = cols.get(0);
+                    if (creditEl == null) creditEl = cols.get(1);
+                    if (gradeEl  == null) gradeEl  = cols.get(2);
+
+                    String name = nameEl.text().trim();
+                    if (name.isEmpty()) continue;
+
+                    StudyPlanSubject s = new StudyPlanSubject();
+                    s.setName(name);
+                    Integer credits = firstInt(creditEl.text());
+                    s.setCredits(credits != null ? credits : 0);
+                    // «—» в .grade-empty означает, что предмет ещё не сдан.
+                    Element badge = gradeEl.selectFirst(".grade-badge");
+                    s.setGrade(firstInt(badge != null ? badge.text() : gradeEl.text()));
+                    s.setSemester(semester);
+                    subjects.add(s);
+                }
+            }
+
+            subjects.sort(Comparator.comparingInt(StudyPlanSubject::getSemester));
+            return subjects;
+    }
+
+
+    // ─────────────────────────────────────────────
+    //  SEMESTERS (подтягиваются с LMS, config — только fallback)
+    // ─────────────────────────────────────────────
+
+    private static final long SEMESTERS_TTL_MS = 6L * 60 * 60 * 1000;
+    private static final Pattern SEM_YEAR_RE = Pattern.compile("(\\d{4})\\s*[-–/]\\s*(\\d{4})");
+    private static final Pattern SEM_NUM_RE  = Pattern.compile("(\\d)\\s*-?\\s*(?:семестр|semestr|semester)", Pattern.CASE_INSENSITIVE);
+
+    // Кэш семестров — строго per-user: у разных студентов разные учебные планы,
+    // и общий кэш раздавал всем semester_id первого, кто успел распарсить страницу.
+    private final Map<Long, List<AppConfig.SemesterConfig>> semestersCache   = new ConcurrentHashMap<>();
+    private final Map<Long, Long>    semestersCacheTs        = new ConcurrentHashMap<>();
+    private final Map<Long, Integer> detectedDefaultSemester = new ConcurrentHashMap<>();
+
+    /**
+     * Список семестров студента прямо из LMS (выпадающий список на страницах раздела
+     * «Мои предметы» / «Расписание»). Кэш на 6 часов, при неудаче — семестры из application.yml.
+     */
+    public List<AppConfig.SemesterConfig> getSemesters(long userId) {
+        long now = System.currentTimeMillis();
+        List<AppConfig.SemesterConfig> cached = semestersCache.get(userId);
+        if (cached != null && !cached.isEmpty()
+                && now - semestersCacheTs.getOrDefault(userId, 0L) < SEMESTERS_TTL_MS) return cached;
+
+        List<AppConfig.SemesterConfig> parsed = parseSemesters(userId);
+        if (parsed != null && !parsed.isEmpty()) {
+            semestersCache.put(userId, parsed);
+            semestersCacheTs.put(userId, now);
+            return parsed;
+        }
+        // Запасного списка нет намеренно: семестры и их id у каждого студента свои
+        // и заводятся в LMS, поэтому любой зашитый id рано или поздно даёт пустые ответы.
+        return List.of();
+    }
+
+    /**
+     * Текущий семестр по данным LMS. Возвращает -1, если список ещё не получен —
+     * вызывающий код обязан это проверить и не слать запрос с выдуманным id.
+     */
+    public int getCurrentSemesterId(long userId) {
+        List<AppConfig.SemesterConfig> list = getSemesters(userId);
+        int detected = detectedDefaultSemester.getOrDefault(userId, -1);
+        if (detected > 0) return detected;
+        return list.isEmpty() ? -1 : list.get(0).getId();
+    }
+
+    /**
+     * true — семестр действительно вычитан из LMS для этого пользователя.
+     * false — отдаётся запасной id из application.yml, его нельзя запоминать
+     * как «выбранный семестр»: он почти наверняка чужой и даст пустые списки.
+     */
+    public boolean isSemesterDetected(long userId) {
+        return detectedDefaultSemester.getOrDefault(userId, -1) > 0;
+    }
+
+    /** Человекочитаемое имя семестра. */
+    public String semesterName(long userId, int semesterId) {
+        for (AppConfig.SemesterConfig s : getSemesters(userId)) {
+            if (s.getId() == semesterId) return s.getName();
+        }
+        return "Semester " + semesterId;
+    }
+
+    /** Сбрасывает кэш семестров конкретного пользователя (смена аккаунта, повторный вход). */
+    public void invalidateSemesters(long userId) {
+        semestersCache.remove(userId);
+        semestersCacheTs.remove(userId);
+        detectedDefaultSemester.remove(userId);
+    }
+
+    /** Сбрасывает кэш семестров всех пользователей. */
+    public void invalidateSemesters() {
+        semestersCache.clear();
+        semestersCacheTs.clear();
+        detectedDefaultSemester.clear();
+    }
+
+    /**
+     * Значок семестра по его названию. LMS пишет их словами («Второй семестр»,
+     * «Переобучение первого семестра»), цифры в тексте нет — по SEM_NUM_RE
+     * не находилось ничего и всем семестрам подряд доставалась «1».
+     */
+    private static String semesterEmoji(String text) {
+        String t = text.toLowerCase();
+        if (t.contains("переобуч") || t.contains("qayta")) return "🔁";
+        Matcher nm = SEM_NUM_RE.matcher(t);
+        boolean second = (nm.find() && "2".equals(nm.group(1)))
+                || t.contains("втор") || t.contains("ikkinchi") || t.contains("иккинчи");
+        return second ? "2️⃣" : "1️⃣";
+    }
+
+    private List<AppConfig.SemesterConfig> parseSemesters(long userId) {
+        // Без живой сессии страницы отдают форму логина: парсить нечего, а запомнить
+        // запасной семестр из конфига — верный способ получить пустые списки.
+        if (!isLoggedIn(userId)) return null;
+        String base = config.getLms().getBaseUrl();
+        String[] pages = { "/student/my-courses", "/student/schedule", "/student/final-exams", "/student/attendance" };
+
+        for (String page : pages) {
+            try {
+                String html = getHtml(userId, base + page, base + "/dashboard");
+                if (html == null || html.contains("name=\"password\"")) continue;
+                Document doc = Jsoup.parse(html);
+
+                for (Element sel : doc.select("select")) {
+                    String key = (sel.id() + " " + sel.attr("name") + " " + sel.className()).toLowerCase();
+                    boolean named = key.contains("semester") || key.contains("semestr");
+
+                    Map<Integer, AppConfig.SemesterConfig> found = new LinkedHashMap<>();
+                    int selectedId = -1;
+
+                    for (Element o : sel.select("option")) {
+                        String value = o.attr("value").trim();
+                        String text  = o.text().trim();
+                        if (!value.matches("\\d{1,6}") || text.isEmpty()) continue;
+
+                        Matcher ym = SEM_YEAR_RE.matcher(text);
+                        boolean hasYear = ym.find();
+                        // Без явного имени select'а доверяем только опциям вида "2026-2027 ..."
+                        if (!named && !hasYear) continue;
+
+                        AppConfig.SemesterConfig s = new AppConfig.SemesterConfig();
+                        s.setId(Integer.parseInt(value));
+                        s.setName(text);
+                        s.setYear(hasYear ? ym.group(1) + "-" + ym.group(2) : text);
+
+                        s.setEmoji(semesterEmoji(text));
+
+                        found.put(s.getId(), s);
+                        if (o.hasAttr("selected")) selectedId = s.getId();
+                    }
+
+                    if (found.size() < 2) continue;
+
+                    List<AppConfig.SemesterConfig> list = new ArrayList<>(found.values());
+                    // Новые семестры — сверху
+                    list.sort((a, b) -> Integer.compare(b.getId(), a.getId()));
+                    int def = selectedId > 0 ? selectedId : list.get(0).getId();
+                    detectedDefaultSemester.put(userId, def);
+                    dbg("SEMESTERS u=%d page=%s default=%d list=%d", userId, page, def, list.size());
+                    return list;
+                }
+            } catch (Exception e) {
+                System.err.println("[LmsService] parseSemesters(" + page + "): " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+
+    /** Сырой HTML произвольной страницы LMS — нужен, чтобы чинить парсеры под реальную вёрстку. */
+    public String dumpPage(long userId, String path) {
+        try {
+            String url = config.getLms().getBaseUrl() + (path.startsWith("/") ? path : "/" + path);
+            return getHtml(userId, url, config.getLms().getBaseUrl() + "/student/info");
+        } catch (Exception e) {
+            return "ERROR: " + e.getMessage();
         }
     }
 
@@ -418,33 +1026,36 @@ public class LmsService {
             Document doc = Jsoup.parse(html);
             StudentInfo info = new StudentInfo();
 
-            Elements leftPs = doc.select("div.col-sm-4 div.card p");
-            for (Element p : leftPs) {
-                Element strong = p.selectFirst("strong");
-                if (strong == null) continue;
-                String label = strong.text().toLowerCase();
-                String value = p.text().replace(strong.text(), "").trim();
-                if (label.contains("ф.и.о"))            info.setFullName(value);
-                else if (label.contains("рожден"))       info.setBirthDate(value);
-                else if (label.contains("пол"))          info.setGender(value);
-                else if (label.contains("зачёт"))        info.setRecordBook(value);
-                else if (label.contains("адрес") && !label.contains("вр")) info.setAddress(value);
-            }
+            Element name = doc.selectFirst(".si-student-name");
+            if (name != null) info.setFullName(name.text().trim());
 
-            Elements rightPs = doc.select("div.col-sm-7 div.card p");
-            for (Element p : rightPs) {
-                Element strong = p.selectFirst("strong");
-                if (strong == null) continue;
-                String label = strong.text().toLowerCase();
-                String value = p.text().replace(strong.text(), "").trim();
-                if (label.contains("направлен"))         info.setDirection(value);
-                else if (label.contains("язык"))         info.setLanguage(value);
-                else if (label.contains("степень"))      info.setDegree(value);
-                else if (label.contains("тип обучен"))   info.setStudyType(value);
-                else if (label.contains("курс"))         info.setCourse(value);
-                else if (label.contains("группа"))       info.setGroup(value);
-                else if (label.contains("куратор"))      info.setCurator(value);
-                else if (label.contains("стипенд"))      info.setScholarship(value);
+            // «№ 32118-23» — студенческий номер, он же зачётка
+            Element sid = doc.selectFirst(".si-student-id");
+            if (sid != null) info.setRecordBook(sid.text().replace("№", "").trim());
+
+            // Личные данные (.si-field) и учебные (.si-info-item) устроены одинаково:
+            // .si-field-label + .si-field-value
+            for (Element f : doc.select(".si-field, .si-info-item")) {
+                Element labelEl = f.selectFirst(".si-field-label");
+                Element valueEl = f.selectFirst(".si-field-value");
+                if (labelEl == null || valueEl == null) continue;
+
+                String label = labelEl.text().toLowerCase().trim();
+                String value = valueEl.text().trim();
+                if (value.isEmpty()) continue;
+
+                if (label.startsWith("дата рожд") || label.contains("tug"))     info.setBirthDate(value);
+                else if (label.equals("пол") || label.contains("jins"))          info.setGender(value);
+                else if (label.startsWith("адрес(") || label.contains("(вр)"))   { /* временный адрес пропускаем */ }
+                else if (label.startsWith("адрес") || label.contains("manzil"))  info.setAddress(value);
+                else if (label.contains("направлен") || label.contains("yo'nalish")) info.setDirection(value);
+                else if (label.contains("язык") || label.contains("til"))        info.setLanguage(value);
+                else if (label.contains("степень") || label.contains("daraja"))  info.setDegree(value);
+                else if (label.contains("тип обучен") || label.contains("turi")) info.setStudyType(value);
+                else if (label.equals("курс") || label.contains("kurs"))         info.setCourse(value);
+                else if (label.contains("группа") || label.contains("guruh"))    info.setGroup(value);
+                else if (label.contains("куратор") || label.contains("kurator")) info.setCurator(value);
+                else if (label.contains("стипенд") || label.contains("stipend")) info.setScholarship(value);
             }
 
             return info;
@@ -459,6 +1070,8 @@ public class LmsService {
     // ─────────────────────────────────────────────
 
     public List<FinalExam> getFinals(long userId, int semesterId) {
+        // id семестра известен только после разбора страницы LMS; -1 значит «ещё не знаем».
+        if (semesterId <= 0) return Collections.emptyList();
         try {
             String url = config.getLms().getBaseUrl()
                     + "/student/finals/data?"
@@ -519,11 +1132,20 @@ public class LmsService {
 
             Map<String, List<CalendarEntry>> result = new LinkedHashMap<>();
 
-            List<CalendarEntry> lectures  = parseCalendarTab(doc, "lecture");
-            List<CalendarEntry> practices = parseCalendarTab(doc, "practice");
+            // Вкладок может быть больше двух (лекция/практика/лаборатория) — берём все
+            for (Element pane : doc.select(".tab-content .tab-pane[id]")) {
+                String id = pane.id();
+                if (id == null || id.isBlank()) continue;
+                List<CalendarEntry> list = parseCalendarTab(doc, id);
+                if (!list.isEmpty()) result.put(id, list);
+            }
 
-            if (!lectures.isEmpty())  result.put("lecture",  lectures);
-            if (!practices.isEmpty()) result.put("practice", practices);
+            if (result.isEmpty()) {
+                List<CalendarEntry> lectures  = parseCalendarTab(doc, "lecture");
+                List<CalendarEntry> practices = parseCalendarTab(doc, "practice");
+                if (!lectures.isEmpty())  result.put("lecture",  lectures);
+                if (!practices.isEmpty()) result.put("practice", practices);
+            }
 
             return result;
         } catch (Exception e) {
@@ -537,22 +1159,49 @@ public class LmsService {
         Element tab = doc.getElementById(tabId);
         if (tab == null) return entries;
 
-        Elements rows = tab.select("tbody tr");
-        for (Element row : rows) {
+        // Актуальная вёрстка: <li class="cal-item"> с .cal-num / .cal-title / .cal-date
+        for (Element item : tab.select("li.cal-item")) {
+            CalendarEntry entry = new CalendarEntry();
+
+            Element num = item.selectFirst(".cal-num");
+            try { entry.setNumber(Integer.parseInt(num.text().trim())); }
+            catch (Exception ex) { entry.setNumber(entries.size() + 1); }
+
+            Element title = item.selectFirst(".cal-title");
+            entry.setTopic(title != null ? title.text().trim() : "");
+
+            Element date = item.selectFirst(".cal-date");
+            entry.setDate(date != null ? date.text().trim() : "");
+
+            // Материалы лежат в раскрывающемся блоке .cal-drawer ссылками .cal-res
+            List<CalendarEntry.FileAttachment> files = new ArrayList<>();
+            for (Element a : item.select("a.cal-res, .cal-drawer a[href]")) {
+                String url = a.attr("abs:href");
+                if (url.isEmpty()) url = a.attr("href");
+                Element nameEl = a.selectFirst(".cal-res-name");
+                String name = nameEl != null ? nameEl.text().trim() : a.text().trim();
+                if (!name.isEmpty() && !url.isEmpty() && !url.startsWith("#")) {
+                    files.add(new CalendarEntry.FileAttachment(name, url, detectFileType(url, a)));
+                }
+            }
+            entry.setFiles(files);
+
+            if (!entry.getTopic().isEmpty()) entries.add(entry);
+        }
+        if (!entries.isEmpty()) return entries;
+
+        // Fallback: старая табличная вёрстка
+        for (Element row : tab.select("tbody tr")) {
             Elements cols = row.select("td");
             if (cols.size() < 3) continue;
 
             CalendarEntry entry = new CalendarEntry();
-
-            // col 0: number
             try { entry.setNumber(Integer.parseInt(cols.get(0).text().trim())); }
             catch (Exception ex) { entry.setNumber(0); }
 
-            // col 1: topic text (inside <p>) + file attachments (inside <a>)
             Element topicP = cols.get(1).selectFirst("p");
             entry.setTopic(topicP != null ? topicP.text().trim() : cols.get(1).ownText().trim());
 
-            // Parse all <a href> buttons as file attachments
             List<CalendarEntry.FileAttachment> files = new ArrayList<>();
             for (Element a : cols.get(1).select("a[href]")) {
                 String url  = a.attr("href");
@@ -562,10 +1211,7 @@ public class LmsService {
                 }
             }
             entry.setFiles(files);
-
-            // col 2: date
             entry.setDate(cols.get(2).text().trim());
-
             entries.add(entry);
         }
         return entries;
@@ -697,7 +1343,11 @@ public class LmsService {
                 .header("Referer", referer)
                 .build();
         try (Response resp = getClient(userId).newCall(req).execute()) {
-            return resp.body().string();
+            String body = resp.body().string();
+            dbg("GET-JSON u=%d code=%d final=%s ct=%s len=%d body=%s",
+                    userId, resp.code(), resp.request().url(),
+                    resp.header("Content-Type"), body.length(), snip(body));
+            return body;
         }
     }
 
@@ -708,7 +1358,11 @@ public class LmsService {
                 .header("Referer", referer)
                 .build();
         try (Response resp = getClient(userId).newCall(req).execute()) {
-            return resp.body().string();
+            String body = resp.body().string();
+            dbg("GET-HTML u=%d code=%d final=%s len=%d loginForm=%s sidebar=%s",
+                    userId, resp.code(), resp.request().url(), body.length(),
+                    body.contains("name=\"password\""), body.contains("page-sidebar"));
+            return body;
         }
     }
 

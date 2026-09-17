@@ -22,6 +22,9 @@ public class Activity {
     /** Upload uchun activity ID — upload button data-id yoki row index */
     private String activityId;
 
+    /** Критерии оценивания — строка под заданием (.sc-criteria-list). */
+    private String criteria;
+
     // legacy compat
     public String getFileUrl()          { return sampleFileUrl; }
     public void   setFileUrl(String u)  { this.sampleFileUrl = u; }

@@ -1,4 +1,9 @@
-# Project exclude paths
-/.gradle/
-/build/
-/build/classes/java/main/
+.gradle/
+build/
+.idea/
+dumps/
+*.log
+# Локальные секреты: токен бота задаётся переменной окружения BOT_TOKEN
+.env
+run-local.sh
+run-local.ps1
