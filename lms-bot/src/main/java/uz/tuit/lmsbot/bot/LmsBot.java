@@ -2,6 +2,7 @@ package uz.tuit.lmsbot.bot;
 
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
@@ -197,10 +198,10 @@ public class LmsBot extends TelegramLongPollingBot {
                         "❌ <b>Хатолик</b>\n\n<blockquote>Пароллар мос эмас.</blockquote>"), null);
                 return;
             }
-            send(chatId, tr(userId,
+            sendProgress(chatId, tr(userId,
                     "⏳ <b>Меняю пароль...</b>",
                     "⏳ <b>Parol o'zgartirilmoqda...</b>",
-                    "⏳ <b>Парол ўзгартирилмоқда...</b>"), null);
+                    "⏳ <b>Парол ўзгартирилмоқда...</b>"));
             final String oldFinal = oldP;
             final String newFinal = newPNorm;
             executor.submit(() -> {
@@ -483,6 +484,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     /** Меняет только клавиатуру сообщения — для листания страниц семестров. */
     private void editMarkup(long chatId, int messageId, InlineKeyboardMarkup markup) {
+        dropProgress(chatId);
         try {
             org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup e =
                     new org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup();
@@ -498,6 +500,7 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void edit(long chatId, int messageId, String text, InlineKeyboardMarkup markup) {
+        dropProgress(chatId);
         try {
             EditMessageText edit = new EditMessageText();
             edit.setChatId(String.valueOf(chatId));
@@ -582,10 +585,10 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void handleOneIdLogin(long chatId, long userId, String login, String password) {
-        send(chatId, tr(userId,
+        sendProgress(chatId, tr(userId,
                 "⏳ Проверяем данные в OneID...",
                 "⏳ OneID ma'lumotlari tekshirilmoqda...",
-                "⏳ OneID маълумотлари текширилмоқда..."), null);
+                "⏳ OneID маълумотлари текширилмоқда..."));
         executor.submit(() -> {
             LmsService.OneIdResult res = lmsService.oneIdLogin(userId, login, password);
             switch (res.status) {
@@ -606,10 +609,10 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void handleOneIdSms(long chatId, long userId, String code) {
-        send(chatId, tr(userId,
+        sendProgress(chatId, tr(userId,
                 "⏳ Проверяем код...",
                 "⏳ Kod tekshirilmoqda...",
-                "⏳ Код текширилмоқда..."), null);
+                "⏳ Код текширилмоқда..."));
         executor.submit(() -> {
             String login = tempOneIdLogin.get(userId);
             LmsService.OneIdResult res = lmsService.oneIdConfirm(userId, login, code);
@@ -658,10 +661,10 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void handleLogin(long chatId, long userId, String login, String password) {
-        send(chatId, tr(userId,
+        sendProgress(chatId, tr(userId,
                 "⏳ Входим в систему...",
                 "⏳ Tizimga kirilmoqda...",
-                "⏳ Тизимга кирилмоқда..."), null);
+                "⏳ Тизимга кирилмоқда..."));
         executor.submit(() -> {
             boolean ok = lmsService.login(userId, login, password);
             if (ok) {
@@ -744,7 +747,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void showCourses(long chatId, long userId, int semesterId) {
         if (!checkLogin(chatId, userId)) return;
         if (!checkSemester(chatId, userId, semesterId)) return;
-        send(chatId, t(userId, "courses.loading"), null);
+        sendProgress(chatId, t(userId, "courses.loading"));
 
         executor.submit(() -> {
             List<Course> courses = lmsService.getMyCourses(userId, semesterId);
@@ -882,7 +885,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showActivities(long chatId, long userId, int courseId) {
         if (!checkLogin(chatId, userId)) return;
-        send(chatId, t(userId, "act.loading"), null);
+        sendProgress(chatId, t(userId, "act.loading"));
 
         executor.submit(() -> {
             CourseSummary summary = lmsService.getActivities(userId, courseId);
@@ -1097,7 +1100,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void showSchedule(long chatId, long userId, int semesterId) {
         if (!checkLogin(chatId, userId)) return;
         if (!checkSemester(chatId, userId, semesterId)) return;
-        send(chatId, t(userId, "sched.loading"), null);
+        sendProgress(chatId, t(userId, "sched.loading"));
 
         executor.submit(() -> {
             List<ScheduleEvent> events = lmsService.getSchedule(userId, semesterId);
@@ -1161,7 +1164,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showStudyPlanFull(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        send(chatId, t(userId, "plan.loading"), null);
+        sendProgress(chatId, t(userId, "plan.loading"));
 
         executor.submit(() -> {
             List<StudyPlanSubject> subjects = lmsService.getStudyPlan(userId);
@@ -1443,7 +1446,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void showFinals(long chatId, long userId, int semesterId) {
         if (!checkLogin(chatId, userId)) return;
         if (!checkSemester(chatId, userId, semesterId)) return;
-        send(chatId, t(userId, "finals.loading"), null);
+        sendProgress(chatId, t(userId, "finals.loading"));
 
         executor.submit(() -> {
             List<FinalExam> exams = lmsService.getFinals(userId, semesterId);
@@ -1498,7 +1501,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showProfile(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        send(chatId, tr(userId, "⏳ Профиль загружается...", "⏳ Profil yuklanmoqda...", "⏳ Профил юкланмоқда..."), null);
+        sendProgress(chatId, tr(userId, "⏳ Профиль загружается...", "⏳ Profil yuklanmoqda...", "⏳ Профил юкланмоқда..."));
 
         executor.submit(() -> {
             StudentInfo info = lmsService.getStudentInfo(userId);
@@ -1549,7 +1552,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showProfilePhoto(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        send(chatId, tr(userId, "⏳ Загружаю фото...", "⏳ Foto yuklanmoqda...", "⏳ Фото юкланмоқда..."), null);
+        sendProgress(chatId, tr(userId, "⏳ Загружаю фото...", "⏳ Foto yuklanmoqda...", "⏳ Фото юкланмоқда..."));
         executor.submit(() -> {
             File tmp = null;
             try {
@@ -1565,6 +1568,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 byte[] bytes = java.util.Base64.getDecoder().decode(b64);
                 tmp = File.createTempFile("lms_avatar_", ext);
                 Files.write(tmp.toPath(), bytes);
+                dropProgress(chatId);
                 SendPhoto p = new SendPhoto();
                 p.setChatId(String.valueOf(chatId));
                 p.setPhoto(new InputFile(tmp, "profile" + ext));
@@ -1612,10 +1616,10 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showDeadlinesList(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        send(chatId, tr(userId,
+        sendProgress(chatId, tr(userId,
                 "⏳ <b>Собираю дедлайны...</b>",
                 "⏳ <b>Deadlinelar yig'ilmoqda...</b>",
-                "⏳ <b>Дедлайнлар йиғилмоқда...</b>"), null);
+                "⏳ <b>Дедлайнлар йиғилмоқда...</b>"));
 
         executor.submit(() -> {
             List<Course> courses = userCourses.get(userId);
@@ -1785,12 +1789,13 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, "🔗 <b>" + esc(att.getName()) + "</b>\n\n" + att.getUrl(), null);
             return;
         }
-        send(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."), null);
+        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."));
         executor.submit(() -> {
             File tmp = null;
             try {
                 LmsService.DownloadedFile dl = lmsService.downloadFile(userId, att.getUrl(), att.getName());
                 tmp = dl.file();
+                dropProgress(chatId);
                 SendDocument doc = new SendDocument();
                 doc.setChatId(String.valueOf(chatId));
                 doc.setDocument(new InputFile(tmp, dl.filename()));
@@ -1820,12 +1825,13 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId, "📭 Файл не найден.", "📭 Fayl topilmadi.", "📭 Файл топилмади."), null);
             return;
         }
-        send(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."), null);
+        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."));
         executor.submit(() -> {
             File tmp = null;
             try {
                 LmsService.DownloadedFile dl = lmsService.downloadFile(userId, url, name);
                 tmp = dl.file();
+                dropProgress(chatId);
                 SendDocument doc = new SendDocument();
                 doc.setChatId(String.valueOf(chatId));
                 doc.setDocument(new InputFile(tmp, dl.filename()));
@@ -1864,10 +1870,10 @@ public class LmsBot extends TelegramLongPollingBot {
                     "⚠️ Юклаш контексти йўқ. Қайта уриниб кўринг."), null);
             return;
         }
-        send(chatId, tr(userId,
+        sendProgress(chatId, tr(userId,
                 "⏳ Загружаю файл в LMS...",
                 "⏳ Fayl LMS ga yuklanmoqda...",
-                "⏳ Файл LMS га юкланмоқда..."), null);
+                "⏳ Файл LMS га юкланмоқда..."));
         executor.submit(() -> {
             File tmp = null;
             try {
@@ -2543,7 +2549,39 @@ public class LmsBot extends TelegramLongPollingBot {
         return true;
     }
 
+    /** Id висящего сообщения «⏳ …» для каждого чата. */
+    private final Map<Long, Integer> progressMsg = new ConcurrentHashMap<>();
+
+    /**
+     * Сообщение о ходе работы: живёт ровно до следующего сообщения боту в этот чат.
+     * Раньше все «⏳ Загружаю…» оставались в переписке навсегда.
+     */
+    private void sendProgress(long chatId, String text) {
+        dropProgress(chatId);
+        Integer id = execSend(chatId, text, null);
+        if (id != null) progressMsg.put(chatId, id);
+    }
+
+    /** Убирает «⏳ …», если оно ещё висит. Вызывается перед любой новой отправкой. */
+    private void dropProgress(long chatId) {
+        Integer id = progressMsg.remove(chatId);
+        if (id == null) return;
+        try {
+            DeleteMessage del = new DeleteMessage();
+            del.setChatId(String.valueOf(chatId));
+            del.setMessageId(id);
+            execute(del);
+        } catch (Exception ignored) {
+            // Сообщение могли удалить вручную или оно старше 48 часов — не беда.
+        }
+    }
+
     private void send(long chatId, String text, Object keyboard) {
+        dropProgress(chatId);
+        execSend(chatId, text, keyboard);
+    }
+
+    private Integer execSend(long chatId, String text, Object keyboard) {
         try {
             SendMessage msg = new SendMessage();
             msg.setChatId(String.valueOf(chatId));
@@ -2551,9 +2589,11 @@ public class LmsBot extends TelegramLongPollingBot {
             msg.setParseMode("HTML");
             if (keyboard instanceof ReplyKeyboardMarkup k)       msg.setReplyMarkup(k);
             else if (keyboard instanceof InlineKeyboardMarkup k) msg.setReplyMarkup(k);
-            execute(msg);
+            Message sent = execute(msg);
+            return sent != null ? sent.getMessageId() : null;
         } catch (Exception e) {
             System.err.println("[LmsBot] Send error: " + e.getMessage());
+            return null;
         }
     }
 
