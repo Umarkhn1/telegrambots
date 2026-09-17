@@ -40,6 +40,7 @@ public class Main {
         // Боту порт не нужен (long polling), поэтому поднимаем его только когда
         // переменная задана — как health-check и как способ не дать сервису уснуть.
         startHealthServer();
+        startKeepAlive();
     }
 
     private static void startHealthServer() {
@@ -60,5 +61,49 @@ public class Main {
         } catch (Exception e) {
             System.err.println("[Main] health server: " + e.getMessage());
         }
+    }
+
+    /** Каждые сколько минут дёргать собственный адрес, чтобы сервис не уснул. */
+    private static final int KEEPALIVE_MINUTES = 14;
+
+    /**
+     * Бесплатный веб-сервис Render засыпает после 15 минут без входящих запросов,
+     * а спящий бот перестаёт забирать апдейты. Поэтому раз в 14 минут дёргаем
+     * собственный публичный адрес (RENDER_EXTERNAL_URL Render подставляет сам).
+     *
+     * Оговорка: это спасает только пока процесс жив — разбудить уже уснувший
+     * сервис изнутри нельзя, для этого нужен внешний пингер.
+     */
+    private static void startKeepAlive() {
+        String url = System.getenv("KEEPALIVE_URL");
+        if (url == null || url.isBlank()) url = System.getenv("RENDER_EXTERNAL_URL");
+        if (url == null || url.isBlank()) return;
+
+        final java.net.URI target = java.net.URI.create(url.endsWith("/") ? url : url + "/");
+        java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(15))
+                .build();
+
+        java.util.concurrent.ScheduledExecutorService ses =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "keepalive");
+                    t.setDaemon(true);
+                    return t;
+                });
+
+        ses.scheduleAtFixedRate(() -> {
+            try {
+                java.net.http.HttpResponse<Void> resp = client.send(
+                        java.net.http.HttpRequest.newBuilder(target)
+                                .timeout(java.time.Duration.ofSeconds(20))
+                                .GET().build(),
+                        java.net.http.HttpResponse.BodyHandlers.discarding());
+                System.out.println("💓 keepalive " + target + " -> " + resp.statusCode());
+            } catch (Exception e) {
+                System.err.println("[Main] keepalive: " + e.getMessage());
+            }
+        }, KEEPALIVE_MINUTES, KEEPALIVE_MINUTES, java.util.concurrent.TimeUnit.MINUTES);
+
+        System.out.println("💓 Keepalive: " + target + " каждые " + KEEPALIVE_MINUTES + " мин");
     }
 }
