@@ -147,6 +147,10 @@ public class LmsService {
         String tokenId;
         String clientId;
         String jwt;
+        // Mobile ID: выдаются generateCodeForMobileId, нужны для подтверждения SMS
+        String phone;
+        String actionId;
+        long controlCode;
     }
 
     private final Map<Long, OneIdSession> oneIdSessions = new ConcurrentHashMap<>();
@@ -216,7 +220,7 @@ public class LmsService {
 
     /**
      * Шаг 2. Логин по паролю OneID. Возвращает OK (можно завершать),
-     * NEED_SMS (нужен код из СМС) либо ERROR с текстом от OneID.
+     * NEED_SMS (нужен 2FA-код из приложения OneID) либо ERROR с текстом от OneID.
      */
     public OneIdResult oneIdLogin(long userId, String login, String password) {
         try {
@@ -248,7 +252,10 @@ public class LmsService {
                 s.jwt = json.get("token").asText();
                 return OneIdResult.ok();
             }
-            if (json.path("code").asInt(-1) == 2) return OneIdResult.needSms();
+            if (json.path("code").asInt(-1) == 2) {
+                dbg("ONEID 2fa u=%d body=%s", userId, snip(body));
+                return OneIdResult.needSms();
+            }
             return OneIdResult.error(oneIdError(body));
 
         } catch (Exception e) {
@@ -257,7 +264,90 @@ public class LmsService {
         }
     }
 
-    /** Шаг 2b. Подтверждение входа кодом из СМС (когда OneID вернул code=2). */
+    /** Номер в формате OneID (+998XXXXXXXXX) или null, если номер не узбекский. */
+    public static String normalizeUzPhone(String raw) {
+        if (raw == null) return null;
+        String d = raw.replaceAll("\\D", "");
+        if (d.length() == 9) d = "998" + d;
+        return d.length() == 12 && d.startsWith("998") ? "+" + d : null;
+    }
+
+    /**
+     * Шаг 2 (Mobile ID). Запрашивает SMS-код на номер, привязанный к Mobile ID.
+     * NEED_SMS — код отправлен, ждём его от пользователя.
+     */
+    public OneIdResult oneIdMobileSendSms(long userId, String phone) {
+        try {
+            OneIdSession s = oneIdStart(userId);
+            s.phone = phone;
+
+            String payload = mapper.createObjectNode().put("phone", phone).toString();
+            Request req = oneIdReq("identity/auth/generateCodeForMobileId")
+                    .post(RequestBody.create(payload, JSON_UTF8))
+                    .build();
+
+            String body;
+            int code;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                code = resp.code();
+                body = resp.body() != null ? resp.body().string() : "";
+            }
+            dbg("ONEID mobile sms u=%d code=%d body=%s", userId, code, snip(body));
+            if (code >= 400) return OneIdResult.error(oneIdError(body));
+
+            JsonNode json = mapper.readTree(body);
+            s.actionId    = json.path("actionId").asText(null);
+            s.controlCode = json.path("controlCode").asLong(0);
+            if (s.actionId == null || s.actionId.isBlank()) return OneIdResult.error(oneIdError(body));
+            return OneIdResult.needSms();
+
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID mobile sms error: " + e.getMessage());
+            return OneIdResult.error(null);
+        }
+    }
+
+    /** Шаг 2b (Mobile ID). Вход по SMS-коду, полученному после oneIdMobileSendSms. */
+    public OneIdResult oneIdMobileConfirm(long userId, String smsCode) {
+        try {
+            OneIdSession s = oneIdSessions.get(userId);
+            if (s == null || s.actionId == null) return OneIdResult.error(null);
+
+            String payload = mapper.createObjectNode()
+                    .put("actionId", s.actionId)
+                    .put("controlCode", s.controlCode)
+                    .put("smsCode", smsCode.trim())
+                    .put("phone", s.phone)
+                    .toString();
+
+            Request req = oneIdReq("identity/auth/login")
+                    .header("X-Authorization-Method", "MOBILEIDMETHOD")
+                    .post(RequestBody.create(payload, JSON_UTF8))
+                    .build();
+
+            String body;
+            int code;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                code = resp.code();
+                body = resp.body() != null ? resp.body().string() : "";
+            }
+            dbg("ONEID mobile login u=%d code=%d len=%d", userId, code, body.length());
+            if (code >= 400) return OneIdResult.error(oneIdError(body));
+
+            JsonNode json = mapper.readTree(body);
+            if (json.hasNonNull("token")) {
+                s.jwt = json.get("token").asText();
+                return OneIdResult.ok();
+            }
+            return OneIdResult.error(oneIdError(body));
+
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID mobile login error: " + e.getMessage());
+            return OneIdResult.error(null);
+        }
+    }
+
+    /** Шаг 2b. Подтверждение входа 2FA-кодом из приложения OneID (когда OneID вернул code=2). */
     public OneIdResult oneIdConfirm(long userId, String login, String smsCode) {
         try {
             OneIdSession s = oneIdSessions.get(userId);

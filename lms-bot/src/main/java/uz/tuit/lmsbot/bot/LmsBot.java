@@ -240,6 +240,24 @@ public class LmsBot extends TelegramLongPollingBot {
             handleOneIdSms(chatId, userId, text);
             return;
         }
+        if ("WAIT_ONEID_PHONE".equals(state)) {
+            String phone = LmsService.normalizeUzPhone(text);
+            if (phone == null) {
+                send(chatId, tr(userId,
+                        "⚠️ Неверный номер. Введите в формате <code>+998901234567</code>:",
+                        "⚠️ Noto'g'ri raqam. <code>+998901234567</code> formatida kiriting:",
+                        "⚠️ Нотўғри рақам. <code>+998901234567</code> форматида киритинг:"), null);
+                return;
+            }
+            userState.put(userId, "IDLE");
+            handleOneIdPhone(chatId, userId, phone);
+            return;
+        }
+        if ("WAIT_ONEID_MOBILE_SMS".equals(state)) {
+            userState.put(userId, "IDLE");
+            handleOneIdMobileSms(chatId, userId, text);
+            return;
+        }
 
         if ("WAIT_LOGIN".equals(state)) {
             tempLogin.put(userId, text);
@@ -424,7 +442,11 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if ("auth_lms".equals(data)) {
             askForLmsLogin(chatId, userId);
         } else if ("auth_oneid".equals(data)) {
+            askForOneIdMethod(chatId, userId);
+        } else if ("oneid_pw".equals(data)) {
             askForOneIdLogin(chatId, userId);
+        } else if ("oneid_mobile".equals(data)) {
+            askForOneIdPhone(chatId, userId);
         } else if ("settings".equals(data)) {
             showSettings(chatId, userId);
         } else if ("settings_lang".equals(data)) {
@@ -573,15 +595,67 @@ public class LmsBot extends TelegramLongPollingBot {
                 "👤 <b>LMS логинингизни</b> киритинг:\n\nМасалан: <code>1bk27748</code>"), null);
     }
 
+    private void askForOneIdMethod(long chatId, long userId) {
+        InlineKeyboardMarkup kb = markup(List.of(
+                List.of(inlineBtn(tr(userId,
+                        "🔑 Логин и пароль", "🔑 Login va parol", "🔑 Логин ва парол"), "oneid_pw")),
+                List.of(inlineBtn(tr(userId,
+                        "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)"), "oneid_mobile"))
+        ));
+        send(chatId, tr(userId,
+                "🆔 <b>Вход через OneID</b>\n\nВыберите способ:",
+                "🆔 <b>OneID orqali kirish</b>\n\nUsulni tanlang:",
+                "🆔 <b>OneID орқали кириш</b>\n\nУсулни танланг:"), kb);
+    }
+
+    private void askForOneIdPhone(long chatId, long userId) {
+        userState.put(userId, "WAIT_ONEID_PHONE");
+        send(chatId, tr(userId,
+                "📱 <b>Вход через Mobile ID</b>\n\nВведите номер телефона, привязанный к Mobile ID:\n\nНапример: <code>+998901234567</code>",
+                "📱 <b>Mobile ID orqali kirish</b>\n\nMobile ID ga bog'langan telefon raqamini kiriting:\n\nMasalan: <code>+998901234567</code>",
+                "📱 <b>Mobile ID орқали кириш</b>\n\nMobile ID га боғланган телефон рақамини киритинг:\n\nМасалан: <code>+998901234567</code>"), null);
+    }
+
+    private void handleOneIdPhone(long chatId, long userId, String phone) {
+        sendProgress(chatId, tr(userId,
+                "⏳ Отправляем SMS...",
+                "⏳ SMS yuborilmoqda...",
+                "⏳ SMS юборилмоқда..."));
+        executor.submit(() -> {
+            LmsService.OneIdResult res = lmsService.oneIdMobileSendSms(userId, phone);
+            if (res.status == LmsService.OneIdResult.Status.NEED_SMS) {
+                userState.put(userId, "WAIT_ONEID_MOBILE_SMS");
+                send(chatId, tr(userId,
+                        "✉️ SMS-код отправлен на <code>" + phone + "</code>\n\nВведите код из SMS:",
+                        "✉️ SMS-kod <code>" + phone + "</code> raqamiga yuborildi\n\nSMS dagi kodni kiriting:",
+                        "✉️ SMS-код <code>" + phone + "</code> рақамига юборилди\n\nSMS даги кодни киритинг:"), null);
+            } else {
+                sendOneIdError(chatId, userId, res.message);
+            }
+        });
+    }
+
+    private void handleOneIdMobileSms(long chatId, long userId, String code) {
+        sendProgress(chatId, tr(userId,
+                "⏳ Проверяем код...",
+                "⏳ Kod tekshirilmoqda...",
+                "⏳ Код текширилмоқда..."));
+        executor.submit(() -> {
+            LmsService.OneIdResult res = lmsService.oneIdMobileConfirm(userId, code);
+            if (res.status == LmsService.OneIdResult.Status.OK) {
+                finishOneId(chatId, userId, null);
+            } else {
+                sendOneIdError(chatId, userId, res.message);
+            }
+        });
+    }
+
     private void askForOneIdLogin(long chatId, long userId) {
         userState.put(userId, "WAIT_ONEID_LOGIN");
         send(chatId, tr(userId,
-                "🆔 <b>Вход через OneID</b>\n\nВведите <b>логин OneID</b> — это ПИНФЛ (14 цифр), "
-                        + "номер телефона или e-mail от аккаунта id.egov.uz:",
-                "🆔 <b>OneID orqali kirish</b>\n\n<b>OneID loginini</b> kiriting — JSHSHIR (14 raqam), "
-                        + "telefon raqami yoki id.egov.uz e-maili:",
-                "🆔 <b>OneID орқали кириш</b>\n\n<b>OneID логинини</b> киритинг — ЖШШИР (14 рақам), "
-                        + "телефон рақами ёки id.egov.uz e-maili:"), null);
+                "🆔 <b>Вход через OneID</b>\n\nВведите <b>логин OneID</b> от аккаунта id.egov.uz:",
+                "🆔 <b>OneID orqali kirish</b>\n\nid.egov.uz hisobingizning <b>OneID loginini</b> kiriting:",
+                "🆔 <b>OneID орқали кириш</b>\n\nid.egov.uz ҳисобингизнинг <b>OneID логинини</b> киритинг:"), null);
     }
 
     private void handleOneIdLogin(long chatId, long userId, String login, String password) {
@@ -595,9 +669,12 @@ public class LmsBot extends TelegramLongPollingBot {
                 case NEED_SMS -> {
                     userState.put(userId, "WAIT_ONEID_SMS");
                     send(chatId, tr(userId,
-                            "📩 <b>OneID отправил SMS-код</b>\n\nВведите код подтверждения:",
-                            "📩 <b>OneID SMS-kod yubordi</b>\n\nTasdiqlash kodini kiriting:",
-                            "📩 <b>OneID SMS-код юборди</b>\n\nТасдиқлаш кодини киритинг:"), null);
+                            "🔑 <b>Двухфакторная аутентификация</b>\n\nОткройте приложение <b>OneID</b> "
+                                    + "и введите <b>код аутентификации</b>:",
+                            "🔑 <b>Ikki bosqichli autentifikatsiya</b>\n\n<b>OneID</b> ilovasini oching "
+                                    + "va <b>autentifikatsiya kodini</b> kiriting:",
+                            "🔑 <b>Икки босқичли аутентификация</b>\n\n<b>OneID</b> иловасини очинг "
+                                    + "ва <b>аутентификация кодини</b> киритинг:"), null);
                 }
                 case OK -> finishOneId(chatId, userId, login);
                 default -> {
