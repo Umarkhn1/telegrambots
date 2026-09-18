@@ -173,9 +173,18 @@ public class WebApi {
         String login = r.str("login").trim();
         String password = r.str("password");
         if (login.isEmpty() || password.isEmpty()) throw new ApiError(400, "empty");
-        boolean ok = lms.login(r.uid(), login, password);
-        if (ok) onLoggedIn(r, login);
-        return Map.of("ok", ok);
+        LmsService.LoginResult res = lms.loginDetailed(r.uid(), login, password);
+        if (res == LmsService.LoginResult.OK) onLoggedIn(r, login);
+        // reason: oneid_required — пароль верный, но LMS пускает этот аккаунт только через OneID.
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", res == LmsService.LoginResult.OK);
+        out.put("reason", switch (res) {
+            case ONEID_REQUIRED -> "oneid_required";
+            case ERROR -> "lms_unavailable";
+            case WRONG_CREDENTIALS -> "wrong_credentials";
+            default -> null;
+        });
+        return out;
     }
 
     private Object authOneId(Req r) throws Exception {

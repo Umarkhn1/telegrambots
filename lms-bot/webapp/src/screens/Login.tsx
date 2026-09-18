@@ -112,7 +112,13 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
         if (res.ok) {
           haptic('success');
           await onDone();
-        } else fail(t('err_credentials'));
+        } else if (res.reason === 'oneid_required') {
+          // LMS пускает этот аккаунт только через OneID — сразу открываем нужную вкладку.
+          setMethod('oneid');
+          setWay('password');
+          setPassword('');
+          fail(t('err_oneid_required'));
+        } else fail(res.reason === 'lms_unavailable' ? t('error_lms') : t('err_credentials'));
       } else if (way === 'password') {
         await handleOneId(await api.loginOneId(login, password));
       } else {

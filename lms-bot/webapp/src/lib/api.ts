@@ -58,7 +58,8 @@ const post = <T>(path: string, data?: unknown) =>
 export const api = {
   me: () => get<Me>('/api/me'),
 
-  loginLms: (login: string, password: string) => post<{ ok: boolean }>('/api/auth/lms', { login, password }),
+  loginLms: (login: string, password: string) =>
+    post<{ ok: boolean; reason?: 'oneid_required' | 'lms_unavailable' | 'wrong_credentials' | null }>('/api/auth/lms', { login, password }),
   loginOneId: (login: string, password: string) => post<OneIdResponse>('/api/auth/oneid', { login, password }),
   confirmOneId: (login: string, code: string) => post<OneIdResponse>('/api/auth/oneid/confirm', { login, code }),
   mobileSend: (phone: string) => post<OneIdResponse>('/api/auth/mobile/send', { phone }),

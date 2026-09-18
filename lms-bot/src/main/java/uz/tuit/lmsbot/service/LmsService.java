@@ -74,7 +74,37 @@ public class LmsService {
     //  AUTH
     // ─────────────────────────────────────────────
 
+    /** Итог входа по логину LMS. */
+    public enum LoginResult { OK, WRONG_CREDENTIALS, ONEID_REQUIRED, ERROR }
+
+    /**
+     * LMS отказывает во входе по паролю тем, кому положен OneID, и пишет
+     * «Iltimos, OneID orqali tizimga kiring» / «Пожалуйста, войдите в систему через OneID».
+     * Кнопка «OneID» есть на странице всегда, поэтому ищем именно фразу — и в тексте,
+     * и в скриптах уведомлений, где она бывает экранирована как \\uXXXX.
+     */
+    private static final Pattern ONEID_REQUIRED = Pattern.compile(
+            "(?iu)(oneid\\s+orqali\\s+tizimga\\s+kiring|oneid\\s+орқали\\s+тизимга\\s+киринг"
+                    + "|войдите\\s+(?:в\\s+систему\\s+)?через\\s+oneid|вход\\s+только\\s+через\\s+oneid"
+                    + "|(?:log|sign)\\s*in\\s+(?:via|through|with|using)\\s+oneid)");
+
+    static boolean oneIdRequired(String html) {
+        if (html == null) return false;
+        if (ONEID_REQUIRED.matcher(html).find()) return true;
+        Matcher m = Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(html);
+        if (!m.find()) return false;
+        StringBuilder sb = new StringBuilder();
+        m.reset();
+        while (m.find()) m.appendReplacement(sb, Matcher.quoteReplacement(String.valueOf((char) Integer.parseInt(m.group(1), 16))));
+        m.appendTail(sb);
+        return ONEID_REQUIRED.matcher(sb).find();
+    }
+
     public boolean login(long userId, String login, String password) {
+        return loginDetailed(userId, login, password) == LoginResult.OK;
+    }
+
+    public LoginResult loginDetailed(long userId, String login, String password) {
         try {
             // Как и в OneID: входим всегда с чистого jar, иначе живая сессия
             // предыдущего аккаунта переживает вход и данные приходят чужие.
@@ -93,7 +123,7 @@ public class LmsService {
             }
 
             String csrf = extractCsrf(html);
-            if (csrf == null) return false;
+            if (csrf == null) return LoginResult.ERROR;
 
             RequestBody body = new FormBody.Builder()
                     .add("_token", csrf)
@@ -124,12 +154,19 @@ public class LmsService {
             dbg("LMS-LOGIN cookies u=%d -> %s", userId, cookieDump(userId));
 
             loggedInMap.put(userId, success);
-            if (success) invalidateSemesters(userId);
-            return success;
+            if (success) {
+                invalidateSemesters(userId);
+                return LoginResult.OK;
+            }
+            if (oneIdRequired(responseBody)) {
+                System.out.println("[LmsService] login: LMS requires OneID for this account");
+                return LoginResult.ONEID_REQUIRED;
+            }
+            return LoginResult.WRONG_CREDENTIALS;
 
         } catch (Exception e) {
             System.err.println("[LmsService] Login error: " + e.getMessage());
-            return false;
+            return LoginResult.ERROR;
         }
     }
 

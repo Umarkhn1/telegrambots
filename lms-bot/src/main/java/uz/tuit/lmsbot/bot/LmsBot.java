@@ -900,7 +900,29 @@ public class LmsBot extends TelegramLongPollingBot {
                 "⏳ Тизимга кирилмоқда...",
                 "⏳ Signing in..."));
         executor.submit(() -> {
-            boolean ok = lmsService.login(userId, login, password);
+            LmsService.LoginResult res = lmsService.loginDetailed(userId, login, password);
+            if (res == LmsService.LoginResult.ONEID_REQUIRED) {
+                // Пароль верный, но LMS пускает этот аккаунт только через OneID — как на сайте.
+                send(chatId, tr(userId,
+                                "🆔 <b>Пожалуйста, войдите в систему через OneID.</b>\n\n<blockquote>LMS не пускает этот аккаунт по логину и паролю — нужен вход через OneID.</blockquote>",
+                                "🆔 <b>Iltimos, OneID orqali tizimga kiring.</b>\n\n<blockquote>LMS bu hisobni login va parol bilan kiritmaydi — OneID orqali kirish kerak.</blockquote>",
+                                "🆔 <b>Илтимос, OneID орқали тизимга киринг.</b>\n\n<blockquote>LMS бу ҳисобни логин ва парол билан киритмайди — OneID орқали кириш керак.</blockquote>",
+                                "🆔 <b>Please sign in with OneID.</b>\n\n<blockquote>LMS does not allow this account to sign in with a login and password — OneID is required.</blockquote>"),
+                        markup(List.of(List.of(inlineBtn(tr(userId,
+                                "🆔 Войти через OneID", "🆔 OneID orqali kirish", "🆔 OneID орқали кириш", "🆔 Sign in with OneID"),
+                                "auth_oneid")))));
+                return;
+            }
+            if (res == LmsService.LoginResult.ERROR) {
+                send(chatId, tr(userId,
+                                "⚠️ <b>LMS не отвечает.</b>\n\nПопробуйте войти чуть позже.",
+                                "⚠️ <b>LMS javob bermayapti.</b>\n\nBirozdan keyin qayta kiring.",
+                                "⚠️ <b>LMS жавоб бермаяпти.</b>\n\nБироздан кейин қайта киринг.",
+                                "⚠️ <b>LMS is not responding.</b>\n\nPlease try signing in a bit later."),
+                        loginKeyboard(userId));
+                return;
+            }
+            boolean ok = res == LmsService.LoginResult.OK;
             if (ok) {
                 resetUserCaches(userId);
                 if (login != null && !login.isBlank()) userLogin.put(userId, login.trim());
