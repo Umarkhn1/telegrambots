@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Bell, ChevronRight, CircleCheck, Globe, KeyRound, LoaderCircle, LogOut, Palette, Wallet } from 'lucide-react';
+import { Bell, ChevronRight, CircleCheck, Globe, Hourglass, KeyRound, LoaderCircle, LogOut, Palette, Wallet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
 import { Sheet } from '../components/Sheet';
@@ -39,6 +39,7 @@ export function Profile() {
   const { t, lang } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const info = useQuery('profile', (f) => api.profile(f));
   const photo = useQuery('photo', () => api.photo(), 30 * 60_000);
   const contract = useQuery('contract', (f) => api.contract(f), 10 * 60_000);
@@ -61,9 +62,24 @@ export function Profile() {
       <PageHead title={t('profile_title')} />
 
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <motion.div className="avatar large" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          {avatar ? <img src={avatar} alt="" /> : photo.loading ? <Skeleton h={84} w={84} r={42} /> : initials(name)}
-        </motion.div>
+        {avatar ? (
+          <motion.button
+            className="photo"
+            initial={{ scale: 0.94, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={() => {
+              haptic('light');
+              setPhotoOpen(true);
+            }}
+            aria-label={t('photo')}
+          >
+            <img src={avatar} alt="" />
+          </motion.button>
+        ) : photo.loading ? (
+          <Skeleton h={122} w={92} r={16} />
+        ) : (
+          <div className="avatar large">{initials(name)}</div>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
           {info.loading ? (
             <>
@@ -166,6 +182,9 @@ export function Profile() {
 
       <LanguageSheet open={langOpen} onClose={() => setLangOpen(false)} />
       <PasswordSheet open={pwOpen} onClose={() => setPwOpen(false)} />
+      <Sheet open={photoOpen && !!avatar} onClose={() => setPhotoOpen(false)} title={name}>
+        {avatar && <img className="photo-full" src={avatar} alt="" />}
+      </Sheet>
     </Screen>
   );
 }
@@ -176,6 +195,20 @@ function ContractCard({ q }: { q: ReturnType<typeof useQuery<Contract>> }) {
   if (q.loading) return <Skeleton h={128} r={18} style={{ marginTop: 12 }} />;
   const c = q.data;
   if (!c?.found) return null;
+
+  // Контракт на учебный год ещё не выставлен — показываем сообщение LMS как есть.
+  if (c.notice || (c.total == null && c.paid == null && c.debt == null)) {
+    return (
+      <Section title={t('contract')}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Tile icon={Hourglass} tone="neutral" />
+          <div className="row-main">
+            <div className="row-title" style={{ fontWeight: 500 }}>{c.notice || t('contract_empty')}</div>
+          </div>
+        </div>
+      </Section>
+    );
+  }
 
   const total = c.total ?? (c.paid != null && c.debt != null ? c.paid + c.debt : null);
   const pct = total && c.paid != null ? Math.min(100, Math.round((c.paid / total) * 100)) : null;

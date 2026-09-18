@@ -1519,8 +1519,17 @@ public class LmsService {
     //  CONTRACT (оплата контракта)
     // ─────────────────────────────────────────────
 
-    /** Суммы контракта в сумах; null — значение не найдено на странице. */
-    public record ContractInfo(Long total, Long paid, Long debt, String source) {}
+    /**
+     * Суммы контракта в сумах (null — значения нет на странице). notice — сообщение LMS
+     * вместо сумм, например «Данные по контракту за 2026-2027 учебный год ещё не сформированы».
+     */
+    public record ContractInfo(Long total, Long paid, Long debt, String notice, String source) {}
+
+    /** Слова, по которым видно, что страница вообще про контракт. */
+    private static final Pattern K_CONTRACT = Pattern.compile("(?iu)(контракт|kontrakt|shartnoma|contract|шартнома)");
+    /** LMS ещё не выставила контракт на учебный год. */
+    private static final Pattern K_NOT_FORMED = Pattern.compile(
+            "(?iu)(не\\s+сформирован|ещё\\s+не|еще\\s+не|shakllantirilmagan|shakllanmagan|шакллантирилмаган|not\\s+(yet\\s+)?(formed|generated|available)|mavjud\\s+emas|мавжуд\\s+эмас|отсутству)");
 
     private static final Pattern MONEY = Pattern.compile("(\\d{1,3}(?:[ \u00a0\u202f.,]\\d{3})+|\\d{4,})(?:[.,]\\d{1,2})?(?!\\d)");
     private static final Pattern K_TOTAL = Pattern.compile("(?iu)(сумма\\s+контракт|контракт\\S*\\s+сумм|стоимость|shartnoma\\s+summa|kontrakt\\s+summa|to'lov-?kontrakt|contract\\s+amount|umumiy\\s+summa|jami\\s+summa|общая\\s+сумма|итого)");
@@ -1529,12 +1538,14 @@ public class LmsService {
 
     /**
      * Контракт в LMS лежит на отдельной странице, адрес которой в разных версиях сайта разный,
-     * поэтому перебираем известные варианты и ищем подписи сумм. Ничего не нашли — null.
+     * поэтому перебираем известные варианты. Общие страницы (/student/info, /dashboard) не
+     * смотрим: там попадаются посторонние числа, которые принимались за суммы. Ничего не нашли — null.
      */
     public ContractInfo getContract(long userId) {
         String base = config.getLms().getBaseUrl();
-        String[] paths = {"/student/contract", "/student/contracts", "/student/payment", "/student/payments",
-                "/student/finance", "/student/kontrakt", "/student/info", "/dashboard"};
+        LinkedHashSet<String> paths = new LinkedHashSet<>(menuContractLinks(userId));
+        paths.addAll(List.of("/student/contract", "/student/contracts", "/student/payment", "/student/payments",
+                "/student/finance", "/student/kontrakt", "/student/contract-info", "/student/payment-info"));
         for (String path : paths) {
             try {
                 Request req = new Request.Builder().url(base + path).header("User-Agent", userAgent())
@@ -1547,10 +1558,13 @@ public class LmsService {
                 }
                 if (html.contains("name=\"password\"")) continue;
                 // Несуществующий раздел LMS тихо уводит на другую страницу.
-                if (!finalUrl.startsWith(path)) continue;
+                int qm = path.indexOf('?');
+                if (!finalUrl.startsWith(qm >= 0 ? path.substring(0, qm) : path)) continue;
                 ContractInfo info = parseContract(html, path);
                 if (info != null) {
-                    dbg("CONTRACT u=%d page=%s total=%s paid=%s debt=%s", userId, path, info.total(), info.paid(), info.debt());
+                    // Без сумм и личных данных: только какая страница подошла — чтобы знать адрес.
+                    System.out.println("[LmsService] contract page=" + path
+                            + (info.notice() != null ? " notice" : " amounts"));
                     return info;
                 }
             } catch (Exception e) {
@@ -1560,9 +1574,45 @@ public class LmsService {
         return null;
     }
 
+    /** Пункты меню LMS, ведущие на контракт/оплату, — пути на lms.tuit.uz. */
+    private List<String> menuContractLinks(long userId) {
+        List<String> out = new ArrayList<>();
+        try {
+            String base = config.getLms().getBaseUrl();
+            Document doc = Jsoup.parse(getHtml(userId, base + "/student/info", base + "/student/info"), base);
+            for (Element a : doc.select("a[href]")) {
+                String href = a.attr("abs:href");
+                String low = href.toLowerCase(Locale.ROOT);
+                boolean byText = K_CONTRACT.matcher(a.text()).find();
+                boolean byHref = low.contains("contract") || low.contains("kontrakt") || low.contains("payment");
+                if (!(byText || byHref) || !href.startsWith(base)) continue;
+                String path = href.substring(base.length());
+                int q = path.indexOf('#');
+                if (q >= 0) path = path.substring(0, q);
+                if (path.startsWith("/") && path.length() > 1 && !out.contains(path)) out.add(path);
+            }
+        } catch (Exception e) {
+            dbg("CONTRACT menu u=%d err=%s", userId, e.getMessage());
+        }
+        return out;
+    }
+
     static ContractInfo parseContract(String html, String source) {
         Document doc = Jsoup.parse(html);
-        doc.select("script, style, nav, .page-sidebar, header").remove();
+        doc.select("script, style, nav, .page-sidebar, .sidebar, header, footer, .navbar, .dropdown-menu").remove();
+        if (!K_CONTRACT.matcher(doc.body() != null ? doc.body().text() : "").find()) return null;
+
+        // Контракт на учебный год ещё не выставлен — LMS пишет об этом вместо таблицы.
+        // Берём самый короткий блок с этим сообщением, чтобы показать его дословно.
+        String notice = null;
+        for (Element el : doc.select("div, p, span, h1, h2, h3, h4, h5, h6, td, li, strong, b")) {
+            String text = el.text().trim();
+            if (text.isEmpty() || text.length() > 300) continue;
+            if (K_NOT_FORMED.matcher(text).find() && K_CONTRACT.matcher(text).find()
+                    && (notice == null || text.length() < notice.length())) notice = text;
+        }
+        if (notice != null) return new ContractInfo(null, null, null, notice, source);
+
         Long total = null, paid = null, debt = null;
         // Подпись и сумма обычно в одной строке таблицы, карточке или соседних элементах —
         // берём самый мелкий блок, где есть и подпись, и число.
@@ -1581,7 +1631,7 @@ public class LmsService {
         if (debt == null && total != null && paid != null) debt = Math.max(0, total - paid);
         if (paid == null && total != null && debt != null) paid = Math.max(0, total - debt);
         if (total == null && paid != null && debt != null) total = paid + debt;
-        return new ContractInfo(total, paid, debt, source);
+        return new ContractInfo(total, paid, debt, null, source);
     }
 
     private static long parseMoney(String s) {

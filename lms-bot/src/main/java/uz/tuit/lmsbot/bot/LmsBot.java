@@ -572,6 +572,7 @@ public class LmsBot extends TelegramLongPollingBot {
                             "✅ <b>Siz allaqachon tizimdasiz</b>\n\nHisobni almashtirish uchun — /logout",
                             "✅ <b>Сиз аллақачон тизимдасиз</b>\n\nҲисобни алмаштириш учун — /logout"),
                     mainMenuKeyboard(userId));
+            sendAppAfterLogin(chatId, userId);
             return;
         }
         InlineKeyboardMarkup kb = markup(List.of(
@@ -723,6 +724,7 @@ public class LmsBot extends TelegramLongPollingBot {
                             "✅ <b>OneID orqali muvaffaqiyatli kirdingiz!</b>\n\nQuyidagi menyudan foydalaning 👇",
                             "✅ <b>OneID орқали муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇"),
                     mainMenuKeyboard(userId));
+            sendAppAfterLogin(chatId, userId);
         } else {
             send(chatId, tr(userId,
                             "❌ <b>Не удалось связать OneID с LMS</b>\n\n<blockquote>Возможно, ваш аккаунт OneID не привязан к lms.tuit.uz. Попробуйте ещё раз.</blockquote>",
@@ -757,6 +759,7 @@ public class LmsBot extends TelegramLongPollingBot {
                                 "✅ <b>Muvaffaqiyatli kirdingiz!</b>\n\nQuyidagi menyudan foydalaning 👇",
                                 "✅ <b>Муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇"),
                         mainMenuKeyboard(userId));
+                sendAppAfterLogin(chatId, userId);
             } else {
                 send(chatId, tr(userId,
                                 "❌ <b>Неверный логин или пароль!</b>\n\nПопробуйте ещё раз.",
@@ -3010,23 +3013,44 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
+    /** Inline-кнопка «Интерактивный LMS»; null — публичного адреса приложения нет. */
+    private InlineKeyboardMarkup appKeyboard(long userId) {
+        if (webAppUrl == null) return null;
+        InlineKeyboardButton btn = new InlineKeyboardButton();
+        btn.setText(tr(userId, "🎓 Интерактивный LMS", "🎓 Interaktiv LMS", "🎓 Интерактив LMS"));
+        btn.setWebApp(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(webAppUrl));
+        return markup(List.of(List.of(btn)));
+    }
+
     /** Сообщение с кнопкой запуска приложения (команда /app). */
     private void sendAppButton(long chatId, long userId) {
-        if (webAppUrl == null) {
+        InlineKeyboardMarkup kb = appKeyboard(userId);
+        if (kb == null) {
             send(chatId, tr(userId,
                     "📱 Приложение пока недоступно.",
                     "📱 Ilova hozircha mavjud emas.",
                     "📱 Илова ҳозирча мавжуд эмас."), null);
             return;
         }
-        InlineKeyboardButton btn = new InlineKeyboardButton();
-        btn.setText(tr(userId, "📱 Открыть приложение", "📱 Ilovani ochish", "📱 Иловани очиш"));
-        btn.setWebApp(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(webAppUrl));
         send(chatId, tr(userId,
-                "📱 <b>TUIT LMS</b>\n\nВсе разделы — предметы, расписание, дедлайны, оценки — в одном приложении.",
-                "📱 <b>TUIT LMS</b>\n\nBarcha bo'limlar — fanlar, jadval, deadlinelar, baholar — bitta ilovada.",
-                "📱 <b>TUIT LMS</b>\n\nБарча бўлимлар — фанлар, жадвал, дедлайнлар, баҳолар — битта иловада."),
-                markup(List.of(List.of(btn))));
+                "🎓 <b>Интерактивный LMS</b>\n\nВсе разделы — предметы, расписание, дедлайны, оценки — в одном приложении.",
+                "🎓 <b>Interaktiv LMS</b>\n\nBarcha bo'limlar — fanlar, jadval, deadlinelar, baholar — bitta ilovada.",
+                "🎓 <b>Интерактив LMS</b>\n\nБарча бўлимлар — фанлар, жадвал, дедлайнлар, баҳолар — битта иловада."),
+                kb);
+    }
+
+    /**
+     * После входа — отдельное сообщение с кнопкой приложения. Оно остаётся в чате:
+     * reply-клавиатура меню и inline-кнопка в одном сообщении не уживаются, поэтому их два.
+     */
+    private void sendAppAfterLogin(long chatId, long userId) {
+        InlineKeyboardMarkup kb = appKeyboard(userId);
+        if (kb == null) return;
+        send(chatId, tr(userId,
+                "🎓 <b>Интерактивный LMS</b> — расписание на весь семестр, дедлайны, оценки, GPA и загрузка работ в удобном приложении 👇",
+                "🎓 <b>Interaktiv LMS</b> — butun semestr jadvali, deadlinelar, baholar, GPA va ishlarni yuklash qulay ilovada 👇",
+                "🎓 <b>Интерактив LMS</b> — бутун семестр жадвали, дедлайнлар, баҳолар, GPA ва ишларни юклаш қулай иловада 👇"),
+                kb);
     }
 
     public void shutdown() {

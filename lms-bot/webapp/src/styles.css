@@ -889,6 +889,34 @@ svg {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
+}
+
+/* Фото студента целиком — в пропорциях оригинала, без обрезки кругом. */
+.photo {
+  width: 92px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line);
+  transition: transform 0.15s ease;
+}
+
+.photo:active { transform: scale(0.97); }
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.photo-full {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  border-radius: 18px;
 }
 
 .lesson {

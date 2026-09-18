@@ -147,6 +147,8 @@ export interface StudentInfo {
 
 export interface Contract {
   found: boolean;
+  /** Сообщение LMS вместо сумм, например «данные ещё не сформированы». */
+  notice?: string | null;
   total?: number | null;
   paid?: number | null;
   debt?: number | null;

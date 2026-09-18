@@ -483,6 +483,7 @@ public class WebApi {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("found", c != null);
             if (c != null) {
+                m.put("notice", c.notice());
                 m.put("total", c.total());
                 m.put("paid", c.paid());
                 m.put("debt", c.debt());
