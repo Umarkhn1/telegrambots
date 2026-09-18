@@ -7,3 +7,7 @@ dumps/
 .env
 run-local.sh
 run-local.ps1
+
+# Сборка мини-приложения (делается в Dockerfile или npm run build в webapp/)
+webapp/node_modules/
+src/main/resources/webapp/

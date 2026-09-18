@@ -524,6 +524,34 @@ public class LmsService {
         }
     }
 
+    /**
+     * Жива ли сессия на стороне LMS: true/false, либо null, если LMS не ответила
+     * (сеть, таймаут) — тогда о сессии ничего не известно и трогать её нельзя.
+     * Протухшую сессию помечает как невошедшую, cookie не стирает.
+     */
+    public Boolean probeSession(long userId) {
+        try {
+            Request req = new Request.Builder()
+                    .url(config.getLms().getBaseUrl() + "/student/info")
+                    .header("User-Agent", userAgent())
+                    .build();
+            String finalUrl, html;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                if (resp.code() >= 500) return null;
+                finalUrl = resp.request().url().toString();
+                html     = resp.body() != null ? resp.body().string() : "";
+            }
+            boolean ok = !finalUrl.contains("/auth/login")
+                    && !html.contains("name=\"password\"")
+                    && finalUrl.contains("/student/info");
+            if (ok) loggedInMap.put(userId, true);
+            else    loggedInMap.remove(userId);
+            return ok;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public boolean isLoggedIn(long userId) {
         return loggedInMap.getOrDefault(userId, false);
     }
@@ -1471,18 +1499,93 @@ public class LmsService {
     //  PROFILE (photo + password)
     // ─────────────────────────────────────────────
 
+    /** Фото студента (data:image/...): сначала со страницы «Информация», затем со смены пароля. */
     public String getProfilePhotoDataUrl(long userId) {
-        try {
-            String url = config.getLms().getBaseUrl() + "/profile/password";
-            String html = getHtml(userId, url, url);
-            Document doc = Jsoup.parse(html);
-            Element img = doc.selectFirst("img[src^=data:image]");
-            if (img == null) return null;
-            String src = img.attr("src");
-            return (src != null && src.startsWith("data:image")) ? src : null;
-        } catch (Exception e) {
-            return null;
+        String base = config.getLms().getBaseUrl();
+        for (String path : new String[]{"/student/info", "/profile/password"}) {
+            try {
+                Document doc = Jsoup.parse(getHtml(userId, base + path, base + path));
+                for (Element img : doc.select("img[src^=data:image]")) {
+                    String src = img.attr("src");
+                    // Иконки и заглушки короткие; настоящее фото — килобайты base64.
+                    if (src.length() > 2000) return src;
+                }
+            } catch (Exception ignored) {}
         }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────
+    //  CONTRACT (оплата контракта)
+    // ─────────────────────────────────────────────
+
+    /** Суммы контракта в сумах; null — значение не найдено на странице. */
+    public record ContractInfo(Long total, Long paid, Long debt, String source) {}
+
+    private static final Pattern MONEY = Pattern.compile("(\\d{1,3}(?:[ \u00a0\u202f.,]\\d{3})+|\\d{4,})(?:[.,]\\d{1,2})?(?!\\d)");
+    private static final Pattern K_TOTAL = Pattern.compile("(?iu)(сумма\\s+контракт|контракт\\S*\\s+сумм|стоимость|shartnoma\\s+summa|kontrakt\\s+summa|to'lov-?kontrakt|contract\\s+amount|umumiy\\s+summa|jami\\s+summa|общая\\s+сумма|итого)");
+    private static final Pattern K_PAID = Pattern.compile("(?iu)(оплачен|оплата\\s+произвед|внесено|to'langan|tolangan|to‘langan|paid)");
+    private static final Pattern K_DEBT = Pattern.compile("(?iu)(задолж|долг|qarzdorlik|qarz|остаток|qoldiq|debt)");
+
+    /**
+     * Контракт в LMS лежит на отдельной странице, адрес которой в разных версиях сайта разный,
+     * поэтому перебираем известные варианты и ищем подписи сумм. Ничего не нашли — null.
+     */
+    public ContractInfo getContract(long userId) {
+        String base = config.getLms().getBaseUrl();
+        String[] paths = {"/student/contract", "/student/contracts", "/student/payment", "/student/payments",
+                "/student/finance", "/student/kontrakt", "/student/info", "/dashboard"};
+        for (String path : paths) {
+            try {
+                Request req = new Request.Builder().url(base + path).header("User-Agent", userAgent())
+                        .header("Referer", base + "/student/info").build();
+                String html, finalUrl;
+                try (Response resp = getClient(userId).newCall(req).execute()) {
+                    if (!resp.isSuccessful()) continue;
+                    finalUrl = resp.request().url().encodedPath();
+                    html = resp.body() != null ? resp.body().string() : "";
+                }
+                if (html.contains("name=\"password\"")) continue;
+                // Несуществующий раздел LMS тихо уводит на другую страницу.
+                if (!finalUrl.startsWith(path)) continue;
+                ContractInfo info = parseContract(html, path);
+                if (info != null) {
+                    dbg("CONTRACT u=%d page=%s total=%s paid=%s debt=%s", userId, path, info.total(), info.paid(), info.debt());
+                    return info;
+                }
+            } catch (Exception e) {
+                dbg("CONTRACT u=%d page=%s err=%s", userId, path, e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    static ContractInfo parseContract(String html, String source) {
+        Document doc = Jsoup.parse(html);
+        doc.select("script, style, nav, .page-sidebar, header").remove();
+        Long total = null, paid = null, debt = null;
+        // Подпись и сумма обычно в одной строке таблицы, карточке или соседних элементах —
+        // берём самый мелкий блок, где есть и подпись, и число.
+        for (Element el : doc.select("tr, li, p, div, span, td, th, h1, h2, h3, h4, h5, h6, label, dt, dd")) {
+            String text = el.text();
+            if (text.length() > 160 || text.isEmpty()) continue;
+            Matcher mm = MONEY.matcher(text);
+            if (!mm.find()) continue;
+            long value = parseMoney(mm.group(1));
+            if (value < 10_000) continue;
+            if (total == null && K_TOTAL.matcher(text).find()) total = value;
+            else if (paid == null && K_PAID.matcher(text).find()) paid = value;
+            else if (debt == null && K_DEBT.matcher(text).find()) debt = value;
+        }
+        if (total == null && paid == null && debt == null) return null;
+        if (debt == null && total != null && paid != null) debt = Math.max(0, total - paid);
+        if (paid == null && total != null && debt != null) paid = Math.max(0, total - debt);
+        if (total == null && paid != null && debt != null) total = paid + debt;
+        return new ContractInfo(total, paid, debt, source);
+    }
+
+    private static long parseMoney(String s) {
+        return Long.parseLong(s.replaceAll("[^\\d]", ""));
     }
 
     public boolean changePassword(long userId, String oldPassword, String newPassword, String confirmPassword) {

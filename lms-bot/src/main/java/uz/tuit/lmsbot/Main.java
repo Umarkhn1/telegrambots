@@ -5,6 +5,7 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import uz.tuit.lmsbot.bot.LmsBot;
 import uz.tuit.lmsbot.config.AppConfig;
 import uz.tuit.lmsbot.service.LmsService;
+import uz.tuit.lmsbot.web.WebApi;
 
 public class Main {
 
@@ -41,37 +42,31 @@ public class Main {
         System.out.println("✅ Bot is running! Username: @" + config.getBot().getUsername());
 
         // Хостинги вроде Render считают веб-сервис упавшим, если он не слушает $PORT.
-        // Боту порт не нужен (long polling), поэтому поднимаем его только когда
-        // переменная задана — как health-check и как способ не дать сервису уснуть.
-        startHealthServer();
+        // На этом же порту живут API и фронтенд мини-приложения.
+        startWebServer(config, lmsService, bot);
         startKeepAlive();
     }
 
-    private static void startHealthServer() {
+    private static void startWebServer(AppConfig config, LmsService lmsService, LmsBot bot) {
         String port = System.getenv("PORT");
-        if (port == null || port.isBlank()) return;
-        try {
-            com.sun.net.httpserver.HttpServer http =
-                    com.sun.net.httpserver.HttpServer.create(
-                            new java.net.InetSocketAddress(Integer.parseInt(port)), 0);
-            http.createContext("/", exchange -> {
-                byte[] body = "ok".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                // Health-check Render ходит методом HEAD, а на HEAD тело слать нельзя:
-                // длина ответа должна быть -1, иначе JDK пишет WARNING в лог.
-                boolean head = "HEAD".equalsIgnoreCase(exchange.getRequestMethod());
-                exchange.sendResponseHeaders(200, head ? -1 : body.length);
-                if (!head) {
-                    try (java.io.OutputStream os = exchange.getResponseBody()) { os.write(body); }
-                } else {
-                    exchange.close();
-                }
-            });
-            http.setExecutor(null);
-            http.start();
-            System.out.println("🌐 Health endpoint on :" + port);
-        } catch (Exception e) {
-            System.err.println("[Main] health server: " + e.getMessage());
+        if (port == null || port.isBlank()) {
+            System.out.println("🌐 PORT не задан — HTTP-сервер и мини-приложение выключены");
+            return;
         }
+        try {
+            new WebApi(config, lmsService, bot).start(Integer.parseInt(port.trim()));
+            System.out.println("🌐 HTTP on :" + port + " (health /, API /api/, app /app/)");
+        } catch (Exception e) {
+            System.err.println("[Main] web server: " + e.getMessage());
+            return;
+        }
+        // Адрес мини-приложения: явный WEBAPP_URL или публичный адрес сервиса на Render.
+        String url = System.getenv("WEBAPP_URL");
+        if (url == null || url.isBlank()) {
+            String ext = System.getenv("RENDER_EXTERNAL_URL");
+            if (ext != null && !ext.isBlank()) url = (ext.endsWith("/") ? ext : ext + "/") + "app/";
+        }
+        bot.applyWebApp(url);
     }
 
     /** Каждые сколько минут дёргать собственный адрес, чтобы сервис не уснул. */

@@ -55,6 +55,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private final AppConfig config;
     private final LmsService lmsService;
+    private final uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule;
 
     private final Map<Long, String>       userState    = new ConcurrentHashMap<>();
     private final Map<Long, String>       tempLogin    = new ConcurrentHashMap<>();
@@ -70,10 +71,8 @@ public class LmsBot extends TelegramLongPollingBot {
     private final Map<Long, Map<Integer, List<Activity>>> userActivities = new ConcurrentHashMap<>();
     private final Map<Long, Long>                         lastChatId     = new ConcurrentHashMap<>();
 
-    /** Кэш расписания для напоминаний о парах: дёргать LMS каждую минуту незачем. */
-    private final Map<Long, List<ScheduleEvent>> schedCache   = new ConcurrentHashMap<>();
-    private final Map<Long, Long>                schedCacheTs = new ConcurrentHashMap<>();
-    private static final long SCHED_CACHE_MS = 15L * 60 * 1000;
+    /** За сколько минут до первой пары присылать сводку на день. */
+    private static final int DAY_DIGEST_BEFORE_MIN = 60;
 
     /** Как часто проверять новые НБ. */
     private final Map<Long, Long> lastNbCheckTs = new ConcurrentHashMap<>();
@@ -123,6 +122,7 @@ public class LmsBot extends TelegramLongPollingBot {
     public LmsBot(AppConfig config, LmsService lmsService) {
         this.config = config;
         this.lmsService = lmsService;
+        this.semesterSchedule = new uz.tuit.lmsbot.service.SemesterSchedule(lmsService);
         startSchedulers();
     }
 
@@ -399,6 +399,11 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if (data.startsWith("act_pick_")) {
             String[] p = data.replace("act_pick_", "").split("_", 2);
             if (p.length == 2) editActivityDetails(chatId, userId, messageId, Integer.parseInt(p[0]), Integer.parseInt(p[1]));
+        } else if (data.startsWith("sw_")) {
+            String[] p = data.substring(3).split("_");
+            if (p.length == 2) editScheduleWeek(chatId, userId, messageId, Integer.parseInt(p[0]), Integer.parseInt(p[1]));
+        } else if ("sched_sem".equals(data)) {
+            edit(chatId, messageId, tr(userId, "📅 Выберите семестр:", "📅 Semestrni tanlang:", "📅 Семестрни танланг:"), semesterScheduleKeyboard(userId));
         } else if (data.startsWith("schedule_")) {
             showSchedule(chatId, userId, Integer.parseInt(data.replace("schedule_", "")));
         } else if ("gpa_all".equals(data)) {
@@ -773,8 +778,7 @@ public class LmsBot extends TelegramLongPollingBot {
         userActivities.remove(userId);
         userCalendars.remove(userId);
         pendingFiles.remove(userId);
-        schedCache.remove(userId);
-        schedCacheTs.remove(userId);
+        semesterSchedule.invalidate(userId);
         lastNbCheckTs.remove(userId);
         lastNbByCourse.remove(userId);
         lastUrgentScanTs.remove(userId);
@@ -1180,59 +1184,108 @@ public class LmsBot extends TelegramLongPollingBot {
         sendProgress(chatId, t(userId, "sched.loading"));
 
         executor.submit(() -> {
-            List<ScheduleEvent> events = lmsService.getSchedule(userId, semesterId);
-            String semName = lmsService.semesterName(userId, semesterId);
-
-            if (events == null || events.isEmpty()) {
+            uz.tuit.lmsbot.service.SemesterSchedule.Result sched = semesterSchedule.get(userId, semesterId, false);
+            if (sched == null || sched.lessons().isEmpty()) {
                 send(chatId, t(userId, "sched.empty"), semesterScheduleKeyboard(userId));
                 return;
             }
-
-            Map<String, List<ScheduleEvent>> byDate = new LinkedHashMap<>();
-            for (ScheduleEvent ev : events)
-                byDate.computeIfAbsent(ev.getStart().substring(0, 10), k -> new ArrayList<>()).add(ev);
-            for (List<ScheduleEvent> list : byDate.values())
-                list.sort(Comparator.comparing(ScheduleEvent::getStart));
-
-            String[] dayNames = switch (lang(userId)) {
-                case "ru"     -> new String[]{"","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"};
-                case "uz_cyr" -> new String[]{"","Душанба","Сешанба","Чоршанба","Пайшанба","Жума","Шанба","Якшанба"};
-                default       -> new String[]{"","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba","Yakshanba"};
-            };
-            String[] dowColors = {"","🟡","🟢","🔵","🟣","🟠","🔴","⚪"};
-
-            StringBuilder schedMsg = new StringBuilder();
-            schedMsg.append("📅 <b>").append(esc(semName)).append("</b>\n\n");
-
-            for (Map.Entry<String, List<ScheduleEvent>> entry : byDate.entrySet()) {
-                String dateStr = entry.getKey();
-                List<ScheduleEvent> dayEvents = entry.getValue();
-                String dayHeader;
-                int dowIndex = 0;
-                try {
-                    int dow = java.time.LocalDate.parse(dateStr).getDayOfWeek().getValue();
-                    dayHeader = dow < dayNames.length ? dayNames[dow].toUpperCase() : dateStr;
-                    dowIndex = dow < dowColors.length ? dow : 0;
-                } catch (Exception e) { dayHeader = dateStr; }
-                String dot = dowColors[dowIndex];
-
-                StringBuilder inner = new StringBuilder();
-                inner.append(dot).append(" <b>").append(esc(dayHeader)).append("</b> — <i>").append(esc(dateStr)).append("</i>\n");
-                for (ScheduleEvent ev : dayEvents) {
-                    String time    = ev.getStart().length() >= 16 ? ev.getStart().substring(11, 16) : "";
-                    String[] parts = ev.getTitle().split("\n", 2);
-                    String room    = parts.length > 0 ? parts[0].trim() : "";
-                    String subject = parts.length > 1 ? parts[1].trim() : ev.getTitle();
-                    String icon    = ev.getType() == 2 || ev.getType() == 3 ? "🔬" : "📖";
-                    inner.append("\n⏰ <b>").append(esc(time)).append("</b>");
-                    if (!room.isEmpty()) inner.append(" | ").append(esc(room));
-                    inner.append("\n").append(icon).append(" ").append(esc(subject)).append("\n");
-                }
-                schedMsg.append("<blockquote>").append(inner.toString().trim()).append("</blockquote>\n");
-            }
-
-            send(chatId, schedMsg.toString(), withBack(userId, semesterScheduleKeyboard(userId)));
+            rememberSemester(userId, semesterId);
+            int week = sched.weekOf(java.time.LocalDate.now(AppConfig.LMS_ZONE));
+            send(chatId, scheduleWeekText(userId, semesterId, sched, week), scheduleWeekKeyboard(userId, semesterId, sched, week));
         });
+    }
+
+    private void editScheduleWeek(long chatId, long userId, int messageId, int semesterId, int week) {
+        if (!checkLogin(chatId, userId)) return;
+        executor.submit(() -> {
+            uz.tuit.lmsbot.service.SemesterSchedule.Result sched = semesterSchedule.get(userId, semesterId, false);
+            if (sched == null || sched.lessons().isEmpty()) {
+                edit(chatId, messageId, t(userId, "sched.empty"), semesterScheduleKeyboard(userId));
+                return;
+            }
+            int w = Math.max(0, Math.min(week, sched.weekCount() - 1));
+            edit(chatId, messageId, scheduleWeekText(userId, semesterId, sched, w), scheduleWeekKeyboard(userId, semesterId, sched, w));
+        });
+    }
+
+    private String[] dayNames(long userId) {
+        return switch (lang(userId)) {
+            case "ru"     -> new String[]{"","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"};
+            case "uz_cyr" -> new String[]{"","Душанба","Сешанба","Чоршанба","Пайшанба","Жума","Шанба","Якшанба"};
+            default       -> new String[]{"","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba","Yakshanba"};
+        };
+    }
+
+    private String kindLabel(long userId, String kind) {
+        return switch (kind) {
+            case uz.tuit.lmsbot.service.SemesterSchedule.PRACTICE -> tr(userId, "Практика", "Amaliyot", "Амалиёт");
+            case uz.tuit.lmsbot.service.SemesterSchedule.LAB -> tr(userId, "Лабораторная", "Laboratoriya", "Лаборатория");
+            default -> tr(userId, "Лекция", "Ma'ruza", "Маъруза");
+        };
+    }
+
+    private String kindIcon(String kind) {
+        return uz.tuit.lmsbot.service.SemesterSchedule.LECTURE.equals(kind) ? "📖 " : "🔬 ";
+    }
+
+    /** Одна неделя расписания; неделя — страница пагинации до конца семестра. */
+    private String scheduleWeekText(long userId, int semesterId,
+                                    uz.tuit.lmsbot.service.SemesterSchedule.Result sched, int week) {
+        java.time.LocalDate from = sched.weekStart(week);
+        java.time.LocalDate to = from.plusDays(6);
+        java.time.LocalDate today = java.time.LocalDate.now(AppConfig.LMS_ZONE);
+        DateTimeFormatter dm = DateTimeFormatter.ofPattern("dd.MM");
+        String[] days = dayNames(userId);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📅 <b>").append(esc(lmsService.semesterName(userId, semesterId))).append("</b>\n")
+                .append(tr(userId, "Неделя ", "Hafta ", "Ҳафта ")).append(week + 1).append(" / ").append(sched.weekCount())
+                .append(" · <i>").append(from.format(dm)).append(" – ").append(to.format(dm)).append("</i>\n\n");
+
+        boolean any = false;
+        for (java.time.LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            List<uz.tuit.lmsbot.service.SemesterSchedule.Lesson> lessons = sched.on(d);
+            if (lessons.isEmpty()) continue;
+            any = true;
+            StringBuilder inner = new StringBuilder();
+            inner.append(d.equals(today) ? "📍 " : "").append("<b>").append(esc(days[d.getDayOfWeek().getValue()].toUpperCase()))
+                    .append("</b> — <i>").append(d.format(dm)).append("</i>");
+            if (d.equals(today)) inner.append(" · ").append(tr(userId, "сегодня", "bugun", "бугун"));
+            inner.append("\n");
+            for (uz.tuit.lmsbot.service.SemesterSchedule.Lesson l : lessons) {
+                inner.append("\n⏰ <b>").append(esc(l.time())).append("</b>");
+                if (!l.room().isBlank()) inner.append(" | 🚪 ").append(esc(l.room()));
+                inner.append("\n").append(kindIcon(l.kind()))
+                        .append(esc(l.subject())).append(" · <i>").append(esc(kindLabel(userId, l.kind()))).append("</i>");
+                if (l.stream() != null) inner.append(" · ").append(esc(l.stream()));
+                if (!l.teacher().isBlank()) inner.append("\n👨‍🏫 ").append(esc(l.teacher()));
+                if (l.topic() != null && !l.topic().isBlank()) inner.append("\n📝 <i>").append(esc(truncateTopic(l.topic(), 80))).append("</i>");
+                if (l.last()) inner.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс"));
+                inner.append("\n");
+            }
+            sb.append("<blockquote>").append(inner.toString().trim()).append("</blockquote>\n");
+        }
+        if (!any) {
+            sb.append("<blockquote>").append(tr(userId, "На этой неделе пар нет.", "Bu haftada dars yo'q.", "Бу ҳафтада дарс йўқ.")).append("</blockquote>");
+        }
+        return sb.toString();
+    }
+
+    private InlineKeyboardMarkup scheduleWeekKeyboard(long userId, int semesterId,
+                                                      uz.tuit.lmsbot.service.SemesterSchedule.Result sched, int week) {
+        int total = sched.weekCount();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        List<InlineKeyboardButton> nav = new ArrayList<>();
+        nav.add(inlineBtn("◀️", week > 0 ? "sw_" + semesterId + "_" + (week - 1) : "noop"));
+        nav.add(inlineBtn((week + 1) + " / " + total, "noop"));
+        nav.add(inlineBtn("▶️", week < total - 1 ? "sw_" + semesterId + "_" + (week + 1) : "noop"));
+        rows.add(nav);
+        int current = sched.weekOf(java.time.LocalDate.now(AppConfig.LMS_ZONE));
+        List<InlineKeyboardButton> extra = new ArrayList<>();
+        if (week != current) extra.add(inlineBtn(tr(userId, "📍 Эта неделя", "📍 Shu hafta", "📍 Шу ҳафта"), "sw_" + semesterId + "_" + current));
+        extra.add(inlineBtn(tr(userId, "📅 Семестр", "📅 Semestr", "📅 Семестр"), "sched_sem"));
+        rows.add(extra);
+        return markup(rows);
     }
 
     // ─────────────────────────────────────────────
@@ -2027,6 +2080,11 @@ public class LmsBot extends TelegramLongPollingBot {
         }, 15, 60, TimeUnit.SECONDS);
     }
 
+    /**
+     * Напоминания по расписанию: сводка дня за час до первой пары и
+     * напоминание за 10 минут до каждой пары. Пары берутся из расписания семестра,
+     * поэтому о закончившихся по плану лекциях и практиках бот не напоминает.
+     */
     private void tickPairReminders() {
         for (Long userId : new ArrayList<>(lastChatId.keySet())) {
             if (!lmsService.isLoggedIn(userId)) continue;
@@ -2035,51 +2093,75 @@ public class LmsBot extends TelegramLongPollingBot {
             int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
             if (semesterId <= 0) continue;
 
-            long nowTs = System.currentTimeMillis();
-            List<ScheduleEvent> events = schedCache.get(userId);
-            if (events == null || nowTs - schedCacheTs.getOrDefault(userId, 0L) > SCHED_CACHE_MS) {
-                events = lmsService.getSchedule(userId, semesterId);
-                schedCache.put(userId, events == null ? List.of() : events);
-                schedCacheTs.put(userId, nowTs);
-            }
-            if (events == null || events.isEmpty()) continue;
+            uz.tuit.lmsbot.service.SemesterSchedule.Result sched = semesterSchedule.get(userId, semesterId, false);
+            if (sched == null) continue;
+
+            java.time.LocalDate today = java.time.LocalDate.now(AppConfig.LMS_ZONE);
+            List<uz.tuit.lmsbot.service.SemesterSchedule.Lesson> lessons = sched.on(today);
+            if (lessons.isEmpty()) continue;
 
             long now = System.currentTimeMillis();
-            for (ScheduleEvent ev : events) {
-                long start = parseScheduleStartTs(ev.getStart());
-                if (start <= 0) continue;
+            long toFirst = (lessons.get(0).ts() - now) / 60000L;
+            if (toFirst >= DAY_DIGEST_BEFORE_MIN - PAIR_REMINDER_WINDOW_MIN
+                    && toFirst <= DAY_DIGEST_BEFORE_MIN + PAIR_REMINDER_WINDOW_MIN
+                    && markOnce(userId, "day|" + today)) {
+                sendDayDigest(chatId, userId, lessons);
+            }
 
-                long diffMin = (start - now) / 60000L;
-
+            for (uz.tuit.lmsbot.service.SemesterSchedule.Lesson l : lessons) {
+                long diffMin = (l.ts() - now) / 60000L;
                 boolean inWindow = diffMin >= (PAIR_REMINDER_BEFORE_MIN - PAIR_REMINDER_WINDOW_MIN)
                         && diffMin <= (PAIR_REMINDER_BEFORE_MIN + PAIR_REMINDER_WINDOW_MIN);
                 if (!inWindow) continue;
+                if (!markOnce(userId, "pair|" + l.ts() + "|" + l.subject())) continue;
 
-                String key = "pair|" + start + "|" + ev.getTitle();
-                if (!markOnce(userId, key)) continue;
-
-                PairInfo info = parsePairInfo(ev);
+                String kind = kindLabel(userId, l.kind());
                 send(chatId, tr(userId,
                         "⏰ <b>Напоминание: пара через " + PAIR_REMINDER_BEFORE_MIN + " минут</b>\n\n<blockquote>"
-                                + "📖 Предмет: <b>" + esc(info.subject) + "</b>\n"
-                                + (info.teacher.isBlank() ? "" : "👨‍🏫 Преподаватель: <b>" + esc(info.teacher) + "</b>\n")
-                                + "🕐 Время: <b>" + esc(info.time) + "</b>\n"
-                                + (info.room.isBlank() ? "" : "🚪 Кабинет: <b>" + esc(info.room) + "</b>\n")
+                                + "📖 Предмет: <b>" + esc(l.subject()) + "</b> · <i>" + esc(kind) + "</i>\n"
+                                + (l.teacher().isBlank() ? "" : "👨‍🏫 Преподаватель: <b>" + esc(l.teacher()) + "</b>\n")
+                                + "🕐 Время: <b>" + esc(l.time()) + "</b>\n"
+                                + (l.room().isBlank() ? "" : "🚪 Кабинет: <b>" + esc(l.room()) + "</b>\n")
                                 + "</blockquote>",
                         "⏰ <b>Eslatma: dars " + PAIR_REMINDER_BEFORE_MIN + " daqiqadan so'ng boshlanadi</b>\n\n<blockquote>"
-                                + "📖 Fan: <b>" + esc(info.subject) + "</b>\n"
-                                + (info.teacher.isBlank() ? "" : "👨‍🏫 O'qituvchi: <b>" + esc(info.teacher) + "</b>\n")
-                                + "🕐 Vaqt: <b>" + esc(info.time) + "</b>\n"
-                                + (info.room.isBlank() ? "" : "🚪 Xona: <b>" + esc(info.room) + "</b>\n")
+                                + "📖 Fan: <b>" + esc(l.subject()) + "</b> · <i>" + esc(kind) + "</i>\n"
+                                + (l.teacher().isBlank() ? "" : "👨‍🏫 O'qituvchi: <b>" + esc(l.teacher()) + "</b>\n")
+                                + "🕐 Vaqt: <b>" + esc(l.time()) + "</b>\n"
+                                + (l.room().isBlank() ? "" : "🚪 Xona: <b>" + esc(l.room()) + "</b>\n")
                                 + "</blockquote>",
                         "⏰ <b>Эслатма: дарс " + PAIR_REMINDER_BEFORE_MIN + " дақиқадан кейин бошланади</b>\n\n<blockquote>"
-                                + "📖 Фан: <b>" + esc(info.subject) + "</b>\n"
-                                + (info.teacher.isBlank() ? "" : "👨‍🏫 Ўқитувчи: <b>" + esc(info.teacher) + "</b>\n")
-                                + "🕐 Вақт: <b>" + esc(info.time) + "</b>\n"
-                                + (info.room.isBlank() ? "" : "🚪 Хона: <b>" + esc(info.room) + "</b>\n")
+                                + "📖 Фан: <b>" + esc(l.subject()) + "</b> · <i>" + esc(kind) + "</i>\n"
+                                + (l.teacher().isBlank() ? "" : "👨‍🏫 Ўқитувчи: <b>" + esc(l.teacher()) + "</b>\n")
+                                + "🕐 Вақт: <b>" + esc(l.time()) + "</b>\n"
+                                + (l.room().isBlank() ? "" : "🚪 Хона: <b>" + esc(l.room()) + "</b>\n")
                                 + "</blockquote>"), null);
             }
         }
+    }
+
+    /** Сводка на день: все сегодняшние пары с аудиторией и преподавателем. */
+    private void sendDayDigest(long chatId, long userId, List<uz.tuit.lmsbot.service.SemesterSchedule.Lesson> lessons) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(tr(userId,
+                "☀️ <b>Пары на сегодня</b> — первая через час",
+                "☀️ <b>Bugungi darslar</b> — birinchisi bir soatdan keyin",
+                "☀️ <b>Бугунги дарслар</b> — биринчиси бир соатдан кейин")).append("\n");
+        sb.append("<i>").append(tr(userId, "Всего пар: ", "Jami darslar: ", "Жами дарслар: ")).append(lessons.size()).append("</i>\n\n");
+        for (int i = 0; i < lessons.size(); i++) {
+            uz.tuit.lmsbot.service.SemesterSchedule.Lesson l = lessons.get(i);
+            StringBuilder b = new StringBuilder();
+            b.append("<b>").append(i + 1).append(". ").append(esc(l.time())).append("</b> · ")
+                    .append(kindIcon(l.kind()))
+                    .append(esc(kindLabel(userId, l.kind()))).append("\n")
+                    .append("<b>").append(esc(l.subject())).append("</b>");
+            if (l.stream() != null) b.append(" · ").append(esc(l.stream()));
+            if (!l.room().isBlank()) b.append("\n🚪 ").append(tr(userId, "Кабинет", "Xona", "Хона")).append(": <b>").append(esc(l.room())).append("</b>");
+            if (!l.teacher().isBlank()) b.append("\n👨‍🏫 ").append(esc(l.teacher()));
+            if (l.topic() != null && !l.topic().isBlank()) b.append("\n📝 <i>").append(esc(truncateTopic(l.topic(), 80))).append("</i>");
+            if (l.last()) b.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс"));
+            sb.append("<blockquote>").append(b).append("</blockquote>\n");
+        }
+        send(chatId, sb.toString(), null);
     }
 
     private void tickNbReminders() {
@@ -2313,6 +2395,11 @@ public class LmsBot extends TelegramLongPollingBot {
             else sendWelcome(chatId, userId, firstName);
             return true;
         }
+        if ("/app".equals(t)) {
+            userState.put(userId, "IDLE");
+            sendAppButton(chatId, userId);
+            return true;
+        }
         if (isLoginCommand(t)) {
             userState.put(userId, "IDLE");
             askForLogin(chatId, userId);
@@ -2460,7 +2547,6 @@ public class LmsBot extends TelegramLongPollingBot {
             rows.add(nav);
         }
 
-        rows.add(List.of(inlineBtn(tr(userId, "⬅️ Назад", "⬅️ Orqaga", "⬅️ Орқага"), "back_main")));
         return markup(rows);
     }
 
@@ -2493,29 +2579,17 @@ public class LmsBot extends TelegramLongPollingBot {
         return m;
     }
 
-    /** Кнопка возврата в главное меню. */
-    private InlineKeyboardButton backBtn(long userId) {
-        return inlineBtn(tr(userId, "⬅️ Назад", "⬅️ Orqaga", "⬅️ Орқага"), "back_main");
-    }
-
-    /** Добавляет к клавиатуре ряд с кнопкой «Назад». */
+    /**
+     * Раньше к каждому разделу добавлялась кнопка «Назад» в главное меню. Меню и так
+     * всегда под рукой на нижней клавиатуре, а кнопка лишь плодила сообщения —
+     * поэтому клавиатура раздела отдаётся как есть.
+     */
     private InlineKeyboardMarkup withBack(long userId, InlineKeyboardMarkup kb) {
-        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        if (kb != null && kb.getKeyboard() != null) {
-            for (List<InlineKeyboardButton> r : kb.getKeyboard()) rows.add(r);
-        }
-        for (List<InlineKeyboardButton> r : rows) {
-            for (InlineKeyboardButton btn : r) {
-                if ("back_main".equals(btn.getCallbackData())) return kb;
-            }
-        }
-        rows.add(List.of(backBtn(userId)));
-        return markup(rows);
+        return kb;
     }
 
-    /** Клавиатура только с кнопкой «Назад». */
     private InlineKeyboardMarkup backOnly(long userId) {
-        return markup(List.of(List.of(backBtn(userId))));
+        return null;
     }
 
     private InlineKeyboardButton inlineBtn(String text, String data) {
@@ -2699,61 +2773,12 @@ public class LmsBot extends TelegramLongPollingBot {
         sb.append("\n");
     }
 
-    /**
-     * Парсинг дедлайна активности.
-     * LMS возвращает формат: "24-03-2026 23:59:59" (dd-MM-yyyy HH:mm:ss)
-     */
     private long parseActivityDeadlineTs(String deadline) {
-        if (deadline == null || deadline.isBlank()) return -1;
-        String s = deadline.trim();
-
-        // Основной формат LMS: "24-03-2026 23:59:59"
-        try {
-            return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"))
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception ignored) {}
-
-        // Fallback: ISO формат "2026-03-24T23:59:59"
-        try {
-            return LocalDateTime.parse(s)
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception ignored) {}
-
-        // Fallback: "2026-03-24 23:59:59"
-        try {
-            return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception e) {
-            return -1;
-        }
+        return uz.tuit.lmsbot.util.LmsDates.parseDeadline(deadline);
     }
 
-    /**
-     * Парсинг времени старта пары из расписания.
-     * LMS возвращает формат: "2026-03-24T10:00:00" (ISO с буквой T)
-     */
     private long parseScheduleStartTs(String start) {
-        if (start == null || start.isBlank()) return -1;
-        String s = start.trim();
-
-        // Приоритет: ISO формат "2026-03-24T10:00:00"
-        try {
-            return LocalDateTime.parse(s)
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception ignored) {}
-
-        // Fallback: с пробелом "2026-03-24 10:00:00"
-        try {
-            return LocalDateTime.parse(s.replace(" ", "T"))
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception ignored) {}
-
-        try {
-            return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-        } catch (Exception e) {
-            return -1;
-        }
+        return uz.tuit.lmsbot.util.LmsDates.parseScheduleStart(start);
     }
 
     private int detectCurrentSemester(Map<Integer, List<StudyPlanSubject>> bySemester) {
@@ -2864,27 +2889,6 @@ public class LmsBot extends TelegramLongPollingBot {
         return lmsService.getCurrentSemesterId(userId);
     }
 
-    private static class PairInfo { String subject = "—", teacher = "", room = "", time = "—"; }
-    private PairInfo parsePairInfo(ScheduleEvent ev) {
-        PairInfo p = new PairInfo();
-        String start = ev.getStart();
-        if (start != null) {
-            int tIdx = start.indexOf('T');
-            if (tIdx >= 0 && start.length() >= tIdx + 6) {
-                p.time = start.substring(tIdx + 1, Math.min(tIdx + 6, start.length()));
-            } else if (start.length() >= 16) {
-                p.time = start.substring(11, 16);
-            }
-        }
-        String title = ev.getTitle() != null ? ev.getTitle() : "";
-        String[] lines = title.split("\n");
-        if (lines.length >= 1) p.room = lines[0].trim();
-        if (lines.length >= 2) p.subject = lines[1].trim();
-        if (lines.length >= 3) p.teacher = lines[2].trim();
-        if (p.subject.isBlank()) p.subject = title.replace("\n", " ").trim();
-        return p;
-    }
-
     private String esc(String text) {
         if (text == null) return "";
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
@@ -2906,6 +2910,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void publishCommands(String languageCode, String lang) {
         List<BotCommand> commands = List.of(
                 botCommand("start",   lang, "Перезапустить бота",  "Botni qayta ishga tushirish", "Ботни қайта ишга тушириш"),
+                botCommand("app",     lang, "Открыть приложение",  "Ilovani ochish",              "Иловани очиш"),
                 botCommand("login",   lang, "Войти в LMS",         "LMS ga kirish",               "LMS га кириш"),
                 botCommand("courses", lang, "Мои предметы",        "Mening fanlarim",             "Менинг фанларим"),
                 botCommand("logout",  lang, "Выйти",               "Chiqish",                     "Чиқиш")
@@ -2924,6 +2929,104 @@ public class LmsBot extends TelegramLongPollingBot {
     private BotCommand botCommand(String cmd, String lang, String ru, String uzLat, String uzCyr) {
         String desc = switch (lang) { case "ru" -> ru; case "uz_cyr" -> uzCyr; default -> uzLat; };
         return new BotCommand(cmd, desc);
+    }
+
+    // ─────────────────────────────────────────────
+    //  MINI APP BRIDGE
+    //  Мини-приложение работает с тем же userId и той же LMS-сессией,
+    //  что и бот; отсюда оно берёт язык, сбрасывает кэши и шлёт файлы в чат.
+    // ─────────────────────────────────────────────
+
+    public uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule() {
+        return semesterSchedule;
+    }
+
+    /** Язык пользователя или null, если он его ещё ни разу не выбирал. */
+    public String appLang(long userId) {
+        return hasLang(userId) ? lang(userId) : null;
+    }
+
+    public void appSetLang(long userId, String lang) {
+        setUserLang(userId, lang);
+    }
+
+    /**
+     * Вход через приложение: сбрасываем кэши старой сессии и запоминаем чат,
+     * чтобы напоминания о парах, НБ и дедлайнах приходили и таким пользователям.
+     * В личке с ботом chatId совпадает с userId.
+     */
+    public void appLoggedIn(long userId) {
+        resetUserCaches(userId);
+        lastChatId.putIfAbsent(userId, userId);
+    }
+
+    public void appTouched(long userId) {
+        if (lmsService.isLoggedIn(userId)) lastChatId.putIfAbsent(userId, userId);
+    }
+
+    public void appLoggedOut(long userId) {
+        resetUserCaches(userId);
+        userLogin.remove(userId);
+    }
+
+    /** Семестр, выбранный в приложении, — по нему бот считает напоминания. */
+    public void appSemester(long userId, int semesterId) {
+        if (semesterId > 0) rememberSemester(userId, semesterId);
+    }
+
+    public void appSendDocument(long userId, File file, String filename) throws Exception {
+        SendDocument doc = new SendDocument();
+        doc.setChatId(String.valueOf(userId));
+        doc.setDocument(new InputFile(file, filename));
+        execute(doc);
+    }
+
+    public void appSendPhoto(long userId, File file, String filename) throws Exception {
+        SendPhoto p = new SendPhoto();
+        p.setChatId(String.valueOf(userId));
+        p.setPhoto(new InputFile(file, filename));
+        execute(p);
+    }
+
+    private volatile String webAppUrl;
+
+    /**
+     * Кнопка меню слева от поля ввода открывает мини-приложение во всех чатах.
+     * Telegram принимает только https, поэтому без публичного адреса ничего не ставим.
+     */
+    public void applyWebApp(String url) {
+        if (url == null || !url.startsWith("https://")) return;
+        webAppUrl = url;
+        try {
+            execute(org.telegram.telegrambots.meta.api.methods.menubutton.SetChatMenuButton.builder()
+                    .menuButton(org.telegram.telegrambots.meta.api.objects.menubutton.MenuButtonWebApp.builder()
+                            .text("LMS")
+                            .webAppInfo(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(url))
+                            .build())
+                    .build());
+            System.out.println("📱 Mini App: " + url);
+        } catch (Exception e) {
+            System.err.println("[LmsBot] setChatMenuButton: " + e.getMessage());
+        }
+    }
+
+    /** Сообщение с кнопкой запуска приложения (команда /app). */
+    private void sendAppButton(long chatId, long userId) {
+        if (webAppUrl == null) {
+            send(chatId, tr(userId,
+                    "📱 Приложение пока недоступно.",
+                    "📱 Ilova hozircha mavjud emas.",
+                    "📱 Илова ҳозирча мавжуд эмас."), null);
+            return;
+        }
+        InlineKeyboardButton btn = new InlineKeyboardButton();
+        btn.setText(tr(userId, "📱 Открыть приложение", "📱 Ilovani ochish", "📱 Иловани очиш"));
+        btn.setWebApp(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(webAppUrl));
+        send(chatId, tr(userId,
+                "📱 <b>TUIT LMS</b>\n\nВсе разделы — предметы, расписание, дедлайны, оценки — в одном приложении.",
+                "📱 <b>TUIT LMS</b>\n\nBarcha bo'limlar — fanlar, jadval, deadlinelar, baholar — bitta ilovada.",
+                "📱 <b>TUIT LMS</b>\n\nБарча бўлимлар — фанлар, жадвал, дедлайнлар, баҳолар — битта иловада."),
+                markup(List.of(List.of(btn))));
     }
 
     public void shutdown() {

@@ -68,3 +68,23 @@ java -jar build/libs/lms-bot.jar
 - 📋 Активности/дедлайны с баллами
 - 📥 Ссылки на скачивание заданий
 - 📅 Переключение между семестрами
+
+## 📱 Mini App
+
+Фронтенд — `webapp/` (React + Vite + framer-motion, иконки lucide). Собирается в
+`src/main/resources/webapp` и отдаётся тем же HTTP-сервером, что health-check (`$PORT`):
+
+| Путь | Что |
+|------|-----|
+| `/` | health-check |
+| `/app/` | мини-приложение |
+| `/api/*` | JSON API; пользователь — из подписанной `initData` Telegram |
+
+Приложение работает в той же LMS-сессии, что и бот: вход в боте = вход в приложении и наоборот.
+Кнопка меню бота ставится автоматически, если есть `WEBAPP_URL` или `RENDER_EXTERNAL_URL`; команда `/app` шлёт кнопку запуска.
+
+```bash
+cd webapp && npm ci && npm run build   # затем ./gradlew jar
+```
+
+Docker собирает фронтенд сам. Для отладки API без Telegram: `WEBAPP_DEV_USER=<telegram id>` (только локально!).
