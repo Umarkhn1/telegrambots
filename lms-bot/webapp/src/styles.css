@@ -1333,3 +1333,66 @@ svg {
 
 :root[data-theme='dark'] .filter-opt { background: #222d39; }
 .filter-opt.active { background: var(--accent); color: var(--on-accent); }
+
+/* Критерии оценивания */
+.crit-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: var(--surface);
+}
+
+:root[data-theme='dark'] .crit-num { background: var(--surface-3); }
+
+.crit-pts {
+  min-width: 34px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.crit-pts.total {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+/* Код потока: RTS201 / RTS201-2 */
+.stream-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  white-space: nowrap;
+}
+
+.stream-chip.practice {
+  color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.teacher-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}

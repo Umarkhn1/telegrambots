@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Flag, MapPin, NotebookText, UserRound } from 'lucide-react';
 import { useI18n, type Key } from '../lib/i18n';
 import type { Lesson } from '../lib/types';
-import { listItem } from './ui';
+import { listItem, StreamChip } from './ui';
 
 /** Пара в ТУИТ идёт 80 минут — по этому считаем «сейчас идёт». */
 export const PAIR_MS = 80 * 60 * 1000;
@@ -38,6 +38,7 @@ export function LessonRow({ l, index, now = Date.now() }: { l: Lesson; index: nu
         <div className="row-title">{l.subject}</div>
         <div className="meta" style={{ marginTop: 6 }}>
           <span className={'badge ' + kind.tone} style={{ height: 22 }}>{t(kind.label)}</span>
+          {l.stream && <StreamChip stream={l.stream} />}
           {live && <span className="badge success" style={{ height: 22 }}>{t('now')}</span>}
           {l.room && (
             <span>

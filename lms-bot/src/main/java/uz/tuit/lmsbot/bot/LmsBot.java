@@ -1171,7 +1171,7 @@ public class LmsBot extends TelegramLongPollingBot {
                         .append("⏰ <b>").append(esc(datePart)).append("</b>")
                         .append(" | 🏆 ").append(earned).append("/").append(max).append("\n")
                         .append("👨‍🏫 ").append(esc(teacher))
-                        .append(criteriaLine(userId, a))
+                        .append(criteriaShort(userId, a))
                         .append("</blockquote>\n");
             }
 
@@ -2052,7 +2052,7 @@ public class LmsBot extends TelegramLongPollingBot {
                     .append("📝 ").append(esc(truncateTopic(a.getTask(), 70))).append("\n")
                     .append("⏰ <b>").append(esc(datePart)).append("</b> — <i>").append(esc(inStr)).append("</i>\n")
                     .append("🏆 ").append(orDash(a.getEarnedScore())).append("/").append(orDash(a.getMaxScore()))
-                    .append(criteriaLine(userId, a))
+                    .append(criteriaShort(userId, a))
                     .append("</blockquote>\n");
         }
 
@@ -3029,11 +3029,50 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     /** Критерии оценивания отдельной строкой; пусто — если LMS их не дала. */
-    private String criteriaLine(long userId, Activity a) {
+    private List<uz.tuit.lmsbot.util.Criteria.Item> criteriaItems(Activity a) {
         String c = a.getCriteria();
-        if (c == null || c.isBlank()) return "";
-        if (c.length() > 300) c = c.substring(0, 299) + "…";
-        return "\n📐 <i>" + esc(tr(userId, "Критерии", "Mezonlar", "Мезонлар", "Criteria")) + ": " + esc(c) + "</i>";
+        if (c == null || c.isBlank()) return List.of();
+        List<uz.tuit.lmsbot.util.Criteria.Item> out = new ArrayList<>();
+        for (String line : c.split("\n")) if (!line.isBlank()) out.add(uz.tuit.lmsbot.util.Criteria.parse(line));
+        return out;
+    }
+
+    /** Критерии в карточке задания: пункт на строку, баллы жирным, в конце — сумма. */
+    private String criteriaLine(long userId, Activity a) {
+        List<uz.tuit.lmsbot.util.Criteria.Item> items = criteriaItems(a);
+        if (items.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("\n\n📐 <b>")
+                .append(esc(tr(userId, "Критерии оценивания", "Baholash mezonlari", "Баҳолаш мезонлари", "Grading criteria")))
+                .append("</b>");
+        double sum = 0;
+        boolean allScored = true;
+        for (uz.tuit.lmsbot.util.Criteria.Item it : items.subList(0, Math.min(items.size(), 12))) {
+            sb.append("\n  ▫️ ").append(esc(truncateTopic(it.name(), 70)));
+            if (it.points() != null) {
+                sb.append(" — <b>").append(esc(it.points())).append("</b>");
+                try { sum += Double.parseDouble(it.points()); } catch (NumberFormatException e) { allScored = false; }
+            } else {
+                allScored = false;
+            }
+        }
+        if (allScored && items.size() > 1) {
+            String total = sum == Math.rint(sum) ? String.valueOf((long) sum) : String.valueOf(sum);
+            sb.append("\n  ").append(esc(tr(userId, "Итого", "Jami", "Жами", "Total"))).append(": <b>").append(total).append("</b>");
+        }
+        return sb.toString();
+    }
+
+    /** Критерии в длинных списках — одной строкой: «Выполнение 3 · Оформление 2». */
+    private String criteriaShort(long userId, Activity a) {
+        List<uz.tuit.lmsbot.util.Criteria.Item> items = criteriaItems(a);
+        if (items.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (uz.tuit.lmsbot.util.Criteria.Item it : items) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(it.name());
+            if (it.points() != null) sb.append(" ").append(it.points());
+        }
+        return "\n📐 <i>" + esc(truncateTopic(sb.toString(), 120)) + "</i>";
     }
 
     private String gradeIcon(int g) { return switch(g){ case 5->"🟢"; case 4->"🔵"; case 3->"🟡"; case 2->"🔴"; default->"⬜"; }; }

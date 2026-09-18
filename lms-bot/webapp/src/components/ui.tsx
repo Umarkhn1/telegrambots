@@ -254,3 +254,18 @@ export const listItem: Variants = {
   hidden: { opacity: 0, y: 8 },
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.025, duration: 0.28, ease: [0.2, 0.8, 0.2, 1] as const } }),
 };
+
+/**
+ * Код потока предмета: «RTS201» — лекционный поток, «RTS201-2» — практическая группа.
+ * Цвет подсказывает вид занятия так же, как в расписании.
+ */
+export function StreamChip({ stream }: { stream: string }) {
+  const practice = stream.includes('-');
+  return <span className={'stream-chip ' + (practice ? 'practice' : '')}>{stream}</span>;
+}
+
+/** Уникальные потоки предмета по порядку: сначала лекционные, потом практические. */
+export function uniqueStreams(list: { stream: string }[]): string[] {
+  const set = [...new Set(list.map((x) => x.stream.trim()).filter(Boolean))];
+  return set.sort((a, b) => Number(a.includes('-')) - Number(b.includes('-')) || a.localeCompare(b));
+}

@@ -49,6 +49,7 @@ export interface Activity {
   earned: string | null;
   max: string | null;
   criteria: string | null;
+  criteriaItems?: { name: string; points: string | null }[];
   sample: FileRef | null;
   uploaded: FileRef | null;
   activityId: string | null;
@@ -150,6 +151,8 @@ export interface Contract {
   found: boolean;
   /** Сообщение LMS вместо сумм, например «данные ещё не сформированы». */
   notice?: string | null;
+  /** Текущий учебный год, например «2026-2027». */
+  year?: string;
   total?: number | null;
   paid?: number | null;
   debt?: number | null;

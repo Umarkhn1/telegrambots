@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Bell, ChevronRight, CircleCheck, Globe, Hourglass, KeyRound, LoaderCircle, LogOut, Palette, ShieldCheck, Wallet } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
 import { Sheet } from '../components/Sheet';
 import { useToast } from '../components/Toast';
@@ -42,7 +42,14 @@ export function Profile() {
   const [photoOpen, setPhotoOpen] = useState(false);
   const info = useQuery('profile', (f) => api.profile(f));
   const photo = useQuery('photo', () => api.photo(), 30 * 60_000);
-  const contract = useQuery('contract', (f) => api.contract(f), 10 * 60_000);
+  // staleMs 0: каждое открытие профиля заново спрашивает контракт, чтобы появившиеся суммы показались сразу.
+  const contract = useQuery('contract', (f) => api.contract(f), 0);
+  const contractReady = !!contract.data?.found;
+  useEffect(() => {
+    if (contractReady) return;
+    const id = setInterval(() => contract.refresh(), 60_000);
+    return () => clearInterval(id);
+  }, [contractReady, contract.refresh]);
 
   const name = info.data?.fullName || [me.user.firstName, me.user.lastName].filter(Boolean).join(' ');
   const avatar = photo.data?.dataUrl || me.user.photoUrl;
@@ -207,18 +214,22 @@ export function Profile() {
 /** Шкала оплаты контракта. Если LMS не показывает контракт, карточки нет. */
 function ContractCard({ q }: { q: ReturnType<typeof useQuery<Contract>> }) {
   const { t } = useI18n();
-  if (q.loading) return <Skeleton h={128} r={18} style={{ marginTop: 12 }} />;
+  if (q.loading) return <Skeleton h={76} r={18} style={{ marginTop: 26 }} />;
   const c = q.data;
-  if (!c?.found) return null;
+  if (!c) return null;
 
-  // Контракт на учебный год ещё не выставлен — показываем сообщение LMS как есть.
-  if (c.notice || (c.total == null && c.paid == null && c.debt == null)) {
+  // Контракт на учебный год ещё не выставлен. Год берём из сообщения LMS,
+  // иначе — текущий учебный год; текст — на языке приложения.
+  if (!c.found) {
+    const year = c.notice?.match(/\d{4}\s*[-–]\s*\d{4}/)?.[0].replace(/\s/g, '').replace('–', '-') ?? c.year ?? '';
     return (
       <Section title={t('contract')}>
         <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Tile icon={Hourglass} tone="neutral" />
           <div className="row-main">
-            <div className="row-title" style={{ fontWeight: 500 }}>{c.notice || t('contract_empty')}</div>
+            <div className="row-title" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+              {year ? t('contract_not_formed', { year }) : t('contract_empty')}
+            </div>
           </div>
         </div>
       </Section>

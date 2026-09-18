@@ -328,6 +328,18 @@ public class WebApi {
         m.put("earned", a.getEarnedScore());
         m.put("max", a.getMaxScore());
         m.put("criteria", a.getCriteria());
+        List<Map<String, String>> criteria = new ArrayList<>();
+        if (a.getCriteria() != null) {
+            for (String line : a.getCriteria().split("\n")) {
+                if (line.isBlank()) continue;
+                uz.tuit.lmsbot.util.Criteria.Item it = uz.tuit.lmsbot.util.Criteria.parse(line);
+                Map<String, String> c = new LinkedHashMap<>();
+                c.put("name", it.name());
+                c.put("points", it.points());
+                criteria.add(c);
+            }
+        }
+        m.put("criteriaItems", criteria);
         m.put("sample", notBlank(a.getSampleFileUrl()) ? fileRef(a.getSampleFileUrl(), a.getSampleFileName()) : null);
         m.put("uploaded", uploaded ? fileRef(a.getUploadedFileUrl(), a.getUploadedFileName()) : null);
         m.put("activityId", a.getActivityId());
@@ -490,20 +502,40 @@ public class WebApi {
     }
 
     /** Оплата контракта: суммы и доля оплаченного; found=false — LMS не показывает контракт. */
+    /** Готовые суммы контракта держим 10 минут; «ещё не сформирован» не кэшируем вовсе. */
+    private static final long CONTRACT_CACHE_MS = 10L * 60 * 1000;
+
+    /**
+     * Оплата контракта. Пока LMS не выставила контракт, приложение показывает
+     * «данные за учебный год ещё не сформированы» и проверяет заново при каждом
+     * открытии профиля — как только суммы появятся, шкала покажется сразу.
+     */
     private Object contract(Req r) {
         requireLogin(r);
-        return cached(r, "contract", () -> {
-            LmsService.ContractInfo c = lms.getContract(r.uid());
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("found", c != null);
-            if (c != null) {
-                m.put("notice", c.notice());
-                m.put("total", c.total());
-                m.put("paid", c.paid());
-                m.put("debt", c.debt());
-            }
-            return m;
-        });
+        String key = r.uid() + "|contract";
+        Cached c0 = cache.get(key);
+        if (!"1".equals(r.q("fresh")) && c0 != null && System.currentTimeMillis() - c0.ts() < CONTRACT_CACHE_MS) return c0.value();
+
+        LmsService.ContractInfo c = lms.getContract(r.uid());
+        boolean amounts = c != null && c.notice() == null && (c.total() != null || c.paid() != null || c.debt() != null);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("found", amounts);
+        m.put("notice", c != null ? c.notice() : null);
+        m.put("year", academicYear());
+        if (amounts) {
+            m.put("total", c.total());
+            m.put("paid", c.paid());
+            m.put("debt", c.debt());
+            cache.put(key, new Cached(System.currentTimeMillis(), m));
+        }
+        return m;
+    }
+
+    /** Текущий учебный год по Ташкенту: с августа — «2026-2027», до августа — «2025-2026». */
+    private static String academicYear() {
+        java.time.LocalDate d = java.time.LocalDate.now(AppConfig.LMS_ZONE);
+        int start = d.getMonthValue() >= 8 ? d.getYear() : d.getYear() - 1;
+        return start + "-" + (start + 1);
     }
 
     private Object changePassword(Req r) throws Exception {

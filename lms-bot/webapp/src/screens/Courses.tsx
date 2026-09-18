@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { BookOpen, ChevronRight, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { SemesterSheet } from '../components/SemesterSheet';
-import { Empty, ErrorState, ListSkeleton, listItem, PageHead, Screen, SemesterChip } from '../components/ui';
+import { Empty, ErrorState, ListSkeleton, listItem, PageHead, Screen, SemesterChip, StreamChip, uniqueStreams } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { useI18n } from '../lib/i18n';
@@ -62,7 +62,10 @@ export function Courses() {
                 {c.teachers.length > 0 && (
                   <div className="row-sub ellipsis">{c.teachers.map((x) => x.name).join(', ')}</div>
                 )}
-                <div className="meta" style={{ marginTop: 8 }}>
+                <div className="meta" style={{ marginTop: 8, gap: 6 }}>
+                  {uniqueStreams(c.teachers).map((st) => (
+                    <StreamChip key={st} stream={st} />
+                  ))}
                   {c.attendance > 0 ? (
                     <span className="badge danger" style={{ height: 22 }}>
                       {t('nb')}: {c.attendance}

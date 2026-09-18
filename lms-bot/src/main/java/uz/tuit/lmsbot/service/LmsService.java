@@ -821,7 +821,10 @@ public class LmsService {
                     if (next.select("td").size() < 6) {
                         Element crit = next.selectFirst(".sc-criteria-list");
                         if (crit == null) crit = next.selectFirst("td");
-                        if (crit != null) act.setCriteria(cleanCriteria(crit.text()));
+                        if (crit != null) {
+                            List<String> items = uz.tuit.lmsbot.util.Criteria.extract(crit);
+                            act.setCriteria(items.isEmpty() ? cleanCriteria(crit.text()) : String.join("\n", items));
+                        }
                     }
                 }
 
@@ -1525,6 +1528,8 @@ public class LmsService {
      */
     public record ContractInfo(Long total, Long paid, Long debt, String notice, String source) {}
 
+    private final Map<Long, String> contractPath = new ConcurrentHashMap<>();
+
     /** Слова, по которым видно, что страница вообще про контракт. */
     private static final Pattern K_CONTRACT = Pattern.compile("(?iu)(контракт|kontrakt|shartnoma|contract|шартнома)");
     /** LMS ещё не выставила контракт на учебный год. */
@@ -1543,7 +1548,11 @@ public class LmsService {
      */
     public ContractInfo getContract(long userId) {
         String base = config.getLms().getBaseUrl();
-        LinkedHashSet<String> paths = new LinkedHashSet<>(menuContractLinks(userId));
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        // Страница, где контракт нашёлся в прошлый раз, — первой: не перебираем адреса каждый раз.
+        String known = contractPath.get(userId);
+        if (known != null) paths.add(known);
+        paths.addAll(menuContractLinks(userId));
         paths.addAll(List.of("/student/contract", "/student/contracts", "/student/payment", "/student/payments",
                 "/student/finance", "/student/kontrakt", "/student/contract-info", "/student/payment-info"));
         for (String path : paths) {
@@ -1562,6 +1571,7 @@ public class LmsService {
                 if (!finalUrl.startsWith(qm >= 0 ? path.substring(0, qm) : path)) continue;
                 ContractInfo info = parseContract(html, path);
                 if (info != null) {
+                    contractPath.put(userId, path);
                     // Без сумм и личных данных: только какая страница подошла — чтобы знать адрес.
                     System.out.println("[LmsService] contract page=" + path
                             + (info.notice() != null ? " notice" : " amounts"));

@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, CircleX, Clock3, Lock, LoaderCircle, Upload, type LucideIcon } from 'lucide-react';
+import { CircleCheck, CircleDashed, CircleX, Clock3, ListChecks, Lock, LoaderCircle, Upload, type LucideIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { deadlineLabel, duration } from '../lib/format';
@@ -103,12 +103,7 @@ export function ActivitySheet({
             )}
           </div>
 
-          {a.criteria && (
-            <div className="card" style={{ padding: 14 }}>
-              <div className="section-title" style={{ marginBottom: 6 }}>{t('criteria')}</div>
-              <div style={{ fontSize: 14, color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>{a.criteria}</div>
-            </div>
-          )}
+          {a.criteria && <CriteriaList a={a} />}
 
           {(a.sample || a.uploaded) && (
             <div className="list">
@@ -151,5 +146,37 @@ export function ActivitySheet({
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** Критерии оценивания: пункт на строку, баллы справа, внизу — сумма. */
+function CriteriaList({ a }: { a: Activity }) {
+  const { t } = useI18n();
+  const items = a.criteriaItems?.length
+    ? a.criteriaItems
+    : (a.criteria ?? '').split(/\n/).filter(Boolean).map((name) => ({ name, points: null as string | null }));
+  const scored = items.length > 1 && items.every((i) => i.points != null);
+  const total = scored ? items.reduce((sum, i) => sum + Number(i.points), 0) : null;
+  return (
+    <div>
+      <div className="section-title" style={{ margin: '0 4px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <ListChecks size={14} /> {t('criteria')}
+      </div>
+      <div className="list">
+        {items.map((it, i) => (
+          <div className="row" key={i} style={{ minHeight: 46, paddingTop: 10, paddingBottom: 10, gap: 12 }}>
+            <span className="crit-num tabular">{i + 1}</span>
+            <div className="row-main" style={{ fontSize: 14.5, lineHeight: 1.35 }}>{it.name}</div>
+            {it.points != null && <span className="crit-pts tabular">{it.points}</span>}
+          </div>
+        ))}
+        {total != null && (
+          <div className="row" style={{ minHeight: 44, paddingTop: 9, paddingBottom: 9 }}>
+            <div className="row-main row-sub" style={{ marginTop: 0, fontWeight: 600 }}>{t('criteria_total')}</div>
+            <span className="crit-pts total tabular">{Number.isInteger(total) ? total : total.toFixed(1)}</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

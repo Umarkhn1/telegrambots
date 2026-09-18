@@ -5,7 +5,7 @@ import { ActivityRow } from '../components/ActivityRow';
 import { ActivitySheet } from '../components/ActivitySheet';
 import { FileRow } from '../components/FileRow';
 import { Sheet } from '../components/Sheet';
-import { Chips, Empty, ErrorState, ListSkeleton, listItem, Screen, Section, Segmented, Skeleton } from '../components/ui';
+import { Chips, Empty, StreamChip, ErrorState, ListSkeleton, listItem, Screen, Section, Segmented, Skeleton } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { num, tabLabel } from '../lib/format';
@@ -32,9 +32,12 @@ export function CourseDetail({ course, onBack }: { course: Course; onBack: () =>
       </div>
       <h1 className="page-title" style={{ fontSize: 25 }}>{course.subject}</h1>
       {course.teachers.length > 0 && (
-        <div className="page-sub">
+        <div className="page-sub" style={{ marginTop: 6 }}>
           {course.teachers.map((x) => (
-            <div key={x.name + x.stream}>{x.stream ? `${x.name} · ${x.stream}` : x.name}</div>
+            <div className="teacher-line" key={x.name + x.stream}>
+              {x.stream && <StreamChip stream={x.stream} />}
+              <span>{x.name}</span>
+            </div>
           ))}
         </div>
       )}
