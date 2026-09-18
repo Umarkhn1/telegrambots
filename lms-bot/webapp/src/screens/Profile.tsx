@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Bell, ChevronRight, CircleCheck, Globe, Hourglass, KeyRound, LoaderCircle, LogOut, Palette, Wallet } from 'lucide-react';
+import { Bell, ChevronRight, CircleCheck, Globe, Hourglass, KeyRound, LoaderCircle, LogOut, Palette, ShieldCheck, Wallet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
 import { Sheet } from '../components/Sheet';
@@ -35,7 +35,7 @@ function money(v: number | null | undefined): string {
 }
 
 export function Profile() {
-  const { me, theme, setTheme, logout } = useApp();
+  const { me, theme, setTheme, logout, push } = useApp();
   const { t, lang } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -148,6 +148,21 @@ export function Profile() {
           </button>
         </div>
       </Section>
+
+      {me.admin && (
+        <Section title={t('admin_panel')}>
+          <div className="list">
+            <button className="row with-icon pressable" onClick={() => push({ name: 'admin' })}>
+              <Tile icon={ShieldCheck} tone="danger" size={18} />
+              <div className="row-main">
+                <div className="row-title">{t('students')}</div>
+                <div className="row-sub">{t('admin_sub')}</div>
+              </div>
+              <ChevronRight size={18} className="chev" />
+            </button>
+          </div>
+        </Section>
+      )}
 
       <Section title={t('notifications')}>
         <div className="list">

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CircleAlert, GraduationCap, LoaderCircle, RefreshCw, Send } from 'lucide-react';
+import { CircleAlert, LoaderCircle, RefreshCw, Send } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from './components/BottomNav';
 import { Empty } from './components/ui';
@@ -9,6 +9,7 @@ import { LangContext, makeT } from './lib/i18n';
 import { invalidate } from './lib/query';
 import { haptic, initData, paintChrome, tg, useBackButton } from './lib/tg';
 import type { Lang, Me } from './lib/types';
+import { Admin } from './screens/Admin';
 import { CourseDetail } from './screens/CourseDetail';
 import { Courses } from './screens/Courses';
 import { Deadlines } from './screens/Deadlines';
@@ -37,6 +38,8 @@ const store = {
 
 function guessLang(code?: string): Lang {
   if (code?.startsWith('ru')) return 'ru';
+  if (code?.startsWith('uz')) return 'uz_lat';
+  if (code?.startsWith('en')) return 'en';
   return 'uz_lat';
 }
 
@@ -172,9 +175,16 @@ export function App() {
   } else if (!me || !app) {
     body = (
       <div className="screen" style={{ display: 'grid', placeItems: 'center' }}>
-        <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} style={{ display: 'grid', justifyItems: 'center', gap: 18 }}>
-          <div className="brand"><GraduationCap size={32} strokeWidth={1.9} /></div>
-          <LoaderCircle size={22} className="spin" color="var(--text-3)" />
+        <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
+          <motion.img
+            src="./tuit-emblem.png"
+            alt="TUIT"
+            className="emblem"
+            animate={{ scale: [1, 1.04, 1] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <div className="splash-title">TUIT LMS</div>
+          <LoaderCircle size={20} className="spin" color="var(--text-3)" />
         </motion.div>
       </div>
     );
@@ -222,6 +232,7 @@ export function App() {
             >
               {top.name === 'course' && <CourseDetail course={top.course} onBack={pop} />}
               {top.name === 'deadlines' && <Deadlines onBack={pop} />}
+              {top.name === 'admin' && me.admin && <Admin onBack={pop} />}
             </motion.div>
           )}
         </AnimatePresence>

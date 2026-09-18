@@ -56,6 +56,9 @@ public class LmsBot extends TelegramLongPollingBot {
     private final AppConfig config;
     private final LmsService lmsService;
     private final uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule;
+    private final uz.tuit.lmsbot.service.StudentRegistry students;
+    /** Имя и @username из последнего апдейта — для списка студентов. */
+    private final Map<Long, String[]> tgIdentity = new ConcurrentHashMap<>();
 
     private final Map<Long, String>       userState    = new ConcurrentHashMap<>();
     private final Map<Long, String>       tempLogin    = new ConcurrentHashMap<>();
@@ -123,6 +126,8 @@ public class LmsBot extends TelegramLongPollingBot {
         this.config = config;
         this.lmsService = lmsService;
         this.semesterSchedule = new uz.tuit.lmsbot.service.SemesterSchedule(lmsService);
+        this.students = new uz.tuit.lmsbot.service.StudentRegistry(lmsService);
+        this.students.setBackup(this::backupStudents);
         startSchedulers();
     }
 
@@ -140,6 +145,7 @@ public class LmsBot extends TelegramLongPollingBot {
         long chatId  = msg.getChatId();
         long userId  = msg.getFrom().getId();
         lastChatId.put(userId, chatId);
+        noteUser(msg.getFrom());
 
         String state = userState.getOrDefault(userId, "IDLE");
         if ("WAIT_UPLOAD".equals(state) && (msg.hasDocument() || msg.hasPhoto())) {
@@ -152,12 +158,13 @@ public class LmsBot extends TelegramLongPollingBot {
             if ("/cancel".equals(txt) || "bekor".equalsIgnoreCase(txt)) {
                 pendingUpload.remove(userId);
                 userState.put(userId, "IDLE");
-                send(chatId, tr(userId, "❌ Загрузка отменена.", "❌ Yuklash bekor qilindi.", "❌ Юклаш бекор қилинди."), null);
+                send(chatId, tr(userId, "❌ Загрузка отменена.", "❌ Yuklash bekor qilindi.", "❌ Юклаш бекор қилинди.", "❌ Upload cancelled."), null);
             } else {
                 send(chatId, tr(userId,
                         "⚠️ Пожалуйста, отправьте файл (doc, pdf, jpg, zip...) или /cancel.",
                         "⚠️ Iltimos, fayl yuboring (doc, pdf, jpg, zip...) yoki /cancel yozing.",
-                        "⚠️ Илтимос, файл юборинг (doc, pdf, jpg, zip...) ёки /cancel ёзинг."), null);
+                        "⚠️ Илтимос, файл юборинг (doc, pdf, jpg, zip...) ёки /cancel ёзинг.",
+                        "⚠️ Please send a file (doc, pdf, jpg, zip...) or /cancel."), null);
             }
             return;
         }
@@ -173,7 +180,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "🔒 <b>Новый пароль</b>:",
                     "🔒 <b>Yangi parol</b>:",
-                    "🔒 <b>Янги парол</b>:"), null);
+                    "🔒 <b>Янги парол</b>:",
+                    "🔒 <b>New password</b>:"), null);
             return;
         }
         if ("WAIT_NEW_PASSWORD".equals(state)) {
@@ -182,7 +190,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "🔒 <b>Подтвердите новый пароль</b>:",
                     "🔒 <b>Yangi parolni tasdiqlang</b>:",
-                    "🔒 <b>Янги паролни тасдиқланг</b>:"), null);
+                    "🔒 <b>Янги паролни тасдиқланг</b>:",
+                    "🔒 <b>Confirm the new password</b>:"), null);
             return;
         }
         if ("WAIT_NEW_PASSWORD_CONFIRM".equals(state)) {
@@ -195,13 +204,15 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                         "❌ <b>Ошибка</b>\n\n<blockquote>Пароли не совпадают.</blockquote>",
                         "❌ <b>Xatolik</b>\n\n<blockquote>Parollar mos emas.</blockquote>",
-                        "❌ <b>Хатолик</b>\n\n<blockquote>Пароллар мос эмас.</blockquote>"), null);
+                        "❌ <b>Хатолик</b>\n\n<blockquote>Пароллар мос эмас.</blockquote>",
+                        "❌ <b>Error</b>\n\n<blockquote>Passwords do not match.</blockquote>"), null);
                 return;
             }
             sendProgress(chatId, tr(userId,
                     "⏳ <b>Меняю пароль...</b>",
                     "⏳ <b>Parol o'zgartirilmoqda...</b>",
-                    "⏳ <b>Парол ўзгартирилмоқда...</b>"));
+                    "⏳ <b>Парол ўзгартирилмоқда...</b>",
+                    "⏳ <b>Changing password...</b>"));
             final String oldFinal = oldP;
             final String newFinal = newPNorm;
             executor.submit(() -> {
@@ -210,12 +221,14 @@ public class LmsBot extends TelegramLongPollingBot {
                     send(chatId, tr(userId,
                             "✅ <b>Пароль изменён</b>",
                             "✅ <b>Parol o'zgartirildi</b>",
-                            "✅ <b>Парол ўзгартирилди</b>"), null);
+                            "✅ <b>Парол ўзгартирилди</b>",
+                            "✅ <b>Password changed</b>"), null);
                 } else {
                     send(chatId, tr(userId,
                             "❌ <b>Не удалось изменить пароль</b>\n\n<blockquote>Проверьте старый пароль и требования к новому.</blockquote>",
                             "❌ <b>Parol o'zgartirib bo'lmadi</b>\n\n<blockquote>Eski parol va yangi parol talablarini tekshiring.</blockquote>",
-                            "❌ <b>Парол ўзгартириб бўлмади</b>\n\n<blockquote>Эски парол ва янги парол талабларини текширинг.</blockquote>"), null);
+                            "❌ <b>Парол ўзгартириб бўлмади</b>\n\n<blockquote>Эски парол ва янги парол талабларини текширинг.</blockquote>",
+                            "❌ <b>Could not change the password</b>\n\n<blockquote>Check your old password and the new password requirements.</blockquote>"), null);
                 }
             });
             return;
@@ -227,7 +240,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "🔐 Теперь введите <b>пароль OneID</b>:",
                     "🔐 Endi <b>OneID parolini</b> kiriting:",
-                    "🔐 Энди <b>OneID паролини</b> киритинг:"), null);
+                    "🔐 Энди <b>OneID паролини</b> киритинг:",
+                    "🔐 Now enter your <b>OneID password</b>:"), null);
             return;
         }
         if ("WAIT_ONEID_PASSWORD".equals(state)) {
@@ -246,7 +260,8 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                         "⚠️ Неверный номер. Введите в формате <code>+998901234567</code>:",
                         "⚠️ Noto'g'ri raqam. <code>+998901234567</code> formatida kiriting:",
-                        "⚠️ Нотўғри рақам. <code>+998901234567</code> форматида киритинг:"), null);
+                        "⚠️ Нотўғри рақам. <code>+998901234567</code> форматида киритинг:",
+                        "⚠️ Invalid number. Enter it as <code>+998901234567</code>:"), null);
                 return;
             }
             userState.put(userId, "IDLE");
@@ -265,7 +280,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "🔐 Теперь введите ваш пароль:",
                     "🔐 Endi parolingizni kiriting:",
-                    "🔐 Энди паролингизни киритинг:"), null);
+                    "🔐 Энди паролингизни киритинг:",
+                    "🔐 Now enter your password:"), null);
             return;
         }
         if ("WAIT_PASSWORD".equals(state)) {
@@ -282,29 +298,37 @@ public class LmsBot extends TelegramLongPollingBot {
             case "/login":
             case "🔑 Kirish":
             case "🔑 Войти":
+            case "🔑 Sign in":
             case "🔑 Кириш":             askForLogin(chatId, userId); break;
             case "/logout":
             case "🚪 Chiqish":
             case "🚪 Выйти":
+            case "🚪 Sign out":
             case "🚪 Чиқиш":              handleLogout(chatId, userId); break;
             case "/courses":
             case "📚 Mening fanlarim":
             case "📚 Мои предметы":
+            case "📚 My subjects":
             case "📚 Менинг фанларим":    showCourses(chatId, userId, getDefaultSemesterId(userId)); break;
             case "📅 Dars jadvali":
             case "📅 Расписание":
+            case "📅 Timetable":
             case "📅 Дарс жадвали":       showSchedule(chatId, userId, getDefaultSemesterId(userId)); break;
             case "📖 O'quv reja":
             case "📖 Учебный план":
+            case "📖 Study plan":
             case "📖 Ўқув режа":          showStudyPlanFull(chatId, userId); break;
             case "🏆 Yakuniy imtihon":
             case "🏆 Итоговый экзамен":
+            case "🏆 Final exams":
             case "🏆 Якуний имтиҳон":     showFinals(chatId, userId, getDefaultSemesterId(userId)); break;
             case "👤 Profil":
             case "👤 Профиль":
+            case "👤 Profile":
             case "👤 Профил":             showProfile(chatId, userId); break;
             case "⚙️ Sozlamalar":
             case "⚙️ Настройки":
+            case "⚙️ Settings":
             case "⚙️ Созламалар":         showSettings(chatId, userId); break;
             default:
                 if (lmsService.isLoggedIn(userId)) sendMainMenu(chatId, userId);
@@ -319,6 +343,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void handleCallback(Update update) {
         long chatId    = update.getCallbackQuery().getMessage().getChatId();
         long userId    = update.getCallbackQuery().getFrom().getId();
+        noteUser(update.getCallbackQuery().getFrom());
         int  messageId = update.getCallbackQuery().getMessage().getMessageId();
         String data    = update.getCallbackQuery().getData();
 
@@ -359,7 +384,7 @@ public class LmsBot extends TelegramLongPollingBot {
             int semId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
             showCourses(chatId, userId, semId);
         } else if ("change_semester".equals(data)) {
-            edit(chatId, messageId, tr(userId, "📅 Выберите семестр:", "📅 Semestrni tanlang:", "📅 Семестрни танланг:"), semesterKeyboard(userId));
+            edit(chatId, messageId, tr(userId, "📅 Выберите семестр:", "📅 Semestrni tanlang:", "📅 Семестрни танланг:", "📅 Choose a semester:"), semesterKeyboard(userId));
         } else if (data.startsWith("ai_")) {
             String[] parts = data.replace("ai_", "").split("_");
             int index = Integer.parseInt(parts[0]);
@@ -403,7 +428,7 @@ public class LmsBot extends TelegramLongPollingBot {
             String[] p = data.substring(3).split("_");
             if (p.length == 2) editScheduleWeek(chatId, userId, messageId, Integer.parseInt(p[0]), Integer.parseInt(p[1]));
         } else if ("sched_sem".equals(data)) {
-            edit(chatId, messageId, tr(userId, "📅 Выберите семестр:", "📅 Semestrni tanlang:", "📅 Семестрни танланг:"), semesterScheduleKeyboard(userId));
+            edit(chatId, messageId, tr(userId, "📅 Выберите семестр:", "📅 Semestrni tanlang:", "📅 Семестрни танланг:", "📅 Choose a semester:"), semesterScheduleKeyboard(userId));
         } else if (data.startsWith("schedule_")) {
             showSchedule(chatId, userId, Integer.parseInt(data.replace("schedule_", "")));
         } else if ("gpa_all".equals(data)) {
@@ -442,7 +467,7 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if ("noop".equals(data)) {
             // только индикатор страницы
         } else if ("back_main".equals(data)) {
-            send(chatId, tr(userId, "🏠 <b>Главное меню</b>", "🏠 <b>Asosiy menyu</b>", "🏠 <b>Асосий меню</b>"),
+            send(chatId, tr(userId, "🏠 <b>Главное меню</b>", "🏠 <b>Asosiy menyu</b>", "🏠 <b>Асосий меню</b>", "🏠 <b>Main menu</b>"),
                     mainMenuKeyboard(userId));
         } else if ("auth_lms".equals(data)) {
             askForLmsLogin(chatId, userId);
@@ -455,7 +480,7 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if ("settings".equals(data)) {
             showSettings(chatId, userId);
         } else if ("settings_lang".equals(data)) {
-            edit(chatId, messageId, tr(userId, "🌐 <b>Выберите язык</b>:", "🌐 <b>Tilni tanlang</b>:", "🌐 <b>Тилни танланг</b>:"), langChoiceMarkup());
+            edit(chatId, messageId, tr(userId, "🌐 <b>Выберите язык</b>:", "🌐 <b>Tilni tanlang</b>:", "🌐 <b>Тилни танланг</b>:", "🌐 <b>Choose a language</b>:"), langChoiceMarkup());
         } else if ("settings_password".equals(data)) {
             startChangePassword(chatId, userId);
         } else if ("settings_logout".equals(data)) {
@@ -468,7 +493,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "✅ <b>Язык изменён</b>",
                     "✅ <b>Til o'zgartirildi</b>",
-                    "✅ <b>Тил ўзгартирилди</b>"),
+                    "✅ <b>Тил ўзгартирилди</b>",
+                    "✅ <b>Language changed</b>"),
                     lmsService.isLoggedIn(userId) ? mainMenuKeyboard(userId) : loginKeyboard(userId));
             showSettings(chatId, userId);
         } else if (data.startsWith("dl_remind_")) {
@@ -483,12 +509,14 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                         "✅ <b>Интервал напоминания изменён</b>",
                         "✅ <b>Eslatma oralig'i o'zgartirildi</b>",
-                        "✅ <b>Эслатма оралиғи ўзгартирилди</b>")
+                        "✅ <b>Эслатма оралиғи ўзгартирилди</b>",
+                        "✅ <b>Reminder interval changed</b>")
                         + "\n\n<blockquote>"
                         + tr(userId,
                         "Теперь: <b>" + minutesToLabelRu(minutes) + "</b>",
                         "Endi: <b>" + minutesToLabelUzLat(minutes) + "</b>",
-                        "Энди: <b>" + minutesToLabelUzCyr(minutes) + "</b>")
+                        "Энди: <b>" + minutesToLabelUzCyr(minutes) + "</b>",
+                        "Now: <b>" + minutesToLabelEn(minutes) + "</b>")
                         + "</blockquote>", null);
             }
         } else if ("profile_photo".equals(data)) {
@@ -547,17 +575,118 @@ public class LmsBot extends TelegramLongPollingBot {
     //  WELCOME / LOGIN
     // ─────────────────────────────────────────────
 
+    /** Автор бота — подписывается в приветствии и описании. */
+    private static final String AUTHOR = "@umarkhn_1";
+
     private void sendWelcome(long chatId, long userId, String firstName) {
-        String lang = lang(userId);
-        String text = switch (lang) {
-            case "ru"     -> "👋 <b>Привет, " + esc(firstName) + "!</b>\n\n"
-                    + "🎓 Добро пожаловать в <b>TUIT LMS Bot</b>!\n\nЧтобы начать, войди в систему 👇";
-            case "uz_cyr" -> "👋 <b>Assalomu alaykum, " + esc(firstName) + "!</b>\n\n"
-                    + "🎓 <b>TUIT LMS Bot</b>га хуш келибсиз!\n\nБошлаш учун тизимга киринг 👇";
-            default       -> "👋 <b>Assalomu alaykum, " + esc(firstName) + "!</b>\n\n"
-                    + "🎓 <b>TUIT LMS Bot</b>ga xush kelibsiz!\n\nBoshlash uchun tizimga kiring 👇";
+        boolean in = lmsService.isLoggedIn(userId);
+        String name = esc(firstName == null ? "" : firstName.trim());
+        String text = tr(userId,
+                "👋 <b>Привет" + (name.isEmpty() ? "" : ", " + name) + "!</b>\n\n"
+                        + "Я — <b>TUIT LMS Bot</b>, помощник студента ТУИТ для lms.tuit.uz.\n\n"
+                        + "<b>Что я умею:</b>\n"
+                        + "📚 предметы, задания и баллы\n"
+                        + "📅 расписание на весь семестр\n"
+                        + "⏰ напоминания о парах и дедлайнах\n"
+                        + "📊 посещаемость, учебный план и GPA\n"
+                        + "📤 загрузка работ прямо из Telegram\n"
+                        + "🎓 интерактивное приложение — кнопка «LMS» слева от поля ввода\n\n"
+                        + (in ? "Вы уже вошли — выбирайте раздел в меню ниже 👇" : "Чтобы начать, войдите в аккаунт 👇")
+                        + "\n\n<i>Автор: " + AUTHOR + "</i>",
+                "👋 <b>Assalomu alaykum" + (name.isEmpty() ? "" : ", " + name) + "!</b>\n\n"
+                        + "Men — <b>TUIT LMS Bot</b>, lms.tuit.uz uchun TATU talabasining yordamchisiman.\n\n"
+                        + "<b>Nimalar qila olaman:</b>\n"
+                        + "📚 fanlar, topshiriqlar va ballar\n"
+                        + "📅 butun semestr uchun dars jadvali\n"
+                        + "⏰ darslar va deadlinelar haqida eslatmalar\n"
+                        + "📊 davomat, o'quv reja va GPA\n"
+                        + "📤 ishlarni to'g'ridan-to'g'ri Telegramdan yuklash\n"
+                        + "🎓 interaktiv ilova — yozish maydoni chapidagi «LMS» tugmasi\n\n"
+                        + (in ? "Siz tizimdasiz — quyidagi menyudan bo'limni tanlang 👇" : "Boshlash uchun hisobingizga kiring 👇")
+                        + "\n\n<i>Muallif: " + AUTHOR + "</i>",
+                "👋 <b>Ассалому алайкум" + (name.isEmpty() ? "" : ", " + name) + "!</b>\n\n"
+                        + "Мен — <b>TUIT LMS Bot</b>, lms.tuit.uz учун ТАТУ талабасининг ёрдамчисиман.\n\n"
+                        + "<b>Нималар қила оламан:</b>\n"
+                        + "📚 фанлар, топшириқлар ва баллар\n"
+                        + "📅 бутун семестр учун дарс жадвали\n"
+                        + "⏰ дарслар ва дедлайнлар ҳақида эслатмалар\n"
+                        + "📊 давомат, ўқув режа ва GPA\n"
+                        + "📤 ишларни тўғридан-тўғри Telegramдан юклаш\n"
+                        + "🎓 интерактив илова — ёзиш майдони чапидаги «LMS» тугмаси\n\n"
+                        + (in ? "Сиз тизимдасиз — қуйидаги менюдан бўлимни танланг 👇" : "Бошлаш учун ҳисобингизга киринг 👇")
+                        + "\n\n<i>Муаллиф: " + AUTHOR + "</i>",
+                "👋 <b>Hi" + (name.isEmpty() ? "" : ", " + name) + "!</b>\n\n"
+                        + "I'm <b>TUIT LMS Bot</b>, a student assistant for TUIT's lms.tuit.uz.\n\n"
+                        + "<b>What I can do:</b>\n"
+                        + "📚 subjects, assignments and scores\n"
+                        + "📅 the timetable for the whole semester\n"
+                        + "⏰ class and deadline reminders\n"
+                        + "📊 attendance, study plan and GPA\n"
+                        + "📤 upload your work right from Telegram\n"
+                        + "🎓 an interactive app — the «LMS» button left of the message field\n\n"
+                        + (in ? "You're already signed in — pick a section in the menu below 👇" : "To get started, sign in to your account 👇")
+                        + "\n\n<i>Author:" + AUTHOR + "</i>");
+        send(chatId, text, in ? mainMenuKeyboard(userId) : loginKeyboard(userId));
+        if (in) sendAppAfterLogin(chatId, userId);
+    }
+
+    /**
+     * Описание в профиле бота и на пустом экране чата («Что умеет этот бот?»).
+     * Отдельного кода для узбекской кириллицы у Telegram нет — ей достаётся описание по умолчанию.
+     */
+    private void publishDescriptions() {
+        String[][] texts = {
+                // { language_code, description, short description }
+                {null,
+                        "🎓 TUIT LMS Bot — TATU talabalari uchun yordamchi (lms.tuit.uz).\n\n"
+                                + "📚 Fanlar, topshiriqlar va ballar\n"
+                                + "📅 Butun semestr jadvali\n"
+                                + "⏰ Dars va deadline eslatmalari\n"
+                                + "📊 Davomat, o'quv reja, GPA\n"
+                                + "📤 Ishlarni LMS ga yuklash\n"
+                                + "📱 Interaktiv ilova\n\n"
+                                + "Kirish — LMS login yoki OneID orqali.\n\n"
+                                + "Muallif: " + AUTHOR,
+                        "TATU talabasi yordamchisi: jadval, deadlinelar, baholar va GPA. Muallif: " + AUTHOR},
+                {"ru",
+                        "🎓 TUIT LMS Bot — помощник студента ТУИТ (lms.tuit.uz).\n\n"
+                                + "📚 Предметы, задания и баллы\n"
+                                + "📅 Расписание на весь семестр\n"
+                                + "⏰ Напоминания о парах и дедлайнах\n"
+                                + "📊 Посещаемость, учебный план, GPA\n"
+                                + "📤 Загрузка работ в LMS\n"
+                                + "📱 Интерактивное приложение\n\n"
+                                + "Вход — по логину LMS или через OneID.\n\n"
+                                + "Автор: " + AUTHOR,
+                        "Помощник студента ТУИТ: расписание, дедлайны, оценки и GPA. Автор: " + AUTHOR},
+                {"en",
+                        "🎓 TUIT LMS Bot — a student assistant for TUIT (lms.tuit.uz).\n\n"
+                                + "📚 Subjects, assignments and scores\n"
+                                + "📅 Whole-semester timetable\n"
+                                + "⏰ Class and deadline reminders\n"
+                                + "📊 Attendance, study plan, GPA\n"
+                                + "📤 Upload your work to LMS\n"
+                                + "📱 Interactive app\n\n"
+                                + "Sign in with your LMS login or OneID.\n\n"
+                                + "Author: " + AUTHOR,
+                        "TUIT student assistant: timetable, deadlines, grades and GPA. Author: " + AUTHOR},
         };
-        send(chatId, text, loginKeyboard(userId));
+        for (String[] t : texts) {
+            try {
+                org.telegram.telegrambots.meta.api.methods.description.SetMyDescription d =
+                        new org.telegram.telegrambots.meta.api.methods.description.SetMyDescription();
+                d.setDescription(t[1]);
+                if (t[0] != null) d.setLanguageCode(t[0]);
+                execute(d);
+                org.telegram.telegrambots.meta.api.methods.description.SetMyShortDescription sd =
+                        new org.telegram.telegrambots.meta.api.methods.description.SetMyShortDescription();
+                sd.setShortDescription(t[2]);
+                if (t[0] != null) sd.setLanguageCode(t[0]);
+                execute(sd);
+            } catch (Exception e) {
+                System.err.println("[LmsBot] setMyDescription(" + t[0] + "): " + e.getMessage());
+            }
+        }
     }
 
     private void askForLogin(long chatId, long userId) {
@@ -570,16 +699,17 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                             "✅ <b>Вы уже вошли в систему</b>\n\nЧтобы сменить аккаунт — /logout",
                             "✅ <b>Siz allaqachon tizimdasiz</b>\n\nHisobni almashtirish uchun — /logout",
-                            "✅ <b>Сиз аллақачон тизимдасиз</b>\n\nҲисобни алмаштириш учун — /logout"),
+                            "✅ <b>Сиз аллақачон тизимдасиз</b>\n\nҲисобни алмаштириш учун — /logout",
+                            "✅ <b>You're already signed in</b>\n\nTo switch accounts — /logout"),
                     mainMenuKeyboard(userId));
-            sendAppAfterLogin(chatId, userId);
+            onBotLogin(chatId, userId);
             return;
         }
         InlineKeyboardMarkup kb = markup(List.of(
                 List.of(inlineBtn(tr(userId,
-                        "🆔 Через OneID", "🆔 OneID orqali", "🆔 OneID орқали"), "auth_oneid")),
+                        "🆔 Через OneID", "🆔 OneID orqali", "🆔 OneID орқали", "🆔 With OneID"), "auth_oneid")),
                 List.of(inlineBtn(tr(userId,
-                        "🔑 Логин и пароль LMS", "🔑 LMS login va parol", "🔑 LMS логин ва парол"), "auth_lms"))
+                        "🔑 Логин и пароль LMS", "🔑 LMS login va parol", "🔑 LMS логин ва парол", "🔑 LMS login and password"), "auth_lms"))
         ));
         send(chatId, tr(userId,
                 "🔐 <b>Выберите способ входа</b>\n\n"
@@ -590,7 +720,10 @@ public class LmsBot extends TelegramLongPollingBot {
                         + "🔑 <b>LMS</b> — lms.tuit.uz login va paroli</blockquote>",
                 "🔐 <b>Кириш усулини танланг</b>\n\n"
                         + "<blockquote>🆔 <b>OneID</b> — id.egov.uz маълумотлари билан (тавсия этилади)\n"
-                        + "🔑 <b>LMS</b> — lms.tuit.uz логин ва пароли</blockquote>"), kb);
+                        + "🔑 <b>LMS</b> — lms.tuit.uz логин ва пароли</blockquote>",
+                "🔐 <b>Choose how to sign in</b>\n\n"
+                        + "<blockquote>🆔 <b>OneID</b> — sign in with your id.egov.uz account (recommended)\n"
+                        + "🔑 <b>LMS</b> — your usual lms.tuit.uz login and password</blockquote>"), kb);
     }
 
     private void askForLmsLogin(long chatId, long userId) {
@@ -598,20 +731,22 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "👤 <b>Введите ваш LMS логин</b>:\n\nНапример: <code>1bk27748</code>",
                 "👤 <b>LMS loginingizni</b> kiriting:\n\nMasalan: <code>1bk27748</code>",
-                "👤 <b>LMS логинингизни</b> киритинг:\n\nМасалан: <code>1bk27748</code>"), null);
+                "👤 <b>LMS логинингизни</b> киритинг:\n\nМасалан: <code>1bk27748</code>",
+                "👤 <b>Enter your LMS login</b>:\n\nFor example: <code>1bk27748</code>"), null);
     }
 
     private void askForOneIdMethod(long chatId, long userId) {
         InlineKeyboardMarkup kb = markup(List.of(
                 List.of(inlineBtn(tr(userId,
-                        "🔑 Логин и пароль", "🔑 Login va parol", "🔑 Логин ва парол"), "oneid_pw")),
+                        "🔑 Логин и пароль", "🔑 Login va parol", "🔑 Логин ва парол", "🔑 Login and password"), "oneid_pw")),
                 List.of(inlineBtn(tr(userId,
-                        "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)"), "oneid_mobile"))
+                        "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)"), "oneid_mobile"))
         ));
         send(chatId, tr(userId,
                 "🆔 <b>Вход через OneID</b>\n\nВыберите способ:",
                 "🆔 <b>OneID orqali kirish</b>\n\nUsulni tanlang:",
-                "🆔 <b>OneID орқали кириш</b>\n\nУсулни танланг:"), kb);
+                "🆔 <b>OneID орқали кириш</b>\n\nУсулни танланг:",
+                "🆔 <b>Sign in with OneID</b>\n\nChoose a method:"), kb);
     }
 
     private void askForOneIdPhone(long chatId, long userId) {
@@ -619,14 +754,16 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "📱 <b>Вход через Mobile ID</b>\n\nВведите номер телефона, привязанный к Mobile ID:\n\nНапример: <code>+998901234567</code>",
                 "📱 <b>Mobile ID orqali kirish</b>\n\nMobile ID ga bog'langan telefon raqamini kiriting:\n\nMasalan: <code>+998901234567</code>",
-                "📱 <b>Mobile ID орқали кириш</b>\n\nMobile ID га боғланган телефон рақамини киритинг:\n\nМасалан: <code>+998901234567</code>"), null);
+                "📱 <b>Mobile ID орқали кириш</b>\n\nMobile ID га боғланган телефон рақамини киритинг:\n\nМасалан: <code>+998901234567</code>",
+                "📱 <b>Sign in with Mobile ID</b>\n\nEnter the phone number linked to Mobile ID:\n\nFor example: <code>+998901234567</code>"), null);
     }
 
     private void handleOneIdPhone(long chatId, long userId, String phone) {
         sendProgress(chatId, tr(userId,
                 "⏳ Отправляем SMS...",
                 "⏳ SMS yuborilmoqda...",
-                "⏳ SMS юборилмоқда..."));
+                "⏳ SMS юборилмоқда...",
+                "⏳ Sending SMS..."));
         executor.submit(() -> {
             LmsService.OneIdResult res = lmsService.oneIdMobileSendSms(userId, phone);
             if (res.status == LmsService.OneIdResult.Status.NEED_SMS) {
@@ -634,7 +771,8 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                         "✉️ SMS-код отправлен на <code>" + phone + "</code>\n\nВведите код из SMS:",
                         "✉️ SMS-kod <code>" + phone + "</code> raqamiga yuborildi\n\nSMS dagi kodni kiriting:",
-                        "✉️ SMS-код <code>" + phone + "</code> рақамига юборилди\n\nSMS даги кодни киритинг:"), null);
+                        "✉️ SMS-код <code>" + phone + "</code> рақамига юборилди\n\nSMS даги кодни киритинг:",
+                        "✉️ SMS code sent to <code>" + phone + "</code>\n\nEnter the code from the SMS:"), null);
             } else {
                 sendOneIdError(chatId, userId, res.message);
             }
@@ -645,7 +783,8 @@ public class LmsBot extends TelegramLongPollingBot {
         sendProgress(chatId, tr(userId,
                 "⏳ Проверяем код...",
                 "⏳ Kod tekshirilmoqda...",
-                "⏳ Код текширилмоқда..."));
+                "⏳ Код текширилмоқда...",
+                "⏳ Checking the code..."));
         executor.submit(() -> {
             LmsService.OneIdResult res = lmsService.oneIdMobileConfirm(userId, code);
             if (res.status == LmsService.OneIdResult.Status.OK) {
@@ -661,14 +800,16 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "🆔 <b>Вход через OneID</b>\n\nВведите <b>логин OneID</b> от аккаунта id.egov.uz:",
                 "🆔 <b>OneID orqali kirish</b>\n\nid.egov.uz hisobingizning <b>OneID loginini</b> kiriting:",
-                "🆔 <b>OneID орқали кириш</b>\n\nid.egov.uz ҳисобингизнинг <b>OneID логинини</b> киритинг:"), null);
+                "🆔 <b>OneID орқали кириш</b>\n\nid.egov.uz ҳисобингизнинг <b>OneID логинини</b> киритинг:",
+                "🆔 <b>Sign in with OneID</b>\n\nEnter your <b>OneID login</b> for id.egov.uz:"), null);
     }
 
     private void handleOneIdLogin(long chatId, long userId, String login, String password) {
         sendProgress(chatId, tr(userId,
                 "⏳ Проверяем данные в OneID...",
                 "⏳ OneID ma'lumotlari tekshirilmoqda...",
-                "⏳ OneID маълумотлари текширилмоқда..."));
+                "⏳ OneID маълумотлари текширилмоқда...",
+                "⏳ Checking your OneID details..."));
         executor.submit(() -> {
             LmsService.OneIdResult res = lmsService.oneIdLogin(userId, login, password);
             switch (res.status) {
@@ -680,7 +821,9 @@ public class LmsBot extends TelegramLongPollingBot {
                             "🔑 <b>Ikki bosqichli autentifikatsiya</b>\n\n<b>OneID</b> ilovasini oching "
                                     + "va <b>autentifikatsiya kodini</b> kiriting:",
                             "🔑 <b>Икки босқичли аутентификация</b>\n\n<b>OneID</b> иловасини очинг "
-                                    + "ва <b>аутентификация кодини</b> киритинг:"), null);
+                                    + "ва <b>аутентификация кодини</b> киритинг:",
+                            "🔑 <b>Two-factor authentication</b>\n\nOpen the <b>OneID</b> app"
+                                    + "and enter the <b>authentication code</b>:"), null);
                 }
                 case OK -> finishOneId(chatId, userId, login);
                 default -> {
@@ -695,7 +838,8 @@ public class LmsBot extends TelegramLongPollingBot {
         sendProgress(chatId, tr(userId,
                 "⏳ Проверяем код...",
                 "⏳ Kod tekshirilmoqda...",
-                "⏳ Код текширилмоқда..."));
+                "⏳ Код текширилмоқда...",
+                "⏳ Checking the code..."));
         executor.submit(() -> {
             String login = tempOneIdLogin.get(userId);
             LmsService.OneIdResult res = lmsService.oneIdConfirm(userId, login, code);
@@ -713,7 +857,8 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "🔗 Входим в LMS через OneID...",
                 "🔗 OneID orqali LMS ga kirilmoqda...",
-                "🔗 OneID орқали LMS га кирилмоқда..."), null);
+                "🔗 OneID орқали LMS га кирилмоқда...",
+                "🔗 Signing in to LMS with OneID..."), null);
         boolean ok = lmsService.oneIdFinish(userId);
         tempOneIdLogin.remove(userId);
         if (ok) {
@@ -722,14 +867,16 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                             "✅ <b>Вы успешно вошли через OneID!</b>\n\nВыберите пункт из меню ниже 👇",
                             "✅ <b>OneID orqali muvaffaqiyatli kirdingiz!</b>\n\nQuyidagi menyudan foydalaning 👇",
-                            "✅ <b>OneID орқали муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇"),
+                            "✅ <b>OneID орқали муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇",
+                            "✅ <b>Signed in with OneID!</b>\n\nChoose an item from the menu below 👇"),
                     mainMenuKeyboard(userId));
-            sendAppAfterLogin(chatId, userId);
+            onBotLogin(chatId, userId);
         } else {
             send(chatId, tr(userId,
                             "❌ <b>Не удалось связать OneID с LMS</b>\n\n<blockquote>Возможно, ваш аккаунт OneID не привязан к lms.tuit.uz. Попробуйте ещё раз.</blockquote>",
                             "❌ <b>OneID ni LMS bilan bog'lab bo'lmadi</b>\n\n<blockquote>OneID hisobingiz lms.tuit.uz ga bog'lanmagan bo'lishi mumkin. Qayta urinib ko'ring.</blockquote>",
-                            "❌ <b>OneID ни LMS билан боғлаб бўлмади</b>\n\n<blockquote>OneID ҳисобингиз lms.tuit.uz га боғланмаган бўлиши мумкин. Қайта уриниб кўринг.</blockquote>"),
+                            "❌ <b>OneID ни LMS билан боғлаб бўлмади</b>\n\n<blockquote>OneID ҳисобингиз lms.tuit.uz га боғланмаган бўлиши мумкин. Қайта уриниб кўринг.</blockquote>",
+                            "❌ <b>Could not link OneID to LMS</b>\n\n<blockquote>Your OneID account may not be linked to lms.tuit.uz. Please try again.</blockquote>"),
                     loginKeyboard(userId));
         }
     }
@@ -740,7 +887,8 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                         "❌ <b>Вход через OneID не удался</b>" + extra + "\n\nПопробуйте ещё раз: /login",
                         "❌ <b>OneID orqali kirish amalga oshmadi</b>" + extra + "\n\nQayta urinib ko'ring: /login",
-                        "❌ <b>OneID орқали кириш амалга ошмади</b>" + extra + "\n\nҚайта уриниб кўринг: /login"),
+                        "❌ <b>OneID орқали кириш амалга ошмади</b>" + extra + "\n\nҚайта уриниб кўринг: /login",
+                        "❌ <b>OneID sign-in failed</b>" + extra + "\n\nTry again: /login"),
                 loginKeyboard(userId));
     }
 
@@ -748,7 +896,8 @@ public class LmsBot extends TelegramLongPollingBot {
         sendProgress(chatId, tr(userId,
                 "⏳ Входим в систему...",
                 "⏳ Tizimga kirilmoqda...",
-                "⏳ Тизимга кирилмоқда..."));
+                "⏳ Тизимга кирилмоқда...",
+                "⏳ Signing in..."));
         executor.submit(() -> {
             boolean ok = lmsService.login(userId, login, password);
             if (ok) {
@@ -757,14 +906,16 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                                 "✅ <b>Вы успешно вошли!</b>\n\nВыберите пункт из меню ниже 👇",
                                 "✅ <b>Muvaffaqiyatli kirdingiz!</b>\n\nQuyidagi menyudan foydalaning 👇",
-                                "✅ <b>Муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇"),
+                                "✅ <b>Муваффақиятли кирдингиз!</b>\n\nҚуйидаги менюдан фойдаланинг 👇",
+                                "✅ <b>Signed in!</b>\n\nChoose an item from the menu below 👇"),
                         mainMenuKeyboard(userId));
-                sendAppAfterLogin(chatId, userId);
+                onBotLogin(chatId, userId);
             } else {
                 send(chatId, tr(userId,
                                 "❌ <b>Неверный логин или пароль!</b>\n\nПопробуйте ещё раз.",
                                 "❌ <b>Login yoki parol noto'g'ri!</b>\n\nQayta urinib ko'ring.",
-                                "❌ <b>Логин ёки парол нотўғри!</b>\n\nҚайта уриниб кўринг."),
+                                "❌ <b>Логин ёки парол нотўғри!</b>\n\nҚайта уриниб кўринг.",
+                                "❌ <b>Wrong login or password!</b>\n\nPlease try again."),
                         loginKeyboard(userId));
             }
         });
@@ -814,14 +965,16 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "👋 Вы вышли из системы.\n\nЧтобы войти снова: /login",
                 "👋 Tizimdan chiqtingiz.\n\nQayta kirish: /login",
-                "👋 Тизимдан чиқдингиз.\n\nҚайта кириш: /login"), loginKeyboard(userId));
+                "👋 Тизимдан чиқдингиз.\n\nҚайта кириш: /login",
+                "👋 You've signed out.\n\nTo sign in again: /login"), loginKeyboard(userId));
     }
 
     private void sendMainMenu(long chatId, long userId) {
         send(chatId, tr(userId,
                 "🏠 <b>Главное меню:</b>",
                 "🏠 <b>Asosiy menyu:</b>",
-                "🏠 <b>Асосий меню:</b>"), mainMenuKeyboard(userId));
+                "🏠 <b>Асосий меню:</b>",
+                "🏠 <b>Main menu:</b>"), mainMenuKeyboard(userId));
     }
 
     // ─────────────────────────────────────────────
@@ -857,7 +1010,7 @@ public class LmsBot extends TelegramLongPollingBot {
                         + (c.isFailed() ? " ⚠️" : "") + "\n"
                         + "👨‍🏫 " + esc(c.getFormattedTeachers()) + "\n"
                         + (c.getAttendance() > 0 ? "🔴" : "🟢") + " "
-                        + tr(userId, "НБ", "NB", "НБ") + ": <b>" + c.getAttendance() + "</b>";
+                        + tr(userId, "НБ", "NB", "НБ", "Absences") + ": <b>" + c.getAttendance() + "</b>";
                 msg.append("<blockquote>").append(inner).append("</blockquote>\n");
             }
 
@@ -881,14 +1034,15 @@ public class LmsBot extends TelegramLongPollingBot {
                     tr(userId,
                             "⚠️ Сначала откройте «Мои предметы».",
                             "⚠️ Avval \"Mening fanlarim\" bo'limini oching.",
-                            "⚠️ Аввал «Менинг фанларим» бўлимини очинг."),
+                            "⚠️ Аввал «Менинг фанларим» бўлимини очинг.",
+                            "⚠️ Open «My subjects» first."),
                     null);
             return;
         }
         String title = switch (action) {
-            case "attend"   -> tr(userId, "📊 <b>Посещаемость</b> — выберите предмет:", "📊 <b>Davomat</b> — fan tanlang:", "📊 <b>Давомат</b> — фан танланг:");
-            case "calendar" -> tr(userId, "📆 <b>План занятий</b> — выберите предмет:", "📆 <b>Dars rejasi</b> — fan tanlang:", "📆 <b>Дарс режаси</b> — фан танланг:");
-            default         -> tr(userId, "📋 <b>Активности</b> — выберите предмет:", "📋 <b>Aktivnosti</b> — fan tanlang:", "📋 <b>Активностлар</b> — фан танланг:");
+            case "attend"   -> tr(userId, "📊 <b>Посещаемость</b> — выберите предмет:", "📊 <b>Davomat</b> — fan tanlang:", "📊 <b>Давомат</b> — фан танланг:", "📊 <b>Attendance</b> — choose a subject:");
+            case "calendar" -> tr(userId, "📆 <b>План занятий</b> — выберите предмет:", "📆 <b>Dars rejasi</b> — fan tanlang:", "📆 <b>Дарс режаси</b> — фан танланг:", "📆 <b>Class plan</b> — choose a subject:");
+            default         -> tr(userId, "📋 <b>Активности</b> — выберите предмет:", "📋 <b>Aktivnosti</b> — fan tanlang:", "📋 <b>Активностлар</b> — фан танланг:", "📋 <b>Activities</b> — choose a subject:");
         };
 
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
@@ -980,11 +1134,11 @@ public class LmsBot extends TelegramLongPollingBot {
                     .put(courseId, activities != null ? activities : Collections.emptyList());
 
             StringBuilder sb = new StringBuilder();
-            sb.append("📊 <b>").append(tr(userId, "Результаты", "Natijalar", "Натижалар")).append("</b>\n<blockquote>");
-            sb.append("🏆 ").append(tr(userId, "Балл", "Ball", "Балл")).append(": <b>").append(orDash(summary.getEarned()))
+            sb.append("📊 <b>").append(tr(userId, "Результаты", "Natijalar", "Натижалар", "Results")).append("</b>\n<blockquote>");
+            sb.append("🏆 ").append(tr(userId, "Балл", "Ball", "Балл", "Score")).append(": <b>").append(orDash(summary.getEarned()))
                     .append("</b> / <b>").append(orDash(summary.getMaxScore())).append("</b>\n");
-            sb.append("📈 ").append(tr(userId, "Прогресс", "Muvaffaqiyat", "Муваффақият")).append(": <b>").append(orDash(summary.getProgress())).append("</b>\n");
-            sb.append("🎓 ").append(tr(userId, "Оценка", "Baho", "Баҳо")).append(": <b>").append(orDash(summary.getGrade())).append("</b>");
+            sb.append("📈 ").append(tr(userId, "Прогресс", "Muvaffaqiyat", "Муваффақият", "Progress")).append(": <b>").append(orDash(summary.getProgress())).append("</b>\n");
+            sb.append("🎓 ").append(tr(userId, "Оценка", "Baho", "Баҳо", "Grade")).append(": <b>").append(orDash(summary.getGrade())).append("</b>");
             sb.append("</blockquote>\n\n");
 
             if (activities == null || activities.isEmpty()) {
@@ -993,7 +1147,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 return;
             }
 
-            sb.append("📋 <b>").append(tr(userId, "Задания", "Topshiriqlar", "Топшириқлар"))
+            sb.append("📋 <b>").append(tr(userId, "Задания", "Topshiriqlar", "Топшириқлар", "Assignments"))
                     .append("</b>: <b>").append(activities.size()).append("</b>\n\n");
 
             long now = System.currentTimeMillis();
@@ -1024,11 +1178,12 @@ public class LmsBot extends TelegramLongPollingBot {
             sb.append("\n<i>").append(tr(userId,
                     "Для выбора задания 👇",
                     "Topshiriqni tanlash uchun 👇",
-                    "Топшириқни танлаш учун 👇")).append("</i>");
+                    "Топшириқни танлаш учун 👇",
+                    "To choose an assignment 👇")).append("</i>");
 
             List<List<InlineKeyboardButton>> allRows = new ArrayList<>();
             allRows.add(List.of(inlineBtn(
-                    tr(userId, "⏰ Выбрать по дедлайну", "⏰ Deadline bo'yicha tanlash", "⏰ Дедлайн бўйича танлаш"),
+                    tr(userId, "⏰ Выбрать по дедлайну", "⏰ Deadline bo'yicha tanlash", "⏰ Дедлайн бўйича танлаш", "⏰ Choose by deadline"),
                     "act_deadline_list_" + courseId)));
             allRows.add(List.of(inlineBtn(t(userId, "btn.back"), "select_activities")));
             send(chatId, sb.toString(), markup(allRows));
@@ -1047,9 +1202,9 @@ public class LmsBot extends TelegramLongPollingBot {
         long now = System.currentTimeMillis();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         String title = switch (filter) {
-            case "uploaded"   -> tr(userId, "📥 <b>Загруженные</b>", "📥 <b>Yuklangan</b>", "📥 <b>Юкланган</b>");
-            case "uploadable" -> tr(userId, "⬆️ <b>Загрузить</b>", "⬆️ <b>Yuklash</b>", "⬆️ <b>Юклаш</b>");
-            default           -> tr(userId, "📋 <b>Задания</b>", "📋 <b>Topshiriqlar</b>", "📋 <b>Топшириқлар</b>");
+            case "uploaded"   -> tr(userId, "📥 <b>Загруженные</b>", "📥 <b>Yuklangan</b>", "📥 <b>Юкланган</b>", "📥 <b>Uploaded</b>");
+            case "uploadable" -> tr(userId, "⬆️ <b>Загрузить</b>", "⬆️ <b>Yuklash</b>", "⬆️ <b>Юклаш</b>", "⬆️ <b>Upload</b>");
+            default           -> tr(userId, "📋 <b>Задания</b>", "📋 <b>Topshiriqlar</b>", "📋 <b>Топшириқлар</b>", "📋 <b>Assignments</b>");
         };
 
         for (int i = 0; i < acts.size(); i++) {
@@ -1071,19 +1226,19 @@ public class LmsBot extends TelegramLongPollingBot {
 
         if (rows.isEmpty()) {
             String empty = "uploadable".equals(filter)
-                    ? tr(userId, "📭 Нет заданий для загрузки (все загружены или срок истёк).", "📭 Yuklash uchun topshiriqlar yo'q.", "📭 Юклаш учун топшириқлар йўқ.")
+                    ? tr(userId, "📭 Нет заданий для загрузки (все загружены или срок истёк).", "📭 Yuklash uchun topshiriqlar yo'q.", "📭 Юклаш учун топшириқлар йўқ.", "📭 Nothing to upload (everything is uploaded or the deadline has passed).")
                     : t(userId, "act.none");
             edit(chatId, messageId, empty, null);
             return;
         }
 
         List<InlineKeyboardButton> filterRow = new ArrayList<>();
-        filterRow.add(inlineBtn(tr(userId, "📋 Задания", "📋 Topshiriqlar", "📋 Топшириқлар"), "act_filter_all_" + courseId));
-        filterRow.add(inlineBtn(tr(userId, "📥 Загруженные", "📥 Yuklangan", "📥 Юкланган"), "act_filter_uploaded_" + courseId));
-        filterRow.add(inlineBtn(tr(userId, "⬆️ Загрузить", "⬆️ Yuklash", "⬆️ Юклаш"), "act_filter_uploadable_" + courseId));
+        filterRow.add(inlineBtn(tr(userId, "📋 Задания", "📋 Topshiriqlar", "📋 Топшириқлар", "📋 Assignments"), "act_filter_all_" + courseId));
+        filterRow.add(inlineBtn(tr(userId, "📥 Загруженные", "📥 Yuklangan", "📥 Юкланган", "📥 Uploaded"), "act_filter_uploaded_" + courseId));
+        filterRow.add(inlineBtn(tr(userId, "⬆️ Загрузить", "⬆️ Yuklash", "⬆️ Юклаш", "⬆️ Upload"), "act_filter_uploadable_" + courseId));
         rows.add(filterRow);
 
-        edit(chatId, messageId, title + "\n\n" + tr(userId, "Выберите 👇", "Tanlang 👇", "Танланг 👇"), markup(rows));
+        edit(chatId, messageId, title + "\n\n" + tr(userId, "Выберите 👇", "Tanlang 👇", "Танланг 👇", "Choose 👇"), markup(rows));
     }
 
     private void editDeadlineList(long chatId, long userId, int messageId, int courseId) {
@@ -1124,7 +1279,8 @@ public class LmsBot extends TelegramLongPollingBot {
         String header = tr(userId,
                 "⏰ <b>Задания по дедлайну</b>\n\n✅ Загружено  |  ❌ Истёк  |  📭 Не загружено\n📖 Лекция  |  🔬 Практика\n\nВыберите 👇",
                 "⏰ <b>Deadline bo'yicha topshiriqlar</b>\n\n✅ Yuklangan  |  ❌ Muddat o'tgan  |  📭 Yuklanmagan\n📖 Leksiya  |  🔬 Amaliyot\n\nTanlang 👇",
-                "⏰ <b>Дедлайн бўйича топшириқлар</b>\n\n✅ Юкланган  |  ❌ Муддат ўтган  |  📭 Юкланмаган\n📖 Маъруза  |  🔬 Амалиёт\n\nТанланг 👇");
+                "⏰ <b>Дедлайн бўйича топшириқлар</b>\n\n✅ Юкланган  |  ❌ Муддат ўтган  |  📭 Юкланмаган\n📖 Маъруза  |  🔬 Амалиёт\n\nТанланг 👇",
+                "⏰ <b>Assignments by deadline</b>\n\n✅ Uploaded  |  ❌ Expired  |  📭 Not uploaded\n📖 Lecture  |  🔬 Practice\n\nChoose 👇");
         edit(chatId, messageId, header, markup(rows));
     }
 
@@ -1136,7 +1292,8 @@ public class LmsBot extends TelegramLongPollingBot {
             edit(chatId, messageId, tr(userId,
                     "⚠️ Данные устарели. Откройте активности заново.",
                     "⚠️ Ma'lumot eskirgan. Aktivnostlarni qayta oching.",
-                    "⚠️ Маълумот эскирган. Активностларни қайта очинг."), null);
+                    "⚠️ Маълумот эскирган. Активностларни қайта очинг.",
+                    "⚠️ The data is outdated. Open the activities again."), null);
             return;
         }
         Activity a = acts.get(index);
@@ -1153,25 +1310,25 @@ public class LmsBot extends TelegramLongPollingBot {
 
         String text = "📝 <b>" + esc(a.getTask()) + "</b>\n"
                 + "👨‍🏫 " + esc(a.getTeacher()) + "\n"
-                + "⏰ " + tr(userId, "Дедлайн", "Deadline", "Дедлайн") + ": <b>" + esc(a.getDeadline()) + "</b>\n"
-                + "🏆 " + tr(userId, "Балл", "Ball", "Балл") + ": <b>" + earned + "</b> / <b>" + max + "</b>\n"
+                + "⏰ " + tr(userId, "Дедлайн", "Deadline", "Дедлайн", "Deadline") + ": <b>" + esc(a.getDeadline()) + "</b>\n"
+                + "🏆 " + tr(userId, "Балл", "Ball", "Балл", "Score") + ": <b>" + earned + "</b> / <b>" + max + "</b>\n"
                 + (hasUpload
-                ? tr(userId, "✅ Загружено", "✅ Yuklangan", "✅ Юкланган")
+                ? tr(userId, "✅ Загружено", "✅ Yuklangan", "✅ Юкланган", "✅ Uploaded")
                 : isGraded(a)
-                ? tr(userId, "✅ Оценено", "✅ Baholangan", "✅ Баҳоланган")
-                : tr(userId, "📭 Не загружено", "📭 Yuklanmagan", "📭 Юкланмаган"))
+                ? tr(userId, "✅ Оценено", "✅ Baholangan", "✅ Баҳоланган", "✅ Graded")
+                : tr(userId, "📭 Не загружено", "📭 Yuklanmagan", "📭 Юкланмаган", "📭 Not uploaded"))
                 + criteriaLine(userId, a);
 
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         List<InlineKeyboardButton> row = new ArrayList<>();
-        if (hasSample) row.add(inlineBtn(tr(userId, "📄 Задание", "📄 Topshiriq", "📄 Топшириқ"), "act_sample_" + courseId + "_" + index));
-        if (hasUpload) row.add(inlineBtn(tr(userId, "📥 Моя загрузка", "📥 Yuklanganim", "📥 Юкланганим"), "act_uploaded_" + courseId + "_" + index));
+        if (hasSample) row.add(inlineBtn(tr(userId, "📄 Задание", "📄 Topshiriq", "📄 Топшириқ", "📄 Assignment"), "act_sample_" + courseId + "_" + index));
+        if (hasUpload) row.add(inlineBtn(tr(userId, "📥 Моя загрузка", "📥 Yuklanganim", "📥 Юкланганим", "📥 My upload"), "act_uploaded_" + courseId + "_" + index));
         if (!row.isEmpty()) rows.add(row);
 
         if (!hasUpload && hasActId && deadlineOk)
-            rows.add(List.of(inlineBtn(tr(userId, "⬆️ Загрузить", "⬆️ Yuklash", "⬆️ Юклаш"), "act_upload_" + courseId + "_" + index + "_" + a.getActivityId())));
+            rows.add(List.of(inlineBtn(tr(userId, "⬆️ Загрузить", "⬆️ Yuklash", "⬆️ Юклаш", "⬆️ Upload"), "act_upload_" + courseId + "_" + index + "_" + a.getActivityId())));
         if (hasUpload && hasActId && deadlineOk)
-            rows.add(List.of(inlineBtn(tr(userId, "🔄 Перезагрузить", "🔄 Qayta yuklash", "🔄 Қайта юклаш"), "act_upload_" + courseId + "_" + index + "_" + a.getActivityId())));
+            rows.add(List.of(inlineBtn(tr(userId, "🔄 Перезагрузить", "🔄 Qayta yuklash", "🔄 Қайта юклаш", "🔄 Re-upload"), "act_upload_" + courseId + "_" + index + "_" + a.getActivityId())));
 
         rows.add(List.of(inlineBtn(t(userId, "btn.back"), "act_deadline_list_" + courseId)));
         edit(chatId, messageId, text, markup(rows));
@@ -1215,15 +1372,16 @@ public class LmsBot extends TelegramLongPollingBot {
         return switch (lang(userId)) {
             case "ru"     -> new String[]{"","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"};
             case "uz_cyr" -> new String[]{"","Душанба","Сешанба","Чоршанба","Пайшанба","Жума","Шанба","Якшанба"};
+            case "en"     -> new String[]{"","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"};
             default       -> new String[]{"","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba","Yakshanba"};
         };
     }
 
     private String kindLabel(long userId, String kind) {
         return switch (kind) {
-            case uz.tuit.lmsbot.service.SemesterSchedule.PRACTICE -> tr(userId, "Практика", "Amaliyot", "Амалиёт");
-            case uz.tuit.lmsbot.service.SemesterSchedule.LAB -> tr(userId, "Лабораторная", "Laboratoriya", "Лаборатория");
-            default -> tr(userId, "Лекция", "Ma'ruza", "Маъруза");
+            case uz.tuit.lmsbot.service.SemesterSchedule.PRACTICE -> tr(userId, "Практика", "Amaliyot", "Амалиёт", "Practice");
+            case uz.tuit.lmsbot.service.SemesterSchedule.LAB -> tr(userId, "Лабораторная", "Laboratoriya", "Лаборатория", "Lab");
+            default -> tr(userId, "Лекция", "Ma'ruza", "Маъруза", "Lecture");
         };
     }
 
@@ -1242,7 +1400,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
         StringBuilder sb = new StringBuilder();
         sb.append("📅 <b>").append(esc(lmsService.semesterName(userId, semesterId))).append("</b>\n")
-                .append(tr(userId, "Неделя ", "Hafta ", "Ҳафта ")).append(week + 1).append(" / ").append(sched.weekCount())
+                .append(tr(userId, "Неделя ", "Hafta ", "Ҳафта ", "Week")).append(week + 1).append(" / ").append(sched.weekCount())
                 .append(" · <i>").append(from.format(dm)).append(" – ").append(to.format(dm)).append("</i>\n\n");
 
         boolean any = false;
@@ -1253,7 +1411,7 @@ public class LmsBot extends TelegramLongPollingBot {
             StringBuilder inner = new StringBuilder();
             inner.append(d.equals(today) ? "📍 " : "").append("<b>").append(esc(days[d.getDayOfWeek().getValue()].toUpperCase()))
                     .append("</b> — <i>").append(d.format(dm)).append("</i>");
-            if (d.equals(today)) inner.append(" · ").append(tr(userId, "сегодня", "bugun", "бугун"));
+            if (d.equals(today)) inner.append(" · ").append(tr(userId, "сегодня", "bugun", "бугун", "today"));
             inner.append("\n");
             for (uz.tuit.lmsbot.service.SemesterSchedule.Lesson l : lessons) {
                 inner.append("\n⏰ <b>").append(esc(l.time())).append("</b>");
@@ -1263,13 +1421,13 @@ public class LmsBot extends TelegramLongPollingBot {
                 if (l.stream() != null) inner.append(" · ").append(esc(l.stream()));
                 if (!l.teacher().isBlank()) inner.append("\n👨‍🏫 ").append(esc(l.teacher()));
                 if (l.topic() != null && !l.topic().isBlank()) inner.append("\n📝 <i>").append(esc(truncateTopic(l.topic(), 80))).append("</i>");
-                if (l.last()) inner.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс"));
+                if (l.last()) inner.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс", "Last class"));
                 inner.append("\n");
             }
             sb.append("<blockquote>").append(inner.toString().trim()).append("</blockquote>\n");
         }
         if (!any) {
-            sb.append("<blockquote>").append(tr(userId, "На этой неделе пар нет.", "Bu haftada dars yo'q.", "Бу ҳафтада дарс йўқ.")).append("</blockquote>");
+            sb.append("<blockquote>").append(tr(userId, "На этой неделе пар нет.", "Bu haftada dars yo'q.", "Бу ҳафтада дарс йўқ.", "No classes this week.")).append("</blockquote>");
         }
         return sb.toString();
     }
@@ -1285,8 +1443,8 @@ public class LmsBot extends TelegramLongPollingBot {
         rows.add(nav);
         int current = sched.weekOf(java.time.LocalDate.now(AppConfig.LMS_ZONE));
         List<InlineKeyboardButton> extra = new ArrayList<>();
-        if (week != current) extra.add(inlineBtn(tr(userId, "📍 Эта неделя", "📍 Shu hafta", "📍 Шу ҳафта"), "sw_" + semesterId + "_" + current));
-        extra.add(inlineBtn(tr(userId, "📅 Семестр", "📅 Semestr", "📅 Семестр"), "sched_sem"));
+        if (week != current) extra.add(inlineBtn(tr(userId, "📍 Эта неделя", "📍 Shu hafta", "📍 Шу ҳафта", "📍 This week"), "sw_" + semesterId + "_" + current));
+        extra.add(inlineBtn(tr(userId, "📅 Семестр", "📅 Semestr", "📅 Семестр", "📅 Semester"), "sched_sem"));
         rows.add(extra);
         return markup(rows);
     }
@@ -1341,7 +1499,8 @@ public class LmsBot extends TelegramLongPollingBot {
                     .append(tr(userId,
                             "🟢 Отлично (5)  🔵 Хорошо (4)  🟡 Удовлетворительно (3)  🔴 Неудовлетворительно (2)",
                             "🟢 A'lo (5)  🔵 Yaxshi (4)  🟡 Qoniqarli (3)  🔴 Qoniqarsiz (2)",
-                            "🟢 Аъло (5)  🔵 Яхши (4)  🟡 Қониқарли (3)  🔴 Қониқарсиз (2)"))
+                            "🟢 Аъло (5)  🔵 Яхши (4)  🟡 Қониқарли (3)  🔴 Қониқарсиз (2)",
+                            "🟢 Excellent (5)  🔵 Good (4)  🟡 Satisfactory (3)  🔴 Unsatisfactory (2)"))
                     .append("</blockquote>\n");
             planMsg.append("\n💡 ").append(t(userId, "plan.gpa_hint"));
             send(chatId, planMsg.toString(), withBack(userId, gpaChoiceKeyboard(userId)));
@@ -1424,8 +1583,8 @@ public class LmsBot extends TelegramLongPollingBot {
                 edit(chatId, messageId,
                         "📆 <b>" + esc(course.getSubject()) + "</b>\n\n" + t(userId, "cal.choose_type"),
                         markup(List.of(List.of(
-                                inlineBtn(tr(userId, "📖 Лекция", "📖 Lektsiya", "📖 Маъруза"), "caltype_" + cid + "_lecture"),
-                                inlineBtn(tr(userId, "🔬 Практика", "🔬 Amaliyot", "🔬 Амалиёт"), "caltype_" + cid + "_practice")
+                                inlineBtn(tr(userId, "📖 Лекция", "📖 Lektsiya", "📖 Маъруза", "📖 Lecture"), "caltype_" + cid + "_lecture"),
+                                inlineBtn(tr(userId, "🔬 Практика", "🔬 Amaliyot", "🔬 Амалиёт", "🔬 Practice"), "caltype_" + cid + "_practice")
                         ))));
             }
         });
@@ -1466,8 +1625,8 @@ public class LmsBot extends TelegramLongPollingBot {
                 if (c.getId() == courseId) { subject = c.getSubject(); break; }
 
         String typeName = "lecture".equals(type)
-                ? tr(userId, "Лекция", "Lektsiya", "Маъруза")
-                : tr(userId, "Практика", "Amaliyot", "Амалиёт");
+                ? tr(userId, "Лекция", "Lektsiya", "Маъруза", "Lecture")
+                : tr(userId, "Практика", "Amaliyot", "Амалиёт", "Practice");
 
         StringBuilder sb = new StringBuilder();
         sb.append("📆 <b>").append(esc(subject)).append("</b>\n");
@@ -1508,8 +1667,8 @@ public class LmsBot extends TelegramLongPollingBot {
             for (Course c : courses)
                 if (c.getId() == courseId) { subject = c.getSubject(); break; }
         String typeName = "lecture".equals(type)
-                ? tr(userId, "Лекция", "Lektsiya", "Маъруза")
-                : tr(userId, "Практика", "Amaliyot", "Амалиёт");
+                ? tr(userId, "Лекция", "Lektsiya", "Маъруза", "Lecture")
+                : tr(userId, "Практика", "Amaliyot", "Амалиёт", "Practice");
 
         StringBuilder sb = new StringBuilder();
         sb.append("📆 <b>").append(esc(subject)).append("</b>\n");
@@ -1610,7 +1769,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 StringBuilder exBlock = new StringBuilder();
                 exBlock.append(dot).append(" <b>").append(esc(ex.getSubject())).append("</b>\n");
                 if (ex.getStream() != null && !ex.getStream().isBlank())
-                    exBlock.append("🔢 ").append(tr(userId, "Поток", "Oqim", "Оқим")).append(": ").append(esc(ex.getStream())).append("\n");
+                    exBlock.append("🔢 ").append(tr(userId, "Поток", "Oqim", "Оқим", "Stream")).append(": ").append(esc(ex.getStream())).append("\n");
                 if (ex.getDate() != null && !ex.getDate().isBlank()) {
                     exBlock.append("📅 <b>").append(esc(ex.getDate())).append("</b>");
                     if (ex.getFrom() != null && !ex.getFrom().isBlank())
@@ -1619,7 +1778,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 }
                 if (ex.getRoom() != null && !ex.getRoom().isBlank())
                     exBlock.append("🚪 <b>").append(esc(ex.getRoom())).append("</b>\n");
-                exBlock.append(gradeIcon).append(" ").append(tr(userId, "Балл", "Ball", "Балл"))
+                exBlock.append(gradeIcon).append(" ").append(tr(userId, "Балл", "Ball", "Балл", "Score"))
                         .append(": <b>").append(esc(ex.getGrade())).append("</b>");
                 sb.append("<blockquote>").append(exBlock).append("</blockquote>\n");
             }
@@ -1634,45 +1793,45 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showProfile(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        sendProgress(chatId, tr(userId, "⏳ Профиль загружается...", "⏳ Profil yuklanmoqda...", "⏳ Профил юкланмоқда..."));
+        sendProgress(chatId, tr(userId, "⏳ Профиль загружается...", "⏳ Profil yuklanmoqda...", "⏳ Профил юкланмоқда...", "⏳ Loading profile..."));
 
         executor.submit(() -> {
             StudentInfo info = lmsService.getStudentInfo(userId);
             if (info == null) { send(chatId, t(userId, "common.no_data"), backOnly(userId)); return; }
 
             StringBuilder sb = new StringBuilder();
-            sb.append(tr(userId, "👤 <b>Профиль</b>", "👤 <b>Profil</b>", "👤 <b>Профил</b>")).append("\n");
+            sb.append(tr(userId, "👤 <b>Профиль</b>", "👤 <b>Profil</b>", "👤 <b>Профил</b>", "👤 <b>Profile</b>")).append("\n");
             sb.append("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n\n");
 
             String sid = info.getRecordBook() != null && !info.getRecordBook().isBlank()
                     ? info.getRecordBook() : "—";
             sb.append("<blockquote>")
-                    .append("🆔 ").append(tr(userId, "Студенческий №", "Talaba raqami", "Талаба рақами"))
+                    .append("🆔 ").append(tr(userId, "Студенческий №", "Talaba raqami", "Талаба рақами", "Student ID"))
                     .append(": <b>").append(esc(sid)).append("</b>")
                     .append("</blockquote>\n\n");
 
             StringBuilder p1 = new StringBuilder();
-            row(p1, "👤 " + tr(userId, "Ф.И.О", "F.I.O", "Ф.И.О"), info.getFullName());
-            row(p1, "🎂 " + tr(userId, "Дата рождения", "Tug'ilgan kun", "Туғилган кун"), info.getBirthDate());
-            row(p1, "⚧ " + tr(userId, "Пол", "Jinsi", "Жинси"), info.getGender());
-            row(p1, "🏠 " + tr(userId, "Адрес", "Manzil", "Манзил"), info.getAddress());
-            sb.append("📌 <b>").append(tr(userId, "Личные данные", "Shaxsiy ma'lumotlar", "Шахсий маълумотлар")).append("</b>\n")
+            row(p1, "👤 " + tr(userId, "Ф.И.О", "F.I.O", "Ф.И.О", "Full name"), info.getFullName());
+            row(p1, "🎂 " + tr(userId, "Дата рождения", "Tug'ilgan kun", "Туғилган кун", "Date of birth"), info.getBirthDate());
+            row(p1, "⚧ " + tr(userId, "Пол", "Jinsi", "Жинси", "Gender"), info.getGender());
+            row(p1, "🏠 " + tr(userId, "Адрес", "Manzil", "Манзил", "Address"), info.getAddress());
+            sb.append("📌 <b>").append(tr(userId, "Личные данные", "Shaxsiy ma'lumotlar", "Шахсий маълумотлар", "Personal details")).append("</b>\n")
                     .append("<blockquote>").append(p1.toString().trim()).append("</blockquote>\n\n");
 
             StringBuilder p2 = new StringBuilder();
-            row(p2, "🎓 " + tr(userId, "Направление", "Yo'nalish", "Йўналиш"), info.getDirection());
-            row(p2, "🌐 " + tr(userId, "Язык обучения", "O'qish tili", "Ўқиш тили"), info.getLanguage());
-            row(p2, "📜 " + tr(userId, "Степень", "Daraja", "Даража"), info.getDegree());
-            row(p2, "🏫 " + tr(userId, "Тип обучения", "O'qish turi", "Ўқиш тури"), info.getStudyType());
-            row(p2, "📅 " + tr(userId, "Курс", "Kurs", "Курс"), info.getCourse());
-            row(p2, "👥 " + tr(userId, "Группа", "Guruh", "Гуруҳ"), info.getGroup());
-            row(p2, "👨‍🏫 " + tr(userId, "Куратор", "Kurator", "Куратор"), info.getCurator());
-            row(p2, "💰 " + tr(userId, "Стипендия", "Stipendiya", "Стипендия"), info.getScholarship());
-            sb.append("📚 <b>").append(tr(userId, "Учебные данные", "O'quv ma'lumotlari", "Ўқув маълумотлари")).append("</b>\n")
+            row(p2, "🎓 " + tr(userId, "Направление", "Yo'nalish", "Йўналиш", "Field of study"), info.getDirection());
+            row(p2, "🌐 " + tr(userId, "Язык обучения", "O'qish tili", "Ўқиш тили", "Language of study"), info.getLanguage());
+            row(p2, "📜 " + tr(userId, "Степень", "Daraja", "Даража", "Degree"), info.getDegree());
+            row(p2, "🏫 " + tr(userId, "Тип обучения", "O'qish turi", "Ўқиш тури", "Form of study"), info.getStudyType());
+            row(p2, "📅 " + tr(userId, "Курс", "Kurs", "Курс", "Year"), info.getCourse());
+            row(p2, "👥 " + tr(userId, "Группа", "Guruh", "Гуруҳ", "Group"), info.getGroup());
+            row(p2, "👨‍🏫 " + tr(userId, "Куратор", "Kurator", "Куратор", "Curator"), info.getCurator());
+            row(p2, "💰 " + tr(userId, "Стипендия", "Stipendiya", "Стипендия", "Scholarship"), info.getScholarship());
+            sb.append("📚 <b>").append(tr(userId, "Учебные данные", "O'quv ma'lumotlari", "Ўқув маълумотлари", "Study details")).append("</b>\n")
                     .append("<blockquote>").append(p2.toString().trim()).append("</blockquote>");
 
             InlineKeyboardMarkup kb = markup(List.of(
-                    List.of(inlineBtn(tr(userId, "🖼 Фотография", "🖼 Foto", "🖼 Фото"), "profile_photo"))
+                    List.of(inlineBtn(tr(userId, "🖼 Фотография", "🖼 Foto", "🖼 Фото", "🖼 Photo"), "profile_photo"))
             ));
             send(chatId, sb.toString(), withBack(userId, kb));
         });
@@ -1685,13 +1844,13 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showProfilePhoto(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
-        sendProgress(chatId, tr(userId, "⏳ Загружаю фото...", "⏳ Foto yuklanmoqda...", "⏳ Фото юкланмоқда..."));
+        sendProgress(chatId, tr(userId, "⏳ Загружаю фото...", "⏳ Foto yuklanmoqda...", "⏳ Фото юкланмоқда...", "⏳ Loading photo..."));
         executor.submit(() -> {
             File tmp = null;
             try {
                 String dataUrl = lmsService.getProfilePhotoDataUrl(userId);
                 if (dataUrl == null || !dataUrl.startsWith("data:image")) {
-                    send(chatId, tr(userId, "📭 <b>Фото не найдено</b>", "📭 <b>Foto topilmadi</b>", "📭 <b>Фото топилмади</b>"), null);
+                    send(chatId, tr(userId, "📭 <b>Фото не найдено</b>", "📭 <b>Foto topilmadi</b>", "📭 <b>Фото топилмади</b>", "📭 <b>Photo not found</b>"), null);
                     return;
                 }
                 int comma = dataUrl.indexOf(',');
@@ -1721,7 +1880,8 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "🔒 <b>Сменить пароль</b>\n\n<blockquote>Введите <b>старый пароль</b>:</blockquote>",
                 "🔒 <b>Parolni o'zgartirish</b>\n\n<blockquote><b>Eski parol</b>ni kiriting:</blockquote>",
-                "🔒 <b>Паролни ўзгартириш</b>\n\n<blockquote><b>Эски парол</b>ни киритинг:</blockquote>"), null);
+                "🔒 <b>Паролни ўзгартириш</b>\n\n<blockquote><b>Эски парол</b>ни киритинг:</blockquote>",
+                "🔒 <b>Change password</b>\n\n<blockquote>Enter your <b>old password</b>:</blockquote>"), null);
     }
 
     // ─────────────────────────────────────────────
@@ -1730,15 +1890,15 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void showSettings(long chatId, long userId) {
         String currentLang = lang(userId);
-        String title = tr(userId, "⚙️ <b>Настройки</b>", "⚙️ <b>Sozlamalar</b>", "⚙️ <b>Созламалар</b>");
+        String title = tr(userId, "⚙️ <b>Настройки</b>", "⚙️ <b>Sozlamalar</b>", "⚙️ <b>Созламалар</b>", "⚙️ <b>Settings</b>");
         String body = "<blockquote>"
-                + tr(userId, "🌐 Язык", "🌐 Til", "🌐 Тил") + ": <b>" + esc(langLabel(currentLang)) + "</b>"
+                + tr(userId, "🌐 Язык", "🌐 Til", "🌐 Тил", "🌐 Language") + ": <b>" + esc(langLabel(currentLang)) + "</b>"
                 + "</blockquote>";
 
         InlineKeyboardMarkup kb = markup(List.of(
-                List.of(inlineBtn(tr(userId, "🌐 Сменить язык", "🌐 Tilni o'zgartirish", "🌐 Тилни ўзгартириш"), "settings_lang")),
-                List.of(inlineBtn(tr(userId, "🔒 Сменить пароль", "🔒 Parolni o'zgartirish", "🔒 Паролни ўзгартириш"), "settings_password")),
-                List.of(inlineBtn(tr(userId, "🚪 Выйти из аккаунта", "🚪 Akkauntdan chiqish", "🚪 Акkauntdan chiqish"), "settings_logout"))
+                List.of(inlineBtn(tr(userId, "🌐 Сменить язык", "🌐 Tilni o'zgartirish", "🌐 Тилни ўзгартириш", "🌐 Change language"), "settings_lang")),
+                List.of(inlineBtn(tr(userId, "🔒 Сменить пароль", "🔒 Parolni o'zgartirish", "🔒 Паролни ўзгартириш", "🔒 Change password"), "settings_password")),
+                List.of(inlineBtn(tr(userId, "🚪 Выйти из аккаунта", "🚪 Akkauntdan chiqish", "🚪 Акkauntdan chiqish", "🚪 Sign out"), "settings_logout"))
         ));
         send(chatId, title + "\n\n" + body, kb);
     }
@@ -1752,7 +1912,8 @@ public class LmsBot extends TelegramLongPollingBot {
         sendProgress(chatId, tr(userId,
                 "⏳ <b>Собираю дедлайны...</b>",
                 "⏳ <b>Deadlinelar yig'ilmoqda...</b>",
-                "⏳ <b>Дедлайнлар йиғилмоқда...</b>"));
+                "⏳ <b>Дедлайнлар йиғилмоқда...</b>",
+                "⏳ <b>Collecting deadlines...</b>"));
 
         executor.submit(() -> {
             List<Course> courses = userCourses.get(userId);
@@ -1772,7 +1933,8 @@ public class LmsBot extends TelegramLongPollingBot {
                 send(chatId, tr(userId,
                         "📭 <b>Список дедлайнов</b>\n\n<blockquote>Сначала откройте «Мои предметы».</blockquote>",
                         "📭 <b>Deadline ro'yxati</b>\n\n<blockquote>Avval «Mening fanlarim» bo'limini oching.</blockquote>",
-                        "📭 <b>Дедлайнлар рўйхати</b>\n\n<blockquote>Аввал «Менинг фанларим» бўлимига киринг.</blockquote>"), null);
+                        "📭 <b>Дедлайнлар рўйхати</b>\n\n<blockquote>Аввал «Менинг фанларим» бўлимига киринг.</blockquote>",
+                        "📭 <b>Deadlines</b>\n\n<blockquote>Open «My subjects» first.</blockquote>"), null);
                 return;
             }
 
@@ -1812,17 +1974,18 @@ public class LmsBot extends TelegramLongPollingBot {
             lastDeadlineItems.put(userId, allItems);
 
             StringBuilder sb = new StringBuilder();
-            sb.append(tr(userId, "🗓 <b>Список дедлайнов</b>", "🗓 <b>Deadline ro'yxati</b>", "🗓 <b>Дедлайнлар рўйхати</b>"))
+            sb.append(tr(userId, "🗓 <b>Список дедлайнов</b>", "🗓 <b>Deadline ro'yxati</b>", "🗓 <b>Дедлайнлар рўйхати</b>", "🗓 <b>Deadlines</b>"))
                     .append("\n");
             sb.append("<blockquote>")
-                    .append(tr(userId, "📭 Только не загруженные задания", "📭 Faqat yuklanmagan topshiriqlar", "📭 Фақат юкланмаган топшириқлар"))
+                    .append(tr(userId, "📭 Только не загруженные задания", "📭 Faqat yuklanmagan topshiriqlar", "📭 Фақат юкланмаган топшириқлар", "📭 Only assignments that are not uploaded"))
                     .append("</blockquote>\n\n");
 
             if (items.isEmpty()) {
                 sb.append("<blockquote>✅ ").append(tr(userId,
                         "Все задания загружены или дедлайнов нет.",
                         "Barcha topshiriqlar yuklangan yoki deadlinelar yo'q.",
-                        "Барча топшириқлар юкланган ёки дедлайнлар йўқ.")).append("</blockquote>");
+                        "Барча топшириқлар юкланган ёки дедлайнлар йўқ.",
+                        "Everything is uploaded or there are no deadlines.")).append("</blockquote>");
                 send(chatId, sb.toString(), backOnly(userId));
                 return;
             }
@@ -1835,14 +1998,14 @@ public class LmsBot extends TelegramLongPollingBot {
                 else rest.add(it);
             }
 
-            appendDeadlineGroup(sb, userId, tr(userId, "🔥 Остался 1 день", "🔥 1 kun qoldi", "🔥 1 кун қолди"), urgent, now);
-            appendDeadlineGroup(sb, userId, tr(userId, "⏳ Осталось 3 дня", "⏳ 3 kun qoldi", "⏳ 3 кун қолди"), d1_3, now);
+            appendDeadlineGroup(sb, userId, tr(userId, "🔥 Остался 1 день", "🔥 1 kun qoldi", "🔥 1 кун қолди", "🔥 1 day left"), urgent, now);
+            appendDeadlineGroup(sb, userId, tr(userId, "⏳ Осталось 3 дня", "⏳ 3 kun qoldi", "⏳ 3 кун қолди", "⏳ 3 days left"), d1_3, now);
             // Остальные — по порядку, но не все: только 4 ближайших
             List<DeadlineItem> restTop = rest.size() <= 4 ? rest : rest.subList(0, 4);
-            appendDeadlineGroup(sb, userId, tr(userId, "📌 Остальные (ближайшие 4)", "📌 Qolganlari (eng yaqin 4)", "📌 Қолганлари (энг яқин 4)"), restTop, now);
+            appendDeadlineGroup(sb, userId, tr(userId, "📌 Остальные (ближайшие 4)", "📌 Qolganlari (eng yaqin 4)", "📌 Қолганлари (энг яқин 4)", "📌 Others (next 4)"), restTop, now);
 
             InlineKeyboardMarkup kb = markup(List.of(List.of(
-                    inlineBtn(tr(userId, "📋 Все дедлайны", "📋 Barcha deadlinelar", "📋 Барча дедлайнлар"), "deadlines_all_0")
+                    inlineBtn(tr(userId, "📋 Все дедлайны", "📋 Barcha deadlinelar", "📋 Барча дедлайнлар", "📋 All deadlines"), "deadlines_all_0")
             )));
             send(chatId, sb.toString(), withBack(userId, kb));
         });
@@ -1867,7 +2030,7 @@ public class LmsBot extends TelegramLongPollingBot {
         long now = System.currentTimeMillis();
 
         StringBuilder sb = new StringBuilder();
-        sb.append(tr(userId, "📋 <b>Все дедлайны</b>", "📋 <b>Barcha deadlinelar</b>", "📋 <b>Барча дедлайнлар</b>"))
+        sb.append(tr(userId, "📋 <b>Все дедлайны</b>", "📋 <b>Barcha deadlinelar</b>", "📋 <b>Барча дедлайнлар</b>", "📋 <b>All deadlines</b>"))
                 .append("\n")
                 .append(t(userId, "common.page")).append(" ").append(page + 1).append(" / ").append(maxPage + 1)
                 .append("\n\n");
@@ -1881,8 +2044,8 @@ public class LmsBot extends TelegramLongPollingBot {
                     ? a.getDeadline().substring(0, 16) : (a.getDeadline() != null ? a.getDeadline() : "—");
             long diffMin = Math.max(0, (it.dl - now) / 60000L);
             String inStr = diffMin < 60
-                    ? tr(userId, "через " + diffMin + " мин", diffMin + " min ichida", diffMin + " мин ичида")
-                    : tr(userId, "через " + (diffMin / 60) + " ч", (diffMin / 60) + " soat ichida", (diffMin / 60) + " соат ичида");
+                    ? tr(userId, "через " + diffMin + " мин", diffMin + " min ichida", diffMin + " мин ичида", "in" + diffMin + " min")
+                    : tr(userId, "через " + (diffMin / 60) + " ч", (diffMin / 60) + " soat ichida", (diffMin / 60) + " соат ичида", "in" + (diffMin / 60) + " h");
 
             sb.append("<blockquote>")
                     .append(statusIcon).append(" <b>").append(esc(it.course)).append("</b>\n")
@@ -1895,10 +2058,10 @@ public class LmsBot extends TelegramLongPollingBot {
 
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         List<InlineKeyboardButton> nav = new ArrayList<>();
-        if (page > 0)      nav.add(inlineBtn(tr(userId, "⬅️ Предыдущий", "⬅️ Oldingi", "⬅️ Олдинги"), "deadlines_all_" + (page - 1)));
-        if (page < maxPage) nav.add(inlineBtn(tr(userId, "Следующий ➡️", "Keyingi ➡️", "Кейинги ➡️"), "deadlines_all_" + (page + 1)));
+        if (page > 0)      nav.add(inlineBtn(tr(userId, "⬅️ Предыдущий", "⬅️ Oldingi", "⬅️ Олдинги", "⬅️ Previous"), "deadlines_all_" + (page - 1)));
+        if (page < maxPage) nav.add(inlineBtn(tr(userId, "Следующий ➡️", "Keyingi ➡️", "Кейинги ➡️", "Next ➡️"), "deadlines_all_" + (page + 1)));
         if (!nav.isEmpty()) rows.add(nav);
-        rows.add(List.of(inlineBtn(tr(userId, "🔙 Назад", "🔙 Orqaga", "🔙 Орқага"), "deadlines_back")));
+        rows.add(List.of(inlineBtn(tr(userId, "🔙 Назад", "🔙 Orqaga", "🔙 Орқага", "🔙 Back"), "deadlines_back")));
 
         edit(chatId, messageId, sb.toString(), markup(rows));
     }
@@ -1915,14 +2078,15 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "⚠️ Ссылка на файл устарела. Откройте план занятий заново.",
                     "⚠️ Fayl havolasi eskirgan. \"📆 Fan rejasi\" bo'limidan qayta ochib ko'ring.",
-                    "⚠️ Файл ҳаволаси эскирган. «📆 Дарс режаси» бўлимидан қайта очиб кўринг."), null);
+                    "⚠️ Файл ҳаволаси эскирган. «📆 Дарс режаси» бўлимидан қайта очиб кўринг.",
+                    "⚠️ The file link has expired. Open the class plan again."), null);
             return;
         }
         if ("url".equals(att.getType())) {
             send(chatId, "🔗 <b>" + esc(att.getName()) + "</b>\n\n" + att.getUrl(), null);
             return;
         }
-        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."));
+        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда...", "⏳ Loading file..."));
         executor.submit(() -> {
             File tmp = null;
             try {
@@ -1948,17 +2112,18 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "⚠️ Данные устарели. Откройте активности заново.",
                     "⚠️ Ma'lumot eskirgan. Aktivnostlarni qayta oching.",
-                    "⚠️ Маълумот эскирган. Активностларни қайта очинг."), null);
+                    "⚠️ Маълумот эскирган. Активностларни қайта очинг.",
+                    "⚠️ The data is outdated. Open the activities again."), null);
             return;
         }
         Activity act = acts.get(actIndex);
         String url  = "sample".equals(which) ? act.getSampleFileUrl()  : act.getUploadedFileUrl();
         String name = "sample".equals(which) ? act.getSampleFileName() : act.getUploadedFileName();
         if (url == null || url.isBlank()) {
-            send(chatId, tr(userId, "📭 Файл не найден.", "📭 Fayl topilmadi.", "📭 Файл топилмади."), null);
+            send(chatId, tr(userId, "📭 Файл не найден.", "📭 Fayl topilmadi.", "📭 Файл топилмади.", "📭 File not found."), null);
             return;
         }
-        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда..."));
+        sendProgress(chatId, tr(userId, "⏳ Загружаю файл...", "⏳ Fayl yuklanmoqda...", "⏳ Файл юкланмоқда...", "⏳ Loading file..."));
         executor.submit(() -> {
             File tmp = null;
             try {
@@ -1991,7 +2156,8 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "📤 <b>Отправить задание</b>\n\n" + header + "<blockquote>• Макс. размер: 50 МБ\n• Типы: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar</blockquote>\n\nОтправьте файл или /cancel.",
                 "📤 <b>Topshiriqni yuborish</b>\n\n" + header + "<blockquote>• Maks. hajm: 50 MB\n• Turlari: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar</blockquote>\n\nFayl yuboring yoki /cancel yozing.",
-                "📤 <b>Топшириқни юбориш</b>\n\n" + header + "<blockquote>• Макс. ҳажм: 50 МБ\n• Турлари: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar</blockquote>\n\nФайл юборинг ёки /cancel ёзинг."), null);
+                "📤 <b>Топшириқни юбориш</b>\n\n" + header + "<blockquote>• Макс. ҳажм: 50 МБ\n• Турлари: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar</blockquote>\n\nФайл юборинг ёки /cancel ёзинг.",
+                "📤 <b>Submit assignment</b>\n\n" + header + "<blockquote>• Max size: 50 MB\n• Types: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar</blockquote>\n\nSend a file or /cancel."), null);
     }
 
     private void handleActivityFileUpload(long chatId, long userId, Message msg) {
@@ -2000,13 +2166,15 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "⚠️ Контекст загрузки утерян. Попробуйте снова.",
                     "⚠️ Upload kontekst yo'q. Qayta urinib ko'ring.",
-                    "⚠️ Юклаш контексти йўқ. Қайта уриниб кўринг."), null);
+                    "⚠️ Юклаш контексти йўқ. Қайта уриниб кўринг.",
+                    "⚠️ The upload context was lost. Please try again."), null);
             return;
         }
         sendProgress(chatId, tr(userId,
                 "⏳ Загружаю файл в LMS...",
                 "⏳ Fayl LMS ga yuklanmoqda...",
-                "⏳ Файл LMS га юкланмоқда..."));
+                "⏳ Файл LMS га юкланмоқда...",
+                "⏳ Uploading the file to LMS..."));
         executor.submit(() -> {
             File tmp = null;
             try {
@@ -2029,7 +2197,8 @@ public class LmsBot extends TelegramLongPollingBot {
                     send(chatId, tr(userId,
                             "❌ Неверный тип файла. Разрешены: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar",
                             "❌ Noto'g'ri fayl turi. Ruxsat: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar",
-                            "❌ Нотўғри файл тури. Рухсат: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar"), null);
+                            "❌ Нотўғри файл тури. Рухсат: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar",
+                            "❌ Wrong file type. Allowed: jpg, png, doc, docx, pdf, ppt, pptx, zip, rar"), null);
                     return;
                 }
                 org.telegram.telegrambots.meta.api.methods.GetFile gf = new org.telegram.telegrambots.meta.api.methods.GetFile();
@@ -2041,7 +2210,8 @@ public class LmsBot extends TelegramLongPollingBot {
                     send(chatId, tr(userId,
                             "❌ Файл слишком большой (макс. 50 МБ).",
                             "❌ Fayl juda katta (maks. 50 MB).",
-                            "❌ Файл жуда катта (макс. 50 МБ)."), null);
+                            "❌ Файл жуда катта (макс. 50 МБ).",
+                            "❌ The file is too large (max 50 MB)."), null);
                     return;
                 }
                 boolean ok = lmsService.uploadActivityFile(userId, pu.courseId, pu.activityId, tmp, filename);
@@ -2049,13 +2219,15 @@ public class LmsBot extends TelegramLongPollingBot {
                     send(chatId, tr(userId,
                             "✅ <b>Файл успешно загружен в LMS!</b>",
                             "✅ <b>Fayl muvaffaqiyatli LMS ga yuklandi!</b>",
-                            "✅ <b>Файл муваффақиятли LMS га юкланди!</b>"), null);
+                            "✅ <b>Файл муваффақиятли LMS га юкланди!</b>",
+                            "✅ <b>File uploaded to LMS!</b>"), null);
                     showActivities(chatId, userId, pu.courseId);
                 } else {
                     send(chatId, tr(userId,
                             "❌ Ошибка загрузки в LMS. Попробуйте позже.",
                             "❌ LMS ga yuklashda xatolik. Keyinroq urinib ko'ring.",
-                            "❌ LMS га юклашда хатолик. Кейинроқ уриниб кўринг."), null);
+                            "❌ LMS га юклашда хатолик. Кейинроқ уриниб кўринг.",
+                            "❌ Upload to LMS failed. Please try later."), null);
                 }
             } catch (Exception e) {
                 send(chatId, "❌ " + esc(e.getMessage()), null);
@@ -2137,6 +2309,12 @@ public class LmsBot extends TelegramLongPollingBot {
                                 + (l.teacher().isBlank() ? "" : "👨‍🏫 Ўқитувчи: <b>" + esc(l.teacher()) + "</b>\n")
                                 + "🕐 Вақт: <b>" + esc(l.time()) + "</b>\n"
                                 + (l.room().isBlank() ? "" : "🚪 Хона: <b>" + esc(l.room()) + "</b>\n")
+                                + "</blockquote>",
+                        "⏰ <b>Reminder: class in" + PAIR_REMINDER_BEFORE_MIN + " minutes</b>\n\n<blockquote>"
+                                + "📖 Subject: <b>" + esc(l.subject()) + "</b> · <i>" + esc(kind) + "</i>\n"
+                                + (l.teacher().isBlank() ? "" : "👨‍🏫 Teacher: <b>" + esc(l.teacher()) + "</b>\n")
+                                + "🕐 Time: <b>" + esc(l.time()) + "</b>\n"
+                                + (l.room().isBlank() ? "" : "🚪 Room: <b>" + esc(l.room()) + "</b>\n")
                                 + "</blockquote>"), null);
             }
         }
@@ -2148,8 +2326,9 @@ public class LmsBot extends TelegramLongPollingBot {
         sb.append(tr(userId,
                 "☀️ <b>Пары на сегодня</b> — первая через час",
                 "☀️ <b>Bugungi darslar</b> — birinchisi bir soatdan keyin",
-                "☀️ <b>Бугунги дарслар</b> — биринчиси бир соатдан кейин")).append("\n");
-        sb.append("<i>").append(tr(userId, "Всего пар: ", "Jami darslar: ", "Жами дарслар: ")).append(lessons.size()).append("</i>\n\n");
+                "☀️ <b>Бугунги дарслар</b> — биринчиси бир соатдан кейин",
+                "☀️ <b>Today's classes</b> — the first one starts in an hour")).append("\n");
+        sb.append("<i>").append(tr(userId, "Всего пар: ", "Jami darslar: ", "Жами дарслар: ", "Classes:")).append(lessons.size()).append("</i>\n\n");
         for (int i = 0; i < lessons.size(); i++) {
             uz.tuit.lmsbot.service.SemesterSchedule.Lesson l = lessons.get(i);
             StringBuilder b = new StringBuilder();
@@ -2158,10 +2337,10 @@ public class LmsBot extends TelegramLongPollingBot {
                     .append(esc(kindLabel(userId, l.kind()))).append("\n")
                     .append("<b>").append(esc(l.subject())).append("</b>");
             if (l.stream() != null) b.append(" · ").append(esc(l.stream()));
-            if (!l.room().isBlank()) b.append("\n🚪 ").append(tr(userId, "Кабинет", "Xona", "Хона")).append(": <b>").append(esc(l.room())).append("</b>");
+            if (!l.room().isBlank()) b.append("\n🚪 ").append(tr(userId, "Кабинет", "Xona", "Хона", "Room")).append(": <b>").append(esc(l.room())).append("</b>");
             if (!l.teacher().isBlank()) b.append("\n👨‍🏫 ").append(esc(l.teacher()));
             if (l.topic() != null && !l.topic().isBlank()) b.append("\n📝 <i>").append(esc(truncateTopic(l.topic(), 80))).append("</i>");
-            if (l.last()) b.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс"));
+            if (l.last()) b.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс", "Last class"));
             sb.append("<blockquote>").append(b).append("</blockquote>\n");
         }
         send(chatId, sb.toString(), null);
@@ -2196,7 +2375,10 @@ public class LmsBot extends TelegramLongPollingBot {
                                 + "📌 NB: <b>" + nb + "</b> (avval " + old + " edi)</blockquote>",
                         "🔴 <b>Янги НБ (дарс қолдирилди)</b>\n\n<blockquote>"
                                 + "📖 Фан: <b>" + esc(c.getSubject()) + "</b>\n"
-                                + "📌 НБ: <b>" + nb + "</b> (аввал " + old + " эди)</blockquote>"), null);
+                                + "📌 НБ: <b>" + nb + "</b> (аввал " + old + " эди)</blockquote>",
+                        "🔴 <b>New absence</b>\n\n<blockquote>"
+                                + "📖 Subject: <b>" + esc(c.getSubject()) + "</b>\n"
+                                + "📌 Absences now: <b>" + nb + "</b> (was" + old + ")</blockquote>"), null);
             }
         }
     }
@@ -2314,14 +2496,16 @@ public class LmsBot extends TelegramLongPollingBot {
                         inStr = tr(userId,
                                 "через " + diffMin + " мин",
                                 diffMin + " min ichida",
-                                diffMin + " мин ичида");
+                                diffMin + " мин ичида",
+                                "in" + diffMin + " min");
                     } else {
                         long h = diffMin / 60;
                         long m = diffMin % 60;
                         inStr = tr(userId,
                                 "через " + h + " ч " + m + " мин",
                                 h + " soat " + m + " min ichida",
-                                h + " соат " + m + " мин ичида");
+                                h + " соат " + m + " мин ичида",
+                                "in" + h + " h" + m + " min");
                     }
 
                     DeadlineMeta meta = new DeadlineMeta();
@@ -2335,30 +2519,32 @@ public class LmsBot extends TelegramLongPollingBot {
                     String title = tr(userId,
                             "🔔 <b>Напоминание о дедлайне</b>",
                             "🔔 <b>Deadline haqida eslatma</b>",
-                            "🔔 <b>Дедлайн ҳақида эслатма</b>");
+                            "🔔 <b>Дедлайн ҳақида эслатма</b>",
+                            "🔔 <b>Deadline reminder</b>");
 
                     String text = title + "\n\n<blockquote>"
-                            + "📖 " + tr(userId, "Предмет", "Fan", "Фан") + ": <b>" + esc(c.getSubject()) + "</b>\n"
+                            + "📖 " + tr(userId, "Предмет", "Fan", "Фан", "Subject") + ": <b>" + esc(c.getSubject()) + "</b>\n"
                             + "📝 " + esc(truncateTopic(a.getTask(), 90)) + "\n"
-                            + "⏰ " + tr(userId, "Дедлайн", "Deadline", "Дедлайн") + ": <b>" + esc(datePart) + "</b>\n"
+                            + "⏰ " + tr(userId, "Дедлайн", "Deadline", "Дедлайн", "Deadline") + ": <b>" + esc(datePart) + "</b>\n"
                             + "⏱ " + esc(inStr) + "\n"
-                            + "📌 " + tr(userId, "Статус", "Status", "Статус") + ": <b>📭 "
-                            + tr(userId, "Не загружено", "Yuklanmagan", "Юкланмаган") + "</b>\n"
-                            + "🔁 " + tr(userId, "Интервал напоминания", "Eslatma oralig'i", "Эслатма оралиғи") + ": <b>"
+                            + "📌 " + tr(userId, "Статус", "Status", "Статус", "Status") + ": <b>📭 "
+                            + tr(userId, "Не загружено", "Yuklanmagan", "Юкланмаган", "Not uploaded") + "</b>\n"
+                            + "🔁 " + tr(userId, "Интервал напоминания", "Eslatma oralig'i", "Эслатма оралиғи", "Reminder interval") + ": <b>"
                             + esc(tr(userId,
                             minutesToLabelRu(intervalMin),
                             minutesToLabelUzLat(intervalMin),
-                            minutesToLabelUzCyr(intervalMin)))
+                            minutesToLabelUzCyr(intervalMin),
+                            minutesToLabelEn(intervalMin)))
                             + "</b></blockquote>";
 
                     InlineKeyboardMarkup kb = markup(List.of(
                             List.of(
-                                    inlineBtn(tr(userId, "⏰ Через 30 мин", "⏰ 30 min keyin", "⏰ 30 мин кейин"),
+                                    inlineBtn(tr(userId, "⏰ Через 30 мин", "⏰ 30 min keyin", "⏰ 30 мин кейин", "⏰ In 30 min"),
                                             "dl_set_" + key + "_30"),
-                                    inlineBtn(tr(userId, "⏰ Через 1 час", "⏰ 1 soat keyin", "⏰ 1 соат кейин"),
+                                    inlineBtn(tr(userId, "⏰ Через 1 час", "⏰ 1 soat keyin", "⏰ 1 соат кейин", "⏰ In 1 hour"),
                                             "dl_set_" + key + "_60")),
                             List.of(inlineBtn(
-                                    tr(userId, "⏱ Изменить интервал", "⏱ Oraliqni o'zgartirish", "⏱ Оралиқни ўзгартириш"),
+                                    tr(userId, "⏱ Изменить интервал", "⏱ Oraliqni o'zgartirish", "⏱ Оралиқни ўзгартириш", "⏱ Change interval"),
                                     "dl_remind_" + key))
                     ));
                     send(chatId, text, kb);
@@ -2371,12 +2557,13 @@ public class LmsBot extends TelegramLongPollingBot {
         edit(chatId, messageId, tr(userId,
                         "⏱ <b>Напоминать через</b>\n\n<blockquote>Выберите интервал.</blockquote>",
                         "⏱ <b>Qachon eslatilsin</b>\n\n<blockquote>Oraliqni tanlang.</blockquote>",
-                        "⏱ <b>Қачон эслатилсин</b>\n\n<blockquote>Оралиқни танланг.</blockquote>"),
+                        "⏱ <b>Қачон эслатилсин</b>\n\n<blockquote>Оралиқни танланг.</blockquote>",
+                        "⏱ <b>Remind me in</b>\n\n<blockquote>Choose an interval.</blockquote>"),
                 markup(List.of(
-                        List.of(inlineBtn(tr(userId, "30 мин", "30 min", "30 мин"), "dl_set_" + key + "_30"),
-                                inlineBtn(tr(userId, "1 час", "1 soat", "1 соат"), "dl_set_" + key + "_60")),
-                        List.of(inlineBtn(tr(userId, "3 часа", "3 soat", "3 соат"), "dl_set_" + key + "_180"),
-                                inlineBtn(tr(userId, "5 часов", "5 soat", "5 соат"), "dl_set_" + key + "_300"))
+                        List.of(inlineBtn(tr(userId, "30 мин", "30 min", "30 мин", "30 min"), "dl_set_" + key + "_30"),
+                                inlineBtn(tr(userId, "1 час", "1 soat", "1 соат", "1 hour"), "dl_set_" + key + "_60")),
+                        List.of(inlineBtn(tr(userId, "3 часа", "3 soat", "3 соат", "3 hours"), "dl_set_" + key + "_180"),
+                                inlineBtn(tr(userId, "5 часов", "5 soat", "5 соат", "5 hours"), "dl_set_" + key + "_300"))
                 )));
     }
 
@@ -2452,20 +2639,22 @@ public class LmsBot extends TelegramLongPollingBot {
                 || t.equals("📅 Dars jadvali") || t.equals("📅 Расписание") || t.equals("📅 Дарс жадвали")
                 || t.equals("📖 O'quv reja") || t.equals("📖 Учебный план") || t.equals("📖 Ўқув режа")
                 || t.equals("🏆 Yakuniy imtihon") || t.equals("🏆 Итоговый экзамен") || t.equals("🏆 Якуний имтиҳон")
-                || t.equals("👤 Profil") || t.equals("👤 Профиль") || t.equals("👤 Профил");
+                || t.equals("👤 Profil") || t.equals("👤 Профиль") || t.equals("👤 Профил")
+                || t.equals("📚 My subjects") || t.equals("📅 Timetable") || t.equals("📖 Study plan")
+                || t.equals("🏆 Final exams") || t.equals("👤 Profile");
     }
 
-    private boolean isLoginCommand(String t)     { return "/login".equals(t) || "🔑 Kirish".equals(t) || "🔑 Войти".equals(t) || "🔑 Кириш".equals(t); }
-    private boolean isLogoutCommand(String t)    { return "/logout".equals(t) || "🚪 Chiqish".equals(t) || "🚪 Выйти".equals(t) || "🚪 Чиқиш".equals(t); }
-    private boolean isSettingsCommand(String t)  { return "⚙️ Sozlamalar".equals(t) || "⚙️ Настройки".equals(t) || "⚙️ Созламалар".equals(t); }
-    private boolean isDeadlinesListCommand(String t) { return "🗓 Deadline ro'yxati".equals(t) || "🗓 Список дедлайнов".equals(t) || "🗓 Дедлайнлар рўйхати".equals(t); }
+    private boolean isLoginCommand(String t)     { return "/login".equals(t) || "🔑 Kirish".equals(t) || "🔑 Войти".equals(t) || "🔑 Кириш".equals(t) || "🔑 Sign in".equals(t); }
+    private boolean isLogoutCommand(String t)    { return "/logout".equals(t) || "🚪 Chiqish".equals(t) || "🚪 Выйти".equals(t) || "🚪 Чиқиш".equals(t) || "🚪 Sign out".equals(t); }
+    private boolean isSettingsCommand(String t)  { return "⚙️ Sozlamalar".equals(t) || "⚙️ Настройки".equals(t) || "⚙️ Созламалар".equals(t) || "⚙️ Settings".equals(t); }
+    private boolean isDeadlinesListCommand(String t) { return "🗓 Deadline ro'yxati".equals(t) || "🗓 Список дедлайнов".equals(t) || "🗓 Дедлайнлар рўйхати".equals(t) || "🗓 Deadlines".equals(t); }
 
     // ─────────────────────────────────────────────
     //  KEYBOARDS
     // ─────────────────────────────────────────────
 
     private ReplyKeyboardMarkup loginKeyboard(long userId) {
-        String label = tr(userId, "🔑 Войти", "🔑 Kirish", "🔑 Кириш");
+        String label = tr(userId, "🔑 Войти", "🔑 Kirish", "🔑 Кириш", "🔑 Sign in");
         KeyboardRow row = new KeyboardRow();
         row.add(new KeyboardButton(label));
         ReplyKeyboardMarkup m = new ReplyKeyboardMarkup();
@@ -2475,12 +2664,12 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private ReplyKeyboardMarkup mainMenuKeyboard(long userId) {
-        String myCourses = tr(userId, "📚 Мои предметы", "📚 Mening fanlarim", "📚 Менинг фанларим");
-        String schedule  = tr(userId, "📅 Расписание", "📅 Dars jadvali", "📅 Дарс жадвали");
-        String plan      = tr(userId, "📖 Учебный план", "📖 O'quv reja", "📖 Ўқув режа");
-        String finals    = tr(userId, "🏆 Итоговый экзамен", "🏆 Yakuniy imtihon", "🏆 Якуний имтиҳон");
-        String profile   = tr(userId, "👤 Профиль", "👤 Profil", "👤 Профил");
-        String settings  = tr(userId, "⚙️ Настройки", "⚙️ Sozlamalar", "⚙️ Созламалар");
+        String myCourses = tr(userId, "📚 Мои предметы", "📚 Mening fanlarim", "📚 Менинг фанларим", "📚 My subjects");
+        String schedule  = tr(userId, "📅 Расписание", "📅 Dars jadvali", "📅 Дарс жадвали", "📅 Timetable");
+        String plan      = tr(userId, "📖 Учебный план", "📖 O'quv reja", "📖 Ўқув режа", "📖 Study plan");
+        String finals    = tr(userId, "🏆 Итоговый экзамен", "🏆 Yakuniy imtihon", "🏆 Якуний имтиҳон", "🏆 Final exams");
+        String profile   = tr(userId, "👤 Профиль", "👤 Profil", "👤 Профил", "👤 Profile");
+        String settings  = tr(userId, "⚙️ Настройки", "⚙️ Sozlamalar", "⚙️ Созламалар", "⚙️ Settings");
 
         KeyboardRow r1 = new KeyboardRow(); r1.add(new KeyboardButton(myCourses));
         KeyboardRow r2 = new KeyboardRow(); r2.add(new KeyboardButton(schedule));  r2.add(new KeyboardButton(plan));
@@ -2504,8 +2693,8 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private InlineKeyboardMarkup gpaChoiceKeyboard(long userId) {
         return markup(List.of(List.of(
-                inlineBtn(tr(userId, "✅ Оценённые предметы", "✅ Baholangan fanlar", "✅ Баҳоланган фанлар"), "gpa_all"),
-                inlineBtn(tr(userId, "⬜ С текущим сем. (0)", "⬜ Joriy semestr 0 bilan", "⬜ Жорий семестр 0 билан"), "gpa_with_zero")
+                inlineBtn(tr(userId, "✅ Оценённые предметы", "✅ Baholangan fanlar", "✅ Баҳоланган фанлар", "✅ Graded subjects"), "gpa_all"),
+                inlineBtn(tr(userId, "⬜ С текущим сем. (0)", "⬜ Joriy semestr 0 bilan", "⬜ Жорий семестр 0 билан", "⬜ With current sem. (0)"), "gpa_with_zero")
         )));
     }
 
@@ -2564,7 +2753,7 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void sendLanguageChoice(long chatId) {
-        send(chatId, "🌐 Tilni tanlang / Выберите язык:", langChoiceMarkup("lang_"));
+        send(chatId, "🌐 Tilni tanlang / Выберите язык / Choose a language:", langChoiceMarkup("lang_"));
     }
 
     private InlineKeyboardMarkup langChoiceMarkup() { return langChoiceMarkup("setlang_"); }
@@ -2572,7 +2761,8 @@ public class LmsBot extends TelegramLongPollingBot {
         return markup(List.of(
                 List.of(inlineBtn("🇷🇺 Русский",             prefix + "ru")),
                 List.of(inlineBtn("🇺🇿 O'zbekcha (lotin)",   prefix + "uz_lat")),
-                List.of(inlineBtn("🇺🇿 Ўзбекча (кирилл)",   prefix + "uz_cyr"))
+                List.of(inlineBtn("🇺🇿 Ўзбекча (кирилл)",   prefix + "uz_cyr")),
+                List.of(inlineBtn("🇬🇧 English",             prefix + "en"))
         ));
     }
 
@@ -2627,63 +2817,63 @@ public class LmsBot extends TelegramLongPollingBot {
         return userLang.containsKey(userId);
     }
 
-    private String tr(long userId, String ru, String uzLat, String uzCyr) {
-        return switch (lang(userId)) { case "ru" -> ru; case "uz_cyr" -> uzCyr; default -> uzLat; };
+    private String tr(long userId, String ru, String uzLat, String uzCyr, String en) {
+        return switch (lang(userId)) { case "ru" -> ru; case "uz_cyr" -> uzCyr; case "en" -> en; default -> uzLat; };
     }
 
     private String t(long userId, String key) {
         String l = lang(userId);
         return switch (key) {
-            case "common.no_data"        -> switch(l){ case "ru"->"📭 Данные не найдены.";        case "uz_cyr"->"📭 Маълумот топилмади.";        default->"📭 Ma'lumot topilmadi."; };
-            case "common.page"           -> switch(l){ case "ru"->"Страница";                     case "uz_cyr"->"Саҳифа";                        default->"Sahifa"; };
-            case "btn.back"              -> switch(l){ case "ru"->"🔙 Назад";                     case "uz_cyr"->"🔙 Орқага";                     default->"🔙 Orqaga"; };
-            case "btn.back_courses"      -> switch(l){ case "ru"->"🔙 Мои предметы";              case "uz_cyr"->"🔙 Менинг фанларим";            default->"🔙 Mening fanlarim"; };
-            case "btn.back_plan"         -> switch(l){ case "ru"->"🔙 Назад к плану";             case "uz_cyr"->"🔙 Режага қайтиш";              default->"🔙 O'quv rejaga qaytish"; };
-            case "btn.prev"              -> switch(l){ case "ru"->"⬅️ Назад";                     case "uz_cyr"->"⬅️ Олдинги";                    default->"⬅️ Oldingi"; };
-            case "btn.next"              -> switch(l){ case "ru"->"Вперёд ➡️";                    case "uz_cyr"->"Кейинги ➡️";                    default->"Keyingi ➡️"; };
-            case "btn.files"             -> switch(l){ case "ru"->"📂 Файлы";                     case "uz_cyr"->"📂 Файллар";                    default->"📂 Fayllar"; };
-            case "btn.attendance"        -> switch(l){ case "ru"->"📊 Посещаемость";              case "uz_cyr"->"📊 Давомат";                    default->"📊 Davomat"; };
-            case "btn.activities"        -> switch(l){ case "ru"->"📋 Активности";                case "uz_cyr"->"📋 Активностлар";               default->"📋 Aktivnosti"; };
-            case "btn.calendar"          -> switch(l){ case "ru"->"📆 План занятий";              case "uz_cyr"->"📆 Дарс режаси";                default->"📆 Fan rejasi"; };
-            case "btn.deadlines"         -> switch(l){ case "ru"->"🗓 Список дедлайнов";          case "uz_cyr"->"🗓 Дедлайнлар рўйхати";         default->"🗓 Deadline ro'yxati"; };
-            case "btn.change_semester"   -> switch(l){ case "ru"->"📅 Сменить семестр";           case "uz_cyr"->"📅 Семестрни ўзгартириш";       default->"📅 Semestrni o'zgartirish"; };
-            case "courses.loading"       -> switch(l){ case "ru"->"⏳ Загружаю предметы...";      case "uz_cyr"->"⏳ Фанлар юкланмоқда...";       default->"⏳ Fanlar yuklanmoqda..."; };
-            case "sem.unavailable"      -> switch(l){ case "ru"->"⚠️ Не удалось получить список семестров из LMS. Попробуйте позже или войдите заново: /login"; case "uz_cyr"->"⚠️ LMS дан семестрлар рўйхатини олиб бўлмади. Кейинроқ уриниб кўринг ёки қайта киринг: /login"; default->"⚠️ LMS dan semestrlar ro'yxatini olib bo'lmadi. Keyinroq urinib ko'ring yoki qayta kiring: /login"; };
-            case "courses.empty_semester"-> switch(l){ case "ru"->"📭 В этом семестре предметов не найдено."; case "uz_cyr"->"📭 Бу семестрда фанлар топилмади."; default->"📭 Bu semestrda fanlar topilmadi."; };
-            case "courses.total"         -> switch(l){ case "ru"->"Итого";                        case "uz_cyr"->"Жами";                          default->"Jami"; };
-            case "courses.subjects_suffix"->switch(l){ case "ru"->"предмет(ов)";                  case "uz_cyr"->"та фан";                        default->"ta fan"; };
-            case "att.loading"           -> switch(l){ case "ru"->"⏳ Загружается посещаемость..."; case "uz_cyr"->"⏳ Давомат юкланмоқда...";    default->"⏳ Davomat yuklanmoqda..."; };
-            case "att.none"              -> switch(l){ case "ru"->"📭 Данные по посещаемости не найдены."; case "uz_cyr"->"📭 Давомат маълумоти топилмади."; default->"📭 Davomat ma'lumoti topilmadi."; };
-            case "att.all_ok_title"      -> switch(l){ case "ru"->"✅ <b>Вы посетили все занятия!</b>"; case "uz_cyr"->"✅ <b>Барча дарсларда қатнашгансиз!</b>"; default->"✅ <b>Barcha darslarga qatnashgansiz!</b>"; };
-            case "att.total_lessons"     -> switch(l){ case "ru"->"📅 Всего занятий";             case "uz_cyr"->"📅 Жами дарслар";               default->"📅 Jami darslar"; };
-            case "att.missed"            -> switch(l){ case "ru"->"🔴 Пропущено";                 case "uz_cyr"->"🔴 Қолдирилган";                default->"🔴 Qoldirilgan"; };
-            case "att.reason_yes"        -> switch(l){ case "ru"->"✅ Есть уважительная причина"; case "uz_cyr"->"✅ Сабаб бор";                  default->"✅ Sabab bor"; };
-            case "att.reason_no"         -> switch(l){ case "ru"->"❌ Без уважительной причины";  case "uz_cyr"->"❌ Сабаб йўқ";                  default->"❌ Sabab yo'q"; };
-            case "cal.loading"           -> switch(l){ case "ru"->"⏳ Загружается план занятий..."; case "uz_cyr"->"⏳ Дарс режаси юкланмоқда..."; default->"⏳ Dars rejasi yuklanmoqda..."; };
-            case "cal.no_data"           -> switch(l){ case "ru"->"📭 Для этого предмета план занятий не найден."; case "uz_cyr"->"📭 Бу фан учун дарс режаси топилмади."; default->"📭 Bu fan uchun dars rejasi topilmadi."; };
-            case "cal.plan_label"        -> switch(l){ case "ru"->"план занятий";                 case "uz_cyr"->"режаси";                        default->"rejasi"; };
-            case "cal.files_empty"       -> switch(l){ case "ru"->"📁 Для этой темы нет файлов."; case "uz_cyr"->"📁 Бу мавзу учун файллар йўқ."; default->"📁 Bu mavzu uchun fayllar yo'q."; };
-            case "cal.files_title"       -> switch(l){ case "ru"->"📂 <b>Файлы</b>";              case "uz_cyr"->"📂 <b>Файллар</b>";              default->"📂 <b>Fayllar</b>"; };
-            case "cal.choose_type"       -> switch(l){ case "ru"->"Какой план хотите посмотреть?"; case "uz_cyr"->"Қайси режани кўрмоқчисиз?";   default->"Qaysi rejani ko'rmoqchisiz?"; };
-            case "act.loading"           -> switch(l){ case "ru"->"⏳ Загружаются активности..."; case "uz_cyr"->"⏳ Активностлар юкланмоқда..."; default->"⏳ Aktivnostlar yuklanmoqda..."; };
-            case "act.no_data"           -> switch(l){ case "ru"->"📭 Данные не загружены.";      case "uz_cyr"->"📭 Маълумот юкланмади.";        default->"📭 Ma'lumot yuklanmadi."; };
-            case "act.none"              -> switch(l){ case "ru"->"📭 Заданий нет.";              case "uz_cyr"->"📭 Топшириқлар йўқ.";           default->"📭 Topshiriqlar yo'q."; };
-            case "sched.loading"         -> switch(l){ case "ru"->"⏳ Загружается расписание..."; case "uz_cyr"->"⏳ Жадвал юкланмоқда...";       default->"⏳ Jadval yuklanmoqda..."; };
-            case "sched.empty"           -> switch(l){ case "ru"->"📭 В этом семестре расписание не найдено."; case "uz_cyr"->"📭 Бу семестрда жадвал топилмади."; default->"📭 Bu semestrda jadval topilmadi."; };
-            case "plan.title"            -> switch(l){ case "ru"->"Учебный план";                 case "uz_cyr"->"Ўқув режа";                     default->"O'quv reja"; };
-            case "plan.loading"          -> switch(l){ case "ru"->"⏳ Загружается учебный план..."; case "uz_cyr"->"⏳ Ўқув режа юкланмоқда...";  default->"⏳ O'quv reja yuklanmoqda..."; };
-            case "plan.semester_suffix"  -> switch(l){ case "ru"->"семестр";                      case "uz_cyr"->"семестр";                       default->"semestr"; };
-            case "plan.current"          -> switch(l){ case "ru"->"текущий";                      case "uz_cyr"->"жорий";                         default->"joriy"; };
-            case "plan.credits"          -> switch(l){ case "ru"->"кр";                           case "uz_cyr"->"кр";                            default->"kr"; };
-            case "plan.gpa_hint"         -> switch(l){ case "ru"->"Выберите метод расчёта GPA 👇"; case "uz_cyr"->"GPA ҳисоблаш усулини танланг 👇"; default->"GPA hisoblash usulini tanlang 👇"; };
-            case "plan.gpa_loading"      -> switch(l){ case "ru"->"⏳ Считаю GPA...";             case "uz_cyr"->"⏳ GPA ҳисобланмоқда...";        default->"⏳ GPA hisoblanmoqda..."; };
-            case "plan.gpa_mode_graded"  -> switch(l){ case "ru"->"Только оценённые предметы";    case "uz_cyr"->"Фақат баҳоланган фанлар";        default->"Faqat baholangan fanlar"; };
-            case "plan.gpa_mode_with_zero"->switch(l){ case "ru"->"Текущий семестр с 0";          case "uz_cyr"->"Жорий семестр 0 билан";          default->"Joriy semestr 0 bilan"; };
-            case "plan.calc_credits"     -> switch(l){ case "ru"->"Учтено кредитов";              case "uz_cyr"->"Ҳисобланган кредит";             default->"Hisoblangan kredit"; };
-            case "plan.gpa_no_grades"    -> switch(l){ case "ru"->"Нет оценок для расчёта.";      case "uz_cyr"->"Ҳисоблаш учун баҳолар топилмади."; default->"Hisoblash uchun baholar topilmadi."; };
-            case "finals.title"          -> switch(l){ case "ru"->"Итоговые экзамены";            case "uz_cyr"->"Якуний имтиҳонлар";             default->"Yakuniy imtihonlar"; };
-            case "finals.loading"        -> switch(l){ case "ru"->"⏳ Загружаются итоговые экзамены..."; case "uz_cyr"->"⏳ Якуний имтиҳонлар юкланмоқда..."; default->"⏳ Yakuniy imtihonlar yuklanmoqda..."; };
-            case "finals.empty"          -> switch(l){ case "ru"->"📭 В этом семестре итоговых экзаменов не найдено."; case "uz_cyr"->"📭 Бу семестрда якуний имтиҳон топилмади."; default->"📭 Bu semestrda yakuniy imtihon topilmadi."; };
+            case "common.no_data"        -> switch(l){ case "ru"->"📭 Данные не найдены."; case "en"->"📭 No data found.";        case "uz_cyr"->"📭 Маълумот топилмади.";        default->"📭 Ma'lumot topilmadi."; };
+            case "common.page"           -> switch(l){ case "ru"->"Страница"; case "en"->"Page";                     case "uz_cyr"->"Саҳифа";                        default->"Sahifa"; };
+            case "btn.back"              -> switch(l){ case "ru"->"🔙 Назад"; case "en"->"🔙 Back";                     case "uz_cyr"->"🔙 Орқага";                     default->"🔙 Orqaga"; };
+            case "btn.back_courses"      -> switch(l){ case "ru"->"🔙 Мои предметы"; case "en"->"🔙 My subjects";              case "uz_cyr"->"🔙 Менинг фанларим";            default->"🔙 Mening fanlarim"; };
+            case "btn.back_plan"         -> switch(l){ case "ru"->"🔙 Назад к плану"; case "en"->"🔙 Back to the plan";             case "uz_cyr"->"🔙 Режага қайтиш";              default->"🔙 O'quv rejaga qaytish"; };
+            case "btn.prev"              -> switch(l){ case "ru"->"⬅️ Назад"; case "en"->"⬅️ Back";                     case "uz_cyr"->"⬅️ Олдинги";                    default->"⬅️ Oldingi"; };
+            case "btn.next"              -> switch(l){ case "ru"->"Вперёд ➡️"; case "en"->"Next ➡️";                    case "uz_cyr"->"Кейинги ➡️";                    default->"Keyingi ➡️"; };
+            case "btn.files"             -> switch(l){ case "ru"->"📂 Файлы"; case "en"->"📂 Files";                     case "uz_cyr"->"📂 Файллар";                    default->"📂 Fayllar"; };
+            case "btn.attendance"        -> switch(l){ case "ru"->"📊 Посещаемость"; case "en"->"📊 Attendance";              case "uz_cyr"->"📊 Давомат";                    default->"📊 Davomat"; };
+            case "btn.activities"        -> switch(l){ case "ru"->"📋 Активности"; case "en"->"📋 Activities";                case "uz_cyr"->"📋 Активностлар";               default->"📋 Aktivnosti"; };
+            case "btn.calendar"          -> switch(l){ case "ru"->"📆 План занятий"; case "en"->"📆 Class plan";              case "uz_cyr"->"📆 Дарс режаси";                default->"📆 Fan rejasi"; };
+            case "btn.deadlines"         -> switch(l){ case "ru"->"🗓 Список дедлайнов"; case "en"->"🗓 Deadlines";          case "uz_cyr"->"🗓 Дедлайнлар рўйхати";         default->"🗓 Deadline ro'yxati"; };
+            case "btn.change_semester"   -> switch(l){ case "ru"->"📅 Сменить семестр"; case "en"->"📅 Change semester";           case "uz_cyr"->"📅 Семестрни ўзгартириш";       default->"📅 Semestrni o'zgartirish"; };
+            case "courses.loading"       -> switch(l){ case "ru"->"⏳ Загружаю предметы..."; case "en"->"⏳ Loading subjects...";      case "uz_cyr"->"⏳ Фанлар юкланмоқда...";       default->"⏳ Fanlar yuklanmoqda..."; };
+            case "sem.unavailable"      -> switch(l){ case "ru"->"⚠️ Не удалось получить список семестров из LMS. Попробуйте позже или войдите заново: /login"; case "en"->"⚠️ Could not get the semester list from LMS. Try later or sign in again: /login"; case "uz_cyr"->"⚠️ LMS дан семестрлар рўйхатини олиб бўлмади. Кейинроқ уриниб кўринг ёки қайта киринг: /login"; default->"⚠️ LMS dan semestrlar ro'yxatini olib bo'lmadi. Keyinroq urinib ko'ring yoki qayta kiring: /login"; };
+            case "courses.empty_semester"-> switch(l){ case "ru"->"📭 В этом семестре предметов не найдено."; case "en"->"📭 No subjects found in this semester."; case "uz_cyr"->"📭 Бу семестрда фанлар топилмади."; default->"📭 Bu semestrda fanlar topilmadi."; };
+            case "courses.total"         -> switch(l){ case "ru"->"Итого"; case "en"->"Total";                        case "uz_cyr"->"Жами";                          default->"Jami"; };
+            case "courses.subjects_suffix"->switch(l){ case "ru"->"предмет(ов)"; case "en"->"subject(s)";                  case "uz_cyr"->"та фан";                        default->"ta fan"; };
+            case "att.loading"           -> switch(l){ case "ru"->"⏳ Загружается посещаемость..."; case "en"->"⏳ Loading attendance..."; case "uz_cyr"->"⏳ Давомат юкланмоқда...";    default->"⏳ Davomat yuklanmoqda..."; };
+            case "att.none"              -> switch(l){ case "ru"->"📭 Данные по посещаемости не найдены."; case "en"->"📭 No attendance data found."; case "uz_cyr"->"📭 Давомат маълумоти топилмади."; default->"📭 Davomat ma'lumoti topilmadi."; };
+            case "att.all_ok_title"      -> switch(l){ case "ru"->"✅ <b>Вы посетили все занятия!</b>"; case "en"->"✅ <b>You attended every class!</b>"; case "uz_cyr"->"✅ <b>Барча дарсларда қатнашгансиз!</b>"; default->"✅ <b>Barcha darslarga qatnashgansiz!</b>"; };
+            case "att.total_lessons"     -> switch(l){ case "ru"->"📅 Всего занятий"; case "en"->"📅 Total classes";             case "uz_cyr"->"📅 Жами дарслар";               default->"📅 Jami darslar"; };
+            case "att.missed"            -> switch(l){ case "ru"->"🔴 Пропущено"; case "en"->"🔴 Missed";                 case "uz_cyr"->"🔴 Қолдирилган";                default->"🔴 Qoldirilgan"; };
+            case "att.reason_yes"        -> switch(l){ case "ru"->"✅ Есть уважительная причина"; case "en"->"✅ Excused"; case "uz_cyr"->"✅ Сабаб бор";                  default->"✅ Sabab bor"; };
+            case "att.reason_no"         -> switch(l){ case "ru"->"❌ Без уважительной причины"; case "en"->"❌ Unexcused";  case "uz_cyr"->"❌ Сабаб йўқ";                  default->"❌ Sabab yo'q"; };
+            case "cal.loading"           -> switch(l){ case "ru"->"⏳ Загружается план занятий..."; case "en"->"⏳ Loading the class plan..."; case "uz_cyr"->"⏳ Дарс режаси юкланмоқда..."; default->"⏳ Dars rejasi yuklanmoqda..."; };
+            case "cal.no_data"           -> switch(l){ case "ru"->"📭 Для этого предмета план занятий не найден."; case "en"->"📭 No class plan found for this subject."; case "uz_cyr"->"📭 Бу фан учун дарс режаси топилмади."; default->"📭 Bu fan uchun dars rejasi topilmadi."; };
+            case "cal.plan_label"        -> switch(l){ case "ru"->"план занятий"; case "en"->"class plan";                 case "uz_cyr"->"режаси";                        default->"rejasi"; };
+            case "cal.files_empty"       -> switch(l){ case "ru"->"📁 Для этой темы нет файлов."; case "en"->"📁 No files for this topic."; case "uz_cyr"->"📁 Бу мавзу учун файллар йўқ."; default->"📁 Bu mavzu uchun fayllar yo'q."; };
+            case "cal.files_title"       -> switch(l){ case "ru"->"📂 <b>Файлы</b>"; case "en"->"📂 <b>Files</b>";              case "uz_cyr"->"📂 <b>Файллар</b>";              default->"📂 <b>Fayllar</b>"; };
+            case "cal.choose_type"       -> switch(l){ case "ru"->"Какой план хотите посмотреть?"; case "en"->"Which plan do you want to see?"; case "uz_cyr"->"Қайси режани кўрмоқчисиз?";   default->"Qaysi rejani ko'rmoqchisiz?"; };
+            case "act.loading"           -> switch(l){ case "ru"->"⏳ Загружаются активности..."; case "en"->"⏳ Loading activities..."; case "uz_cyr"->"⏳ Активностлар юкланмоқда..."; default->"⏳ Aktivnostlar yuklanmoqda..."; };
+            case "act.no_data"           -> switch(l){ case "ru"->"📭 Данные не загружены."; case "en"->"📭 Data not loaded.";      case "uz_cyr"->"📭 Маълумот юкланмади.";        default->"📭 Ma'lumot yuklanmadi."; };
+            case "act.none"              -> switch(l){ case "ru"->"📭 Заданий нет."; case "en"->"📭 No assignments.";              case "uz_cyr"->"📭 Топшириқлар йўқ.";           default->"📭 Topshiriqlar yo'q."; };
+            case "sched.loading"         -> switch(l){ case "ru"->"⏳ Загружается расписание..."; case "en"->"⏳ Loading timetable..."; case "uz_cyr"->"⏳ Жадвал юкланмоқда...";       default->"⏳ Jadval yuklanmoqda..."; };
+            case "sched.empty"           -> switch(l){ case "ru"->"📭 В этом семестре расписание не найдено."; case "en"->"📭 No timetable found for this semester."; case "uz_cyr"->"📭 Бу семестрда жадвал топилмади."; default->"📭 Bu semestrda jadval topilmadi."; };
+            case "plan.title"            -> switch(l){ case "ru"->"Учебный план"; case "en"->"Study plan";                 case "uz_cyr"->"Ўқув режа";                     default->"O'quv reja"; };
+            case "plan.loading"          -> switch(l){ case "ru"->"⏳ Загружается учебный план..."; case "en"->"⏳ Loading study plan..."; case "uz_cyr"->"⏳ Ўқув режа юкланмоқда...";  default->"⏳ O'quv reja yuklanmoqda..."; };
+            case "plan.semester_suffix"  -> switch(l){ case "ru"->"семестр"; case "en"->"semester";                      case "uz_cyr"->"семестр";                       default->"semestr"; };
+            case "plan.current"          -> switch(l){ case "ru"->"текущий"; case "en"->"current";                      case "uz_cyr"->"жорий";                         default->"joriy"; };
+            case "plan.credits"          -> switch(l){ case "ru"->"кр"; case "en"->"cr";                           case "uz_cyr"->"кр";                            default->"kr"; };
+            case "plan.gpa_hint"         -> switch(l){ case "ru"->"Выберите метод расчёта GPA 👇"; case "en"->"Choose how to calculate GPA 👇"; case "uz_cyr"->"GPA ҳисоблаш усулини танланг 👇"; default->"GPA hisoblash usulini tanlang 👇"; };
+            case "plan.gpa_loading"      -> switch(l){ case "ru"->"⏳ Считаю GPA..."; case "en"->"⏳ Calculating GPA...";             case "uz_cyr"->"⏳ GPA ҳисобланмоқда...";        default->"⏳ GPA hisoblanmoqda..."; };
+            case "plan.gpa_mode_graded"  -> switch(l){ case "ru"->"Только оценённые предметы"; case "en"->"Graded subjects only";    case "uz_cyr"->"Фақат баҳоланган фанлар";        default->"Faqat baholangan fanlar"; };
+            case "plan.gpa_mode_with_zero"->switch(l){ case "ru"->"Текущий семестр с 0"; case "en"->"Current semester as 0";          case "uz_cyr"->"Жорий семестр 0 билан";          default->"Joriy semestr 0 bilan"; };
+            case "plan.calc_credits"     -> switch(l){ case "ru"->"Учтено кредитов"; case "en"->"Credits counted";              case "uz_cyr"->"Ҳисобланган кредит";             default->"Hisoblangan kredit"; };
+            case "plan.gpa_no_grades"    -> switch(l){ case "ru"->"Нет оценок для расчёта."; case "en"->"No grades to calculate.";      case "uz_cyr"->"Ҳисоблаш учун баҳолар топилмади."; default->"Hisoblash uchun baholar topilmadi."; };
+            case "finals.title"          -> switch(l){ case "ru"->"Итоговые экзамены"; case "en"->"Final exams";            case "uz_cyr"->"Якуний имтиҳонлар";             default->"Yakuniy imtihonlar"; };
+            case "finals.loading"        -> switch(l){ case "ru"->"⏳ Загружаются итоговые экзамены..."; case "en"->"⏳ Loading final exams..."; case "uz_cyr"->"⏳ Якуний имтиҳонлар юкланмоқда..."; default->"⏳ Yakuniy imtihonlar yuklanmoqda..."; };
+            case "finals.empty"          -> switch(l){ case "ru"->"📭 В этом семестре итоговых экзаменов не найдено."; case "en"->"📭 No final exams found in this semester."; case "uz_cyr"->"📭 Бу семестрда якуний имтиҳон топилмади."; default->"📭 Bu semestrda yakuniy imtihon topilmadi."; };
             default -> key;
         };
     }
@@ -2697,7 +2887,8 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "⚠️ Сначала войдите в систему! /login",
                     "⚠️ Avval tizimga kiring! /login",
-                    "⚠️ Аввал тизимга киринг! /login"), null);
+                    "⚠️ Аввал тизимга киринг! /login",
+                    "⚠️ Sign in first! /login"), null);
             return false;
         }
         return true;
@@ -2760,8 +2951,8 @@ public class LmsBot extends TelegramLongPollingBot {
                     ? a.getDeadline().substring(0, 16) : (a.getDeadline() != null ? a.getDeadline() : "—");
             long diffMin = Math.max(0, (it.dl - now) / 60000L);
             String inStr = diffMin < 60
-                    ? tr(userId, "через " + diffMin + " мин", diffMin + " min ichida", diffMin + " мин ичида")
-                    : tr(userId, "через " + (diffMin / 60) + " ч", (diffMin / 60) + " soat ichida", (diffMin / 60) + " соат ичида");
+                    ? tr(userId, "через " + diffMin + " мин", diffMin + " min ichida", diffMin + " мин ичида", "in" + diffMin + " min")
+                    : tr(userId, "через " + (diffMin / 60) + " ч", (diffMin / 60) + " soat ichida", (diffMin / 60) + " соат ичида", "in" + (diffMin / 60) + " h");
             sb.append("<blockquote>")
                     .append("📭 <b>").append(esc(it.course)).append("</b>\n")
                     .append("📝 ").append(esc(truncateTopic(a.getTask(), 60))).append("\n")
@@ -2842,17 +3033,17 @@ public class LmsBot extends TelegramLongPollingBot {
         String c = a.getCriteria();
         if (c == null || c.isBlank()) return "";
         if (c.length() > 300) c = c.substring(0, 299) + "…";
-        return "\n📐 <i>" + esc(tr(userId, "Критерии", "Mezonlar", "Мезонлар")) + ": " + esc(c) + "</i>";
+        return "\n📐 <i>" + esc(tr(userId, "Критерии", "Mezonlar", "Мезонлар", "Criteria")) + ": " + esc(c) + "</i>";
     }
 
     private String gradeIcon(int g) { return switch(g){ case 5->"🟢"; case 4->"🔵"; case 3->"🟡"; case 2->"🔴"; default->"⬜"; }; }
 
     private String gpaComment(long userId, double gpa) {
-        if (gpa >= 4.5) return tr(userId, "Отличный результат! Так держать! 🚀", "A'lo natija! Davom eting! 🚀", "Аъло натижа! Давом этинг! 🚀");
-        if (gpa >= 4.0) return tr(userId, "Хороший результат! 👍", "Yaxshi natija! 👍", "Яхши натижа! 👍");
-        if (gpa >= 3.5) return tr(userId, "Выше среднего.", "O'rtacha yaxshi natija.", "Ўртачадан юқори.");
-        if (gpa >= 3.0) return tr(userId, "Средний результат, есть куда расти.", "O'rtacha natija, yaxshilash mumkin.", "Ўртача натижа, яхшилаш мумкин.");
-        return tr(userId, "Слабый результат, нужно больше усилий! 💪", "Past natija, ko'proq harakat kerak! 💪", "Паст натижа, кўпроқ ҳаракат керак! 💪");
+        if (gpa >= 4.5) return tr(userId, "Отличный результат! Так держать! 🚀", "A'lo natija! Davom eting! 🚀", "Аъло натижа! Давом этинг! 🚀", "Excellent result! Keep it up! 🚀");
+        if (gpa >= 4.0) return tr(userId, "Хороший результат! 👍", "Yaxshi natija! 👍", "Яхши натижа! 👍", "Good result! 👍");
+        if (gpa >= 3.5) return tr(userId, "Выше среднего.", "O'rtacha yaxshi natija.", "Ўртачадан юқори.", "Above average.");
+        if (gpa >= 3.0) return tr(userId, "Средний результат, есть куда расти.", "O'rtacha natija, yaxshilash mumkin.", "Ўртача натижа, яхшилаш мумкин.", "Average result, room to grow.");
+        return tr(userId, "Слабый результат, нужно больше усилий! 💪", "Past natija, ko'proq harakat kerak! 💪", "Паст натижа, кўпроқ ҳаракат керак! 💪", "Weak result, more effort needed! 💪");
     }
 
     /**
@@ -2868,7 +3059,7 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private String langLabel(String lang) {
-        return switch (lang) { case "ru" -> "Русский"; case "uz_cyr" -> "Ўзбекча (кирилл)"; default -> "O'zbekcha (lotin)"; };
+        return switch (lang) { case "ru" -> "Русский"; case "uz_cyr" -> "Ўзбекча (кирилл)"; case "en" -> "English"; default -> "O'zbekcha (lotin)"; };
     }
 
     private void setUserLang(long userId, String lang) {
@@ -2883,6 +3074,9 @@ public class LmsBot extends TelegramLongPollingBot {
     }
     private String minutesToLabelUzLat(int m) {
         return switch(m){ case 1->"1 minut"; case 30->"30 minut"; case 60->"1 soat"; case 180->"3 soat"; case 300->"5 soat"; default->m+" min"; };
+    }
+    private String minutesToLabelEn(int m) {
+        return switch(m){ case 1->"1 minute"; case 30->"30 minutes"; case 60->"1 hour"; case 180->"3 hours"; case 300->"5 hours"; default->m+" min"; };
     }
     private String minutesToLabelUzCyr(int m) {
         return switch(m){ case 1->"1 минут"; case 30->"30 минут"; case 60->"1 соат"; case 180->"3 соат"; case 300->"5 соат"; default->m+" мин"; };
@@ -2907,16 +3101,17 @@ public class LmsBot extends TelegramLongPollingBot {
         publishCommands(null, "uz_lat");   // список по умолчанию
         publishCommands("uz", "uz_lat");
         publishCommands("ru", "ru");
-        publishCommands("en", "uz_lat");
+        publishCommands("en", "en");
+        publishDescriptions();
     }
 
     private void publishCommands(String languageCode, String lang) {
         List<BotCommand> commands = List.of(
-                botCommand("start",   lang, "Перезапустить бота",  "Botni qayta ishga tushirish", "Ботни қайта ишга тушириш"),
-                botCommand("app",     lang, "Открыть приложение",  "Ilovani ochish",              "Иловани очиш"),
-                botCommand("login",   lang, "Войти в LMS",         "LMS ga kirish",               "LMS га кириш"),
-                botCommand("courses", lang, "Мои предметы",        "Mening fanlarim",             "Менинг фанларим"),
-                botCommand("logout",  lang, "Выйти",               "Chiqish",                     "Чиқиш")
+                botCommand("start",   lang, "Перезапустить бота",  "Botni qayta ishga tushirish", "Ботни қайта ишга тушириш", "Restart the bot"),
+                botCommand("app",     lang, "Открыть приложение",  "Ilovani ochish",              "Иловани очиш", "Open the app"),
+                botCommand("login",   lang, "Войти в LMS",         "LMS ga kirish",               "LMS га кириш", "Sign in to LMS"),
+                botCommand("courses", lang, "Мои предметы",        "Mening fanlarim",             "Менинг фанларим", "My subjects"),
+                botCommand("logout",  lang, "Выйти",               "Chiqish",                     "Чиқиш", "Sign out")
         );
         try {
             SetMyCommands.SetMyCommandsBuilder b = SetMyCommands.builder()
@@ -2929,8 +3124,8 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
-    private BotCommand botCommand(String cmd, String lang, String ru, String uzLat, String uzCyr) {
-        String desc = switch (lang) { case "ru" -> ru; case "uz_cyr" -> uzCyr; default -> uzLat; };
+    private BotCommand botCommand(String cmd, String lang, String ru, String uzLat, String uzCyr, String en) {
+        String desc = switch (lang) { case "ru" -> ru; case "uz_cyr" -> uzCyr; case "en" -> en; default -> uzLat; };
         return new BotCommand(cmd, desc);
     }
 
@@ -3017,7 +3212,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private InlineKeyboardMarkup appKeyboard(long userId) {
         if (webAppUrl == null) return null;
         InlineKeyboardButton btn = new InlineKeyboardButton();
-        btn.setText(tr(userId, "🎓 Интерактивный LMS", "🎓 Interaktiv LMS", "🎓 Интерактив LMS"));
+        btn.setText(tr(userId, "🎓 Интерактивный LMS", "🎓 Interaktiv LMS", "🎓 Интерактив LMS", "🎓 Interactive LMS"));
         btn.setWebApp(new org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo(webAppUrl));
         return markup(List.of(List.of(btn)));
     }
@@ -3029,13 +3224,15 @@ public class LmsBot extends TelegramLongPollingBot {
             send(chatId, tr(userId,
                     "📱 Приложение пока недоступно.",
                     "📱 Ilova hozircha mavjud emas.",
-                    "📱 Илова ҳозирча мавжуд эмас."), null);
+                    "📱 Илова ҳозирча мавжуд эмас.",
+                    "📱 The app is not available yet."), null);
             return;
         }
         send(chatId, tr(userId,
                 "🎓 <b>Интерактивный LMS</b>\n\nВсе разделы — предметы, расписание, дедлайны, оценки — в одном приложении.",
                 "🎓 <b>Interaktiv LMS</b>\n\nBarcha bo'limlar — fanlar, jadval, deadlinelar, baholar — bitta ilovada.",
-                "🎓 <b>Интерактив LMS</b>\n\nБарча бўлимлар — фанлар, жадвал, дедлайнлар, баҳолар — битта иловада."),
+                "🎓 <b>Интерактив LMS</b>\n\nБарча бўлимлар — фанлар, жадвал, дедлайнлар, баҳолар — битта иловада.",
+                "🎓 <b>Interactive LMS</b>\n\nEvery section — subjects, timetable, deadlines, grades — in one app."),
                 kb);
     }
 
@@ -3049,11 +3246,99 @@ public class LmsBot extends TelegramLongPollingBot {
         send(chatId, tr(userId,
                 "🎓 <b>Интерактивный LMS</b> — расписание на весь семестр, дедлайны, оценки, GPA и загрузка работ в удобном приложении 👇",
                 "🎓 <b>Interaktiv LMS</b> — butun semestr jadvali, deadlinelar, baholar, GPA va ishlarni yuklash qulay ilovada 👇",
-                "🎓 <b>Интерактив LMS</b> — бутун семестр жадвали, дедлайнлар, баҳолар, GPA ва ишларни юклаш қулай иловада 👇"),
+                "🎓 <b>Интерактив LMS</b> — бутун семестр жадвали, дедлайнлар, баҳолар, GPA ва ишларни юклаш қулай иловада 👇",
+                "🎓 <b>Interactive LMS</b> — the whole-semester timetable, deadlines, grades, GPA and work uploads in a handy app 👇"),
                 kb);
     }
 
+    // ─────────────────────────────────────────────
+    //  STUDENTS REGISTRY (панель администратора)
+    // ─────────────────────────────────────────────
+
+    public uz.tuit.lmsbot.service.StudentRegistry students() {
+        return students;
+    }
+
+    private void noteUser(org.telegram.telegrambots.meta.api.objects.User u) {
+        if (u == null) return;
+        String name = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
+                + (u.getLastName() == null ? "" : u.getLastName())).trim();
+        tgIdentity.put(u.getId(), new String[]{name, u.getUserName()});
+        if (lmsService.isLoggedIn(u.getId())) students.onSeen(u.getId(), name, u.getUserName());
+    }
+
+    /** Успешный вход в боте: запись в списке студентов и кнопка приложения. */
+    private void onBotLogin(long chatId, long userId) {
+        String[] id = tgIdentity.getOrDefault(userId, new String[]{null, null});
+        students.onLogin(userId, userLogin.get(userId), id[0], id[1]);
+        sendAppAfterLogin(chatId, userId);
+    }
+
+    private static final String BACKUP_NAME = "students.json";
+    private volatile Integer backupMessageId;
+
+    /**
+     * Резервная копия списка студентов — закреплённый документ в чате администратора.
+     * Одно сообщение, которое при каждом обновлении подменяется новым файлом.
+     */
+    private synchronized void backupStudents(byte[] json) {
+        String chat = String.valueOf(AppConfig.primaryAdmin());
+        if (backupMessageId != null) {
+            try {
+                org.telegram.telegrambots.meta.api.objects.media.InputMediaDocument media =
+                        new org.telegram.telegrambots.meta.api.objects.media.InputMediaDocument();
+                media.setMedia(new java.io.ByteArrayInputStream(json), BACKUP_NAME);
+                media.setCaption(backupCaption());
+                execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageMedia.builder()
+                        .chatId(chat).messageId(backupMessageId).media(media).build());
+                return;
+            } catch (Exception e) {
+                // Сообщение удалили вручную — создаём новое.
+                backupMessageId = null;
+            }
+        }
+        try {
+            SendDocument doc = new SendDocument();
+            doc.setChatId(chat);
+            doc.setDocument(new InputFile(new java.io.ByteArrayInputStream(json), BACKUP_NAME));
+            doc.setCaption(backupCaption());
+            doc.setDisableNotification(true);
+            Message sent = execute(doc);
+            backupMessageId = sent.getMessageId();
+            org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage pin =
+                    new org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage(chat, sent.getMessageId());
+            pin.setDisableNotification(true);
+            execute(pin);
+        } catch (Exception e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
+    private String backupCaption() {
+        return "🗂 Резервная копия списка студентов для панели администратора. "
+                + "Не удаляйте и не открепляйте — после перезапуска бот восстанавливает список отсюда.";
+    }
+
+    /** При старте: поднять список студентов из закреплённой резервной копии. */
+    public void restoreStudents() {
+        try {
+            org.telegram.telegrambots.meta.api.objects.Chat chat = execute(
+                    new org.telegram.telegrambots.meta.api.methods.groupadministration.GetChat(String.valueOf(AppConfig.primaryAdmin())));
+            Message pinned = chat.getPinnedMessage();
+            if (pinned == null || !pinned.hasDocument() || !BACKUP_NAME.equals(pinned.getDocument().getFileName())) return;
+            backupMessageId = pinned.getMessageId();
+            org.telegram.telegrambots.meta.api.methods.GetFile gf = new org.telegram.telegrambots.meta.api.methods.GetFile();
+            gf.setFileId(pinned.getDocument().getFileId());
+            try (java.io.InputStream in = downloadFileAsStream(execute(gf))) {
+                students.restore(in.readAllBytes());
+            }
+        } catch (Exception e) {
+            System.err.println("[LmsBot] restoreStudents: " + e.getMessage());
+        }
+    }
+
     public void shutdown() {
+        students.flush();
         executor.shutdown();
         scheduler.shutdown();
         try { if (!executor.awaitTermination(10, TimeUnit.SECONDS)) executor.shutdownNow(); }

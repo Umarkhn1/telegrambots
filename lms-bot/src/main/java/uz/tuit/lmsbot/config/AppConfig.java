@@ -17,6 +17,26 @@ public class AppConfig {
      */
     public static final java.time.ZoneId LMS_ZONE = java.time.ZoneId.of("Asia/Tashkent");
 
+    /**
+     * Администраторы — Telegram id через запятую в ADMIN_IDS. Им доступна панель со списком
+     * студентов; по умолчанию — владелец бота.
+     */
+    private static final java.util.Set<Long> ADMINS = parseAdmins(System.getenv("ADMIN_IDS"));
+
+    private static java.util.Set<Long> parseAdmins(String raw) {
+        java.util.Set<Long> out = new java.util.LinkedHashSet<>();
+        for (String p : (raw == null || raw.isBlank() ? "743813399" : raw).split("[,\\s]+")) {
+            try { out.add(Long.parseLong(p.trim())); } catch (NumberFormatException ignored) {}
+        }
+        if (out.isEmpty()) out.add(743813399L);
+        return java.util.Collections.unmodifiableSet(out);
+    }
+
+    public static boolean isAdmin(long userId) { return ADMINS.contains(userId); }
+
+    /** Первый администратор — в его чате хранится резервная копия списка студентов. */
+    public static long primaryAdmin() { return ADMINS.iterator().next(); }
+
     private BotConfig bot = new BotConfig();
     private LmsConfig lms = new LmsConfig();
 

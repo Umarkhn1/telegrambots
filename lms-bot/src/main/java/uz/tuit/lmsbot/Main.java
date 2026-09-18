@@ -32,6 +32,7 @@ public class Main {
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         botsApi.registerBot(bot);
         bot.applyBotCommands();
+        bot.restoreStudents();
 
         // ✅ НОВОЕ: чистая остановка всех потоков при Ctrl+C или kill
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

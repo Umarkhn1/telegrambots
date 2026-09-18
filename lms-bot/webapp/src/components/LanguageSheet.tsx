@@ -3,7 +3,7 @@ import { LANG_NAMES, useI18n } from '../lib/i18n';
 import type { Lang } from '../lib/types';
 import { Sheet } from './Sheet';
 
-const CODES: Record<Lang, string> = { ru: 'RU', uz_lat: "O'Z", uz_cyr: 'ЎЗ' };
+const CODES: Record<Lang, string> = { ru: 'RU', uz_lat: "O'Z", uz_cyr: 'ЎЗ', en: 'EN' };
 
 export function LanguageSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { lang, setLang, t } = useI18n();

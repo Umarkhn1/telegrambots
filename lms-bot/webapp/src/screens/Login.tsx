@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CircleAlert, Eye, EyeOff, GraduationCap, Globe, KeyRound, LoaderCircle, Smartphone, UserRound } from 'lucide-react';
+import { CircleAlert, Eye, EyeOff, Globe, KeyRound, LoaderCircle, Smartphone, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
 import { Segmented } from '../components/ui';
@@ -141,7 +141,7 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button className="semester-chip" onClick={() => setLangOpen(true)}>
             <Globe size={15} />
-            {lang === 'ru' ? 'RU' : lang === 'uz_lat' ? "O'Z" : 'ЎЗ'}
+            {lang === 'ru' ? 'RU' : lang === 'uz_lat' ? "O'Z" : lang === 'en' ? 'EN' : 'ЎЗ'}
           </button>
         </div>
 
@@ -151,9 +151,7 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
           transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
           style={{ marginTop: 18 }}
         >
-          <div className="brand">
-            <GraduationCap size={32} strokeWidth={1.9} />
-          </div>
+          <img src="./tuit-emblem.png" alt="TUIT" className="emblem small" />
           <h1 className="page-title" style={{ marginTop: 22 }}>{step === 'code' ? t('f_code') : t('login_title')}</h1>
           <div className="page-sub" style={{ fontSize: 15 }}>
             {step === 'code' ? (way === 'mobile' ? t('code_sent', { phone: sentTo }) : t('code_2fa')) : t('login_sub')}

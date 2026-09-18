@@ -5,7 +5,7 @@ export type Tab = 'home' | 'courses' | 'schedule' | 'grades' | 'profile';
 export const TABS: Tab[] = ['home', 'courses', 'schedule', 'grades', 'profile'];
 
 /** Экраны, которые открываются поверх вкладки и закрываются «Назад». */
-export type Route = { name: 'course'; course: Course } | { name: 'deadlines' };
+export type Route = { name: 'course'; course: Course } | { name: 'deadlines' } | { name: 'admin' };
 
 export type ThemePref = 'system' | 'light' | 'dark';
 

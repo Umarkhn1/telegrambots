@@ -1,4 +1,4 @@
-export type Lang = 'ru' | 'uz_lat' | 'uz_cyr';
+export type Lang = 'ru' | 'uz_lat' | 'uz_cyr' | 'en';
 
 export interface Semester {
   id: number;
@@ -11,6 +11,7 @@ export interface Me {
   lang: Lang | null;
   loggedIn: boolean;
   botUsername: string;
+  admin?: boolean;
   semesters?: Semester[];
   currentSemesterId?: number | null;
 }
@@ -152,4 +153,36 @@ export interface Contract {
   total?: number | null;
   paid?: number | null;
   debt?: number | null;
+}
+
+export interface AdminStudent {
+  telegramId: number;
+  tgName: string | null;
+  tgUsername: string | null;
+  fullName: string | null;
+  login: string | null;
+  recordBook: string | null;
+  group: string | null;
+  direction: string | null;
+  course: string | null;
+  gender: string | null;
+  birthDate: string | null;
+  curator: string | null;
+  studyType: string | null;
+  language: string | null;
+  gpa: number | null;
+  firstSeen: number;
+  lastSeen: number;
+}
+
+export type AdminFilterKey = 'group' | 'course' | 'direction' | 'gender' | 'studyType' | 'language';
+
+export interface AdminStudentsResponse {
+  items: AdminStudent[];
+  total: number;
+  page: number;
+  pages: number;
+  size: number;
+  stats: { total: number; active24h: number; active7d: number; avgGpa: number | null };
+  facets: Record<AdminFilterKey, string[]>;
 }

@@ -1,6 +1,7 @@
 import { initData } from './tg';
 import type {
   ActivitiesResponse,
+  AdminStudentsResponse,
   AttendanceResponse,
   CalendarTab,
   Contract,
@@ -82,6 +83,9 @@ export const api = {
   changePassword: (old: string, next: string, confirm: string) =>
     post<{ ok: boolean }>('/api/profile/password', { old, new: next, confirm }),
   setLang: (lang: string) => post('/api/settings', { lang }),
+
+  adminStudents: (params: Record<string, string | number>, fresh?: boolean) =>
+    get<AdminStudentsResponse>('/api/admin/students?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString(), fresh),
 
   sendFile: (url: string, name: string) => post('/api/files/send', { url, name }),
   fileLink: (url: string, name: string) => post<{ path: string }>('/api/files/link', { url, name }),

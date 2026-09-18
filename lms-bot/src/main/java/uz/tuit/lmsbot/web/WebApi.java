@@ -5,6 +5,7 @@ import uz.tuit.lmsbot.config.AppConfig;
 import uz.tuit.lmsbot.model.*;
 import uz.tuit.lmsbot.service.LmsService;
 import uz.tuit.lmsbot.service.SemesterSchedule;
+import uz.tuit.lmsbot.service.StudentRegistry;
 import uz.tuit.lmsbot.util.LmsDates;
 
 import java.io.File;
@@ -26,7 +27,7 @@ import static uz.tuit.lmsbot.web.WebServer.Req;
  */
 public class WebApi {
 
-    private static final Set<String> LANGS = Set.of("ru", "uz_lat", "uz_cyr");
+    private static final Set<String> LANGS = Set.of("ru", "uz_lat", "uz_cyr", "en");
     private static final Set<String> UPLOAD_EXT = Set.of("jpg", "jpeg", "png", "doc", "docx", "pdf", "ppt", "pptx", "zip", "rar");
     private static final long UPLOAD_LIMIT = 50L * 1024 * 1024;
 
@@ -91,6 +92,8 @@ public class WebApi {
         s.publicGet("/api/files/get", this::fileGet);
         s.post("/api/upload", this::upload);
 
+        s.get("/api/admin/students", this::adminStudents);
+
         s.start(port);
     }
 
@@ -101,7 +104,10 @@ public class WebApi {
     private Object me(Req r) {
         long uid = r.uid();
         boolean loggedIn = ensureSession(uid);
-        if (loggedIn) bot.appTouched(uid);
+        if (loggedIn) {
+            bot.appTouched(uid);
+            bot.students().onSeen(uid, tgName(r), r.user.username());
+        }
 
         Map<String, Object> user = new LinkedHashMap<>();
         user.put("id", uid);
@@ -116,6 +122,7 @@ public class WebApi {
         out.put("lang", bot.appLang(uid));
         out.put("loggedIn", loggedIn);
         out.put("botUsername", config.getBot().getUsername());
+        out.put("admin", AppConfig.isAdmin(uid));
         if (loggedIn) {
             out.put("semesters", semesters(uid));
             int cur = lms.getCurrentSemesterId(uid);
@@ -150,7 +157,13 @@ public class WebApi {
         if (!lms.isLoggedIn(r.uid()) && !lms.restoreSession(r.uid())) throw new ApiError(403, "not_logged_in");
     }
 
-    private void onLoggedIn(long uid) {
+    private static String tgName(Req r) {
+        return (r.user.firstName() + " " + r.user.lastName()).trim();
+    }
+
+    private void onLoggedIn(Req r, String login) {
+        long uid = r.uid();
+        bot.students().onLogin(uid, login, tgName(r), r.user.username());
         dropCache(uid);
         lastProbe.put(uid, System.currentTimeMillis());
         bot.appLoggedIn(uid);
@@ -161,7 +174,7 @@ public class WebApi {
         String password = r.str("password");
         if (login.isEmpty() || password.isEmpty()) throw new ApiError(400, "empty");
         boolean ok = lms.login(r.uid(), login, password);
-        if (ok) onLoggedIn(r.uid());
+        if (ok) onLoggedIn(r, login);
         return Map.of("ok", ok);
     }
 
@@ -169,11 +182,11 @@ public class WebApi {
         String login = r.str("login").trim();
         String password = r.str("password");
         if (login.isEmpty() || password.isEmpty()) throw new ApiError(400, "empty");
-        return oneIdResult(r.uid(), lms.oneIdLogin(r.uid(), login, password));
+        return oneIdResult(r, login, lms.oneIdLogin(r.uid(), login, password));
     }
 
     private Object authOneIdConfirm(Req r) throws Exception {
-        return oneIdResult(r.uid(), lms.oneIdConfirm(r.uid(), r.str("login").trim(), r.str("code").trim()));
+        return oneIdResult(r, r.str("login").trim(), lms.oneIdConfirm(r.uid(), r.str("login").trim(), r.str("code").trim()));
     }
 
     private Object authMobileSend(Req r) throws Exception {
@@ -185,16 +198,17 @@ public class WebApi {
     }
 
     private Object authMobileConfirm(Req r) throws Exception {
-        return oneIdResult(r.uid(), lms.oneIdMobileConfirm(r.uid(), r.str("code").trim()));
+        return oneIdResult(r, null, lms.oneIdMobileConfirm(r.uid(), r.str("code").trim()));
     }
 
     /** OK от OneID — это ещё не вход: надо обменять токен на сессию LMS. */
-    private Object oneIdResult(long uid, LmsService.OneIdResult res) {
+    private Object oneIdResult(Req r, String login, LmsService.OneIdResult res) {
+        long uid = r.uid();
         switch (res.status) {
             case NEED_SMS: return Map.of("status", "NEED_SMS");
             case OK:
                 if (lms.oneIdFinish(uid)) {
-                    onLoggedIn(uid);
+                    onLoggedIn(r, login);
                     return Map.of("status", "OK");
                 }
                 return Map.of("status", "ERROR", "reason", "link");
@@ -498,6 +512,156 @@ public class WebApi {
         if (oldP.isEmpty() || newP.isEmpty()) throw new ApiError(400, "empty");
         if (!newP.equals(conf)) throw new ApiError(400, "mismatch");
         return Map.of("ok", lms.changePassword(r.uid(), oldP, newP, conf));
+    }
+
+    // ─────────────────────────────────────────────
+    //  ADMIN
+    // ─────────────────────────────────────────────
+
+    private static final List<String> FILTERS = List.of("group", "course", "direction", "gender", "studyType", "language");
+
+    private static String field(StudentRegistry.Student s, String name) {
+        return switch (name) {
+            case "fullName" -> s.fullName != null ? s.fullName : s.tgName;
+            case "login" -> s.login;
+            case "group" -> s.group;
+            case "direction" -> s.direction;
+            case "course" -> s.course;
+            case "gender" -> s.gender;
+            case "birthDate" -> s.birthDate;
+            case "curator" -> s.curator;
+            case "studyType" -> s.studyType;
+            case "language" -> s.language;
+            default -> null;
+        };
+    }
+
+    /** «12.03.2006» → 20060312 для сортировки по дате рождения. */
+    private static Long dateKey(String d) {
+        if (d == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2})[./-](\\d{1,2})[./-](\\d{4})").matcher(d);
+        if (m.find()) return Long.parseLong(m.group(3)) * 10000 + Long.parseLong(m.group(2)) * 100 + Long.parseLong(m.group(1));
+        m = java.util.regex.Pattern.compile("(\\d{4})-(\\d{1,2})-(\\d{1,2})").matcher(d);
+        if (m.find()) return Long.parseLong(m.group(1)) * 10000 + Long.parseLong(m.group(2)) * 100 + Long.parseLong(m.group(3));
+        return null;
+    }
+
+    private static Comparable<?> sortKey(StudentRegistry.Student s, String sort) {
+        switch (sort) {
+            case "gpa": return s.gpa;
+            case "lastSeen": return s.lastSeen > 0 ? s.lastSeen : null;
+            case "birthDate": return dateKey(s.birthDate);
+            case "course": {
+                String c = s.course;
+                if (c == null) return null;
+                String digits = c.replaceAll("\\D", "");
+                return digits.isEmpty() ? null : Long.parseLong(digits);
+            }
+            default: {
+                String v = field(s, sort);
+                return v == null || v.isBlank() ? null : v.toLowerCase(Locale.ROOT);
+            }
+        }
+    }
+
+    /**
+     * Список студентов для администратора: поиск, фильтры, сортировка, пагинация.
+     * Доступ проверяется здесь, на сервере; во фронтенде кнопка лишь скрыта.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Object adminStudents(Req r) {
+        if (!AppConfig.isAdmin(r.uid())) throw new ApiError(403, "forbidden");
+
+        List<StudentRegistry.Student> all = bot.students().all();
+        long now = System.currentTimeMillis();
+
+        // Значения для фильтров — по всему списку, чтобы выбор не зависел от поиска.
+        Map<String, List<String>> facets = new LinkedHashMap<>();
+        for (String f : FILTERS) {
+            TreeSet<String> vals = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            for (StudentRegistry.Student s : all) {
+                String v = field(s, f);
+                if (v != null && !v.isBlank()) vals.add(v.trim());
+            }
+            facets.put(f, new ArrayList<>(vals));
+        }
+
+        String q = Optional.ofNullable(r.q("q")).orElse("").trim().toLowerCase(Locale.ROOT);
+        List<StudentRegistry.Student> list = new ArrayList<>();
+        for (StudentRegistry.Student s : all) {
+            boolean ok = true;
+            for (String f : FILTERS) {
+                String want = r.q(f);
+                if (want == null || want.isBlank()) continue;
+                String v = field(s, f);
+                if (v == null || !v.trim().equalsIgnoreCase(want.trim())) { ok = false; break; }
+            }
+            if (!ok) continue;
+            if (!q.isEmpty()) {
+                String hay = String.join(" ", Arrays.asList(s.fullName, s.tgName, s.tgUsername, s.login, s.group,
+                        s.direction, s.curator, s.recordBook, String.valueOf(s.telegramId))).toLowerCase(Locale.ROOT);
+                if (!hay.contains(q)) continue;
+            }
+            list.add(s);
+        }
+
+        String sort = Optional.ofNullable(r.q("sort")).orElse("lastSeen");
+        boolean desc = !"asc".equalsIgnoreCase(r.q("dir"));
+        Comparator<StudentRegistry.Student> cmp = (a, b) -> {
+            Comparable ka = sortKey(a, sort), kb = sortKey(b, sort);
+            if (ka == null && kb == null) return 0;
+            if (ka == null) return 1;   // пустые — всегда в конце
+            if (kb == null) return -1;
+            int c = ka.compareTo(kb);
+            return desc ? -c : c;
+        };
+        list.sort(cmp.thenComparing(s -> String.valueOf(field(s, "fullName")), String.CASE_INSENSITIVE_ORDER));
+
+        int size = Math.max(5, Math.min(100, r.qInt("size", 20)));
+        int pages = Math.max(1, (list.size() + size - 1) / size);
+        int page = Math.max(1, Math.min(pages, r.qInt("page", 1)));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (StudentRegistry.Student s : list.subList((page - 1) * size, Math.min(list.size(), page * size))) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("telegramId", s.telegramId);
+            m.put("tgName", s.tgName);
+            m.put("tgUsername", s.tgUsername);
+            m.put("fullName", s.fullName);
+            m.put("login", s.login);
+            m.put("recordBook", s.recordBook);
+            m.put("group", s.group);
+            m.put("direction", s.direction);
+            m.put("course", s.course);
+            m.put("gender", s.gender);
+            m.put("birthDate", s.birthDate);
+            m.put("curator", s.curator);
+            m.put("studyType", s.studyType);
+            m.put("language", s.language);
+            m.put("gpa", s.gpa);
+            m.put("firstSeen", s.firstSeen);
+            m.put("lastSeen", s.lastSeen);
+            items.add(m);
+        }
+
+        long day = 24L * 60 * 60 * 1000;
+        double gpaSum = 0;
+        int gpaN = 0;
+        for (StudentRegistry.Student s : all) if (s.gpa != null) { gpaSum += s.gpa; gpaN++; }
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total", all.size());
+        stats.put("active24h", all.stream().filter(s -> now - s.lastSeen < day).count());
+        stats.put("active7d", all.stream().filter(s -> now - s.lastSeen < 7 * day).count());
+        stats.put("avgGpa", gpaN > 0 ? Math.round(gpaSum / gpaN * 100) / 100.0 : null);
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("items", items);
+        out.put("total", list.size());
+        out.put("page", page);
+        out.put("pages", pages);
+        out.put("size", size);
+        out.put("stats", stats);
+        out.put("facets", facets);
+        return out;
     }
 
     // ─────────────────────────────────────────────
