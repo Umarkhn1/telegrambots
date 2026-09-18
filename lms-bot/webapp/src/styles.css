@@ -1148,7 +1148,15 @@ svg {
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  box-shadow: 0 12px 30px rgba(28, 30, 83, 0.25);
+  box-shadow: 0 10px 28px rgba(27, 39, 51, 0.12), 0 0 0 1px rgba(27, 39, 51, 0.06);
+}
+
+/* Светлая тема — эмблема со светлым кольцом, тёмная — с тёмно-синим. */
+.emblem.on-dark { display: none; }
+:root[data-theme='dark'] .emblem.on-light { display: none; }
+:root[data-theme='dark'] .emblem.on-dark {
+  display: block;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
 .emblem.small {

@@ -269,3 +269,14 @@ export function uniqueStreams(list: { stream: string }[]): string[] {
   const set = [...new Set(list.map((x) => x.stream.trim()).filter(Boolean))];
   return set.sort((a, b) => Number(a.includes('-')) - Number(b.includes('-')) || a.localeCompare(b));
 }
+
+/** Эмблема ТАТУ: в светлой теме — со светлым кольцом, в тёмной — с тёмно-синим. */
+export function Emblem({ small }: { small?: boolean }) {
+  const cls = 'emblem' + (small ? ' small' : '');
+  return (
+    <>
+      <img src="./tuit-emblem-light.png" alt="TUIT" className={cls + ' on-light'} />
+      <img src="./tuit-emblem.png" alt="" aria-hidden className={cls + ' on-dark'} />
+    </>
+  );
+}

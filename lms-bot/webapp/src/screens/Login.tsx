@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CircleAlert, Eye, EyeOff, Globe, KeyRound, LoaderCircle, Smartphone, UserRound } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
-import { Segmented } from '../components/ui';
+import { Emblem, Segmented } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { haptic, useBackButton } from '../lib/tg';
@@ -151,7 +151,7 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
           transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
           style={{ marginTop: 18 }}
         >
-          <img src="./tuit-emblem.png" alt="TUIT" className="emblem small" />
+          <Emblem small />
           <h1 className="page-title" style={{ marginTop: 22 }}>{step === 'code' ? t('f_code') : t('login_title')}</h1>
           <div className="page-sub" style={{ fontSize: 15 }}>
             {step === 'code' ? (way === 'mobile' ? t('code_sent', { phone: sentTo }) : t('code_2fa')) : t('login_sub')}

@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CircleAlert, LoaderCircle, RefreshCw, Send } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from './components/BottomNav';
-import { Empty } from './components/ui';
+import { Emblem, Empty } from './components/ui';
 import { api, SESSION_LOST } from './lib/api';
 import { AppContext, TABS, type AppState, type Route, type Tab, type ThemePref } from './lib/app';
 import { LangContext, makeT } from './lib/i18n';
@@ -176,13 +176,9 @@ export function App() {
     body = (
       <div className="screen" style={{ display: 'grid', placeItems: 'center' }}>
         <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
-          <motion.img
-            src="./tuit-emblem.png"
-            alt="TUIT"
-            className="emblem"
-            animate={{ scale: [1, 1.04, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-          />
+          <motion.div animate={{ scale: [1, 1.04, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}>
+            <Emblem />
+          </motion.div>
           <div className="splash-title">TUIT LMS</div>
           <LoaderCircle size={20} className="spin" color="var(--text-3)" />
         </motion.div>
