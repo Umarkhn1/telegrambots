@@ -2633,19 +2633,19 @@ public class LmsBot extends TelegramLongPollingBot {
         // Основной формат LMS: "24-03-2026 23:59:59"
         try {
             return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"))
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception ignored) {}
 
         // Fallback: ISO формат "2026-03-24T23:59:59"
         try {
             return LocalDateTime.parse(s)
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception ignored) {}
 
         // Fallback: "2026-03-24 23:59:59"
         try {
             return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception e) {
             return -1;
         }
@@ -2662,18 +2662,18 @@ public class LmsBot extends TelegramLongPollingBot {
         // Приоритет: ISO формат "2026-03-24T10:00:00"
         try {
             return LocalDateTime.parse(s)
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception ignored) {}
 
         // Fallback: с пробелом "2026-03-24 10:00:00"
         try {
             return LocalDateTime.parse(s.replace(" ", "T"))
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception ignored) {}
 
         try {
             return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+                    .atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
         } catch (Exception e) {
             return -1;
         }

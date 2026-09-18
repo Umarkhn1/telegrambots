@@ -10,6 +10,13 @@ import java.io.InputStream;
 @Data
 public class AppConfig {
 
+    /**
+     * Часовой пояс LMS. Сайт отдаёт дедлайны и расписание в ташкентском времени
+     * без указания пояса, поэтому переводить их надо именно в Asia/Tashkent,
+     * а не в пояс сервера: на хостинге он обычно UTC, и всё съехало бы на 5 часов.
+     */
+    public static final java.time.ZoneId LMS_ZONE = java.time.ZoneId.of("Asia/Tashkent");
+
     private BotConfig bot = new BotConfig();
     private LmsConfig lms = new LmsConfig();
 

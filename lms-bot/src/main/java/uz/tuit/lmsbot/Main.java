@@ -10,6 +10,10 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         System.out.println("🚀 TUIT LMS Bot starting...");
+        System.out.println("🕐 Пояс JVM: " + java.time.ZoneId.systemDefault()
+                + " | пояс LMS: " + AppConfig.LMS_ZONE
+                + " | сейчас в Ташкенте: " + java.time.LocalDateTime.now(AppConfig.LMS_ZONE)
+                        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")));
 
         AppConfig config = AppConfig.load();
 
@@ -74,7 +78,7 @@ public class Main {
     private static final int KEEPALIVE_MINUTES = 14;
 
     /**
-     * Окно активности в местном времени контейнера (TZ сервиса), например «7-1» —
+     * Окно активности по ташкентскому времени (AppConfig.LMS_ZONE), например «7-1» —
      * с 07:00 до 01:00. Вне окна пинги прекращаются, сервис засыпает и перестаёт
      * тратить бесплатные часы Render. Пусто — работаем круглосуточно.
      */
@@ -85,7 +89,7 @@ public class Main {
             String[] p = window.split("-");
             int from = Integer.parseInt(p[0].trim());
             int to   = Integer.parseInt(p[1].trim());
-            int hour = java.time.LocalTime.now().getHour();
+            int hour = java.time.LocalTime.now(AppConfig.LMS_ZONE).getHour();
             // from > to means the window wraps over midnight (7-1 = 07:00…01:00).
             return from <= to ? hour >= from && hour < to : hour >= from || hour < to;
         } catch (Exception e) {

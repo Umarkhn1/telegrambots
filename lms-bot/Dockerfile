@@ -12,5 +12,5 @@ WORKDIR /app
 RUN adduser -D -h /app bot
 COPY --from=build /src/build/libs/lms-bot.jar ./lms-bot.jar
 USER bot
-ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -XX:MaxRAMPercentage=75"
+ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Duser.timezone=Asia/Tashkent -XX:MaxRAMPercentage=75"
 CMD ["java", "-jar", "lms-bot.jar"]
