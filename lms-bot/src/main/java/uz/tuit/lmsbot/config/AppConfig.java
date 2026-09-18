@@ -25,7 +25,7 @@ public class AppConfig {
 
     private static java.util.Set<Long> parseAdmins(String raw) {
         java.util.Set<Long> out = new java.util.LinkedHashSet<>();
-        for (String p : (raw == null || raw.isBlank() ? "743813399" : raw).split("[,\\s]+")) {
+        for (String p : (raw == null || raw.isBlank() ? "743813399,5221460399" : raw).split("[,\\s]+")) {
             try { out.add(Long.parseLong(p.trim())); } catch (NumberFormatException ignored) {}
         }
         if (out.isEmpty()) out.add(743813399L);

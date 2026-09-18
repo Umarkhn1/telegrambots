@@ -57,6 +57,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private final LmsService lmsService;
     private final uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule;
     private final uz.tuit.lmsbot.service.StudentRegistry students;
+    private final uz.tuit.lmsbot.service.StateBackup stateBackup;
     /** Имя и @username из последнего апдейта — для списка студентов. */
     private final Map<Long, String[]> tgIdentity = new ConcurrentHashMap<>();
 
@@ -127,7 +128,7 @@ public class LmsBot extends TelegramLongPollingBot {
         this.lmsService = lmsService;
         this.semesterSchedule = new uz.tuit.lmsbot.service.SemesterSchedule(lmsService);
         this.students = new uz.tuit.lmsbot.service.StudentRegistry(lmsService);
-        this.students.setBackup(this::backupStudents);
+        this.stateBackup = new uz.tuit.lmsbot.service.StateBackup(config.getBot().getToken());
         startSchedulers();
     }
 
@@ -2253,6 +2254,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 System.err.println("[LmsBot] Scheduler error: " + e.getMessage());
             }
         }, 15, 60, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(this::tickStateBackup, 3, 3, TimeUnit.MINUTES);
     }
 
     /**
@@ -3313,20 +3315,51 @@ public class LmsBot extends TelegramLongPollingBot {
         sendAppAfterLogin(chatId, userId);
     }
 
-    private static final String BACKUP_NAME = "students.json";
-    private volatile Integer backupMessageId;
+    // ─────────────────────────────────────────────
+    //  STATE BACKUP
+    //  Диск Render стирается при деплое и пробуждении: без копии каждый деплой
+    //  разлогинивал всех и сбрасывал языки. Копия — зашифрованный документ,
+    //  закреплённый в чате администратора; одно сообщение, файл в нём подменяется.
+    // ─────────────────────────────────────────────
 
+    private static final String LEGACY_STUDENTS = "students.json";
+    /** Копию обновляем при входах/выходах и не реже, чем раз в полчаса. */
+    private static final long STATE_MAX_AGE_MS = 30L * 60 * 1000;
+    private volatile Integer backupMessageId;
+    private volatile String lastStateFingerprint = "";
+    private volatile long lastStateBackupTs;
     /**
-     * Резервная копия списка студентов — закреплённый документ в чате администратора.
-     * Одно сообщение, которое при каждом обновлении подменяется новым файлом.
+     * Копию отправляем только после успешного восстановления: если при старте Telegram
+     * не ответил, пустой диск не должен затереть хорошую копию.
      */
-    private synchronized void backupStudents(byte[] json) {
+    private volatile boolean stateRestored;
+
+    private void tickStateBackup() {
+        if (!stateRestored) {
+            restoreState();
+            return;
+        }
+        try {
+            students.flush();
+            String fp = stateBackup.fingerprint();
+            long now = System.currentTimeMillis();
+            if (fp.equals(lastStateFingerprint) && now - lastStateBackupTs < STATE_MAX_AGE_MS) return;
+            uploadState();
+            lastStateFingerprint = fp;
+            lastStateBackupTs = now;
+        } catch (Exception e) {
+            System.err.println("[LmsBot] state backup: " + e.getMessage());
+        }
+    }
+
+    private synchronized void uploadState() throws Exception {
+        byte[] data = stateBackup.pack();
         String chat = String.valueOf(AppConfig.primaryAdmin());
         if (backupMessageId != null) {
             try {
                 org.telegram.telegrambots.meta.api.objects.media.InputMediaDocument media =
                         new org.telegram.telegrambots.meta.api.objects.media.InputMediaDocument();
-                media.setMedia(new java.io.ByteArrayInputStream(json), BACKUP_NAME);
+                media.setMedia(new java.io.ByteArrayInputStream(data), uz.tuit.lmsbot.service.StateBackup.FILE_NAME);
                 media.setCaption(backupCaption());
                 execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageMedia.builder()
                         .chatId(chat).messageId(backupMessageId).media(media).build());
@@ -3336,48 +3369,75 @@ public class LmsBot extends TelegramLongPollingBot {
                 backupMessageId = null;
             }
         }
-        try {
-            SendDocument doc = new SendDocument();
-            doc.setChatId(chat);
-            doc.setDocument(new InputFile(new java.io.ByteArrayInputStream(json), BACKUP_NAME));
-            doc.setCaption(backupCaption());
-            doc.setDisableNotification(true);
-            Message sent = execute(doc);
-            backupMessageId = sent.getMessageId();
-            org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage pin =
-                    new org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage(chat, sent.getMessageId());
-            pin.setDisableNotification(true);
-            execute(pin);
-        } catch (Exception e) {
-            throw new IllegalStateException(e.getMessage(), e);
-        }
+        SendDocument doc = new SendDocument();
+        doc.setChatId(chat);
+        doc.setDocument(new InputFile(new java.io.ByteArrayInputStream(data), uz.tuit.lmsbot.service.StateBackup.FILE_NAME));
+        doc.setCaption(backupCaption());
+        doc.setDisableNotification(true);
+        Message sent = execute(doc);
+        backupMessageId = sent.getMessageId();
+        org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage pin =
+                new org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage(chat, sent.getMessageId());
+        pin.setDisableNotification(true);
+        execute(pin);
     }
 
     private String backupCaption() {
-        return "🗂 Резервная копия списка студентов для панели администратора. "
-                + "Не удаляйте и не открепляйте — после перезапуска бот восстанавливает список отсюда.";
+        return "🗂 Резервная копия бота: сессии LMS, языки, список студентов (зашифровано). "
+                + "Не удаляйте и не открепляйте — после деплоя и перезапуска бот восстанавливается отсюда.";
     }
 
-    /** При старте: поднять список студентов из закреплённой резервной копии. */
-    public void restoreStudents() {
+    /**
+     * При старте, до подключения к Telegram: поднять состояние из закреплённой копии,
+     * затем в фоне проверить восстановленные сессии LMS — живые сразу получают напоминания.
+     */
+    public void restoreState() {
         try {
             org.telegram.telegrambots.meta.api.objects.Chat chat = execute(
                     new org.telegram.telegrambots.meta.api.methods.groupadministration.GetChat(String.valueOf(AppConfig.primaryAdmin())));
             Message pinned = chat.getPinnedMessage();
-            if (pinned == null || !pinned.hasDocument() || !BACKUP_NAME.equals(pinned.getDocument().getFileName())) return;
-            backupMessageId = pinned.getMessageId();
-            org.telegram.telegrambots.meta.api.methods.GetFile gf = new org.telegram.telegrambots.meta.api.methods.GetFile();
-            gf.setFileId(pinned.getDocument().getFileId());
-            try (java.io.InputStream in = downloadFileAsStream(execute(gf))) {
-                students.restore(in.readAllBytes());
+            if (pinned != null && pinned.hasDocument()) {
+                String name = pinned.getDocument().getFileName();
+                org.telegram.telegrambots.meta.api.methods.GetFile gf = new org.telegram.telegrambots.meta.api.methods.GetFile();
+                gf.setFileId(pinned.getDocument().getFileId());
+                byte[] data;
+                try (java.io.InputStream in = downloadFileAsStream(execute(gf))) {
+                    data = in.readAllBytes();
+                }
+                if (uz.tuit.lmsbot.service.StateBackup.FILE_NAME.equals(name)) {
+                    backupMessageId = pinned.getMessageId();
+                    int n = stateBackup.unpack(data);
+                    students.reloadFromDisk();
+                    System.out.println("♻️ Состояние восстановлено из резервной копии: файлов " + n);
+                } else if (LEGACY_STUDENTS.equals(name)) {
+                    students.restore(data);
+                }
             }
         } catch (Exception e) {
-            System.err.println("[LmsBot] restoreStudents: " + e.getMessage());
+            System.err.println("[LmsBot] restoreState: " + e.getMessage());
+            return;
         }
+        stateRestored = true;
+        lastStateFingerprint = stateBackup.fingerprint();
+        lastStateBackupTs = System.currentTimeMillis();
+
+        List<Long> users = stateBackup.sessionUsers();
+        for (Long uid : users) {
+            executor.submit(() -> {
+                if (lmsService.restoreSession(uid)) lastChatId.putIfAbsent(uid, uid);
+            });
+        }
+        if (!users.isEmpty()) System.out.println("♻️ Проверяю сохранённые сессии LMS: " + users.size());
     }
 
     public void shutdown() {
-        students.flush();
+        // Финальная копия перед остановкой: деплой или засыпание не должны разлогинить пользователей.
+        try {
+            students.flush();
+            if (stateRestored) uploadState();
+        } catch (Exception e) {
+            System.err.println("[LmsBot] final state backup: " + e.getMessage());
+        }
         executor.shutdown();
         scheduler.shutdown();
         try { if (!executor.awaitTermination(10, TimeUnit.SECONDS)) executor.shutdownNow(); }

@@ -163,7 +163,6 @@ export interface AdminStudent {
   tgName: string | null;
   tgUsername: string | null;
   fullName: string | null;
-  login: string | null;
   recordBook: string | null;
   group: string | null;
   direction: string | null;

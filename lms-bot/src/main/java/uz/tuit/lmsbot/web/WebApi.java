@@ -555,7 +555,6 @@ public class WebApi {
     private static String field(StudentRegistry.Student s, String name) {
         return switch (name) {
             case "fullName" -> s.fullName != null ? s.fullName : s.tgName;
-            case "login" -> s.login;
             case "group" -> s.group;
             case "direction" -> s.direction;
             case "course" -> s.course;
@@ -630,7 +629,7 @@ public class WebApi {
             }
             if (!ok) continue;
             if (!q.isEmpty()) {
-                String hay = String.join(" ", Arrays.asList(s.fullName, s.tgName, s.tgUsername, s.login, s.group,
+                String hay = String.join(" ", Arrays.asList(s.fullName, s.tgName, s.tgUsername, s.group,
                         s.direction, s.curator, s.recordBook, String.valueOf(s.telegramId))).toLowerCase(Locale.ROOT);
                 if (!hay.contains(q)) continue;
             }
@@ -659,7 +658,6 @@ public class WebApi {
             m.put("tgName", s.tgName);
             m.put("tgUsername", s.tgUsername);
             m.put("fullName", s.fullName);
-            m.put("login", s.login);
             m.put("recordBook", s.recordBook);
             m.put("group", s.group);
             m.put("direction", s.direction);

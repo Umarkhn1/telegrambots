@@ -29,10 +29,13 @@ public class Main {
         LmsService lmsService = new LmsService(config);
         LmsBot bot = new LmsBot(config, lmsService);
 
+        // Сессии, языки и список студентов — до первого апдейта, иначе ранние сообщения
+        // обработаются с пустым диском.
+        bot.restoreState();
+
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         botsApi.registerBot(bot);
         bot.applyBotCommands();
-        bot.restoreStudents();
 
         // ✅ НОВОЕ: чистая остановка всех потоков при Ctrl+C или kill
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

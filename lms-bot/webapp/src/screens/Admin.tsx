@@ -24,11 +24,10 @@ import { useQuery } from '../lib/query';
 import { haptic, tg } from '../lib/tg';
 import type { AdminFilterKey, AdminStudent, AdminStudentsResponse, Lang } from '../lib/types';
 
-type SortKey = 'fullName' | 'login' | 'group' | 'direction' | 'course' | 'gender' | 'birthDate' | 'curator' | 'studyType' | 'language' | 'gpa' | 'lastSeen';
+type SortKey = 'fullName' | 'group' | 'direction' | 'course' | 'gender' | 'birthDate' | 'curator' | 'studyType' | 'language' | 'gpa' | 'lastSeen';
 
 const COLUMNS: { key: SortKey; label: Key; width: number; num?: boolean }[] = [
   { key: 'fullName', label: 'col_name', width: 210 },
-  { key: 'login', label: 'col_login', width: 110 },
   { key: 'group', label: 'group', width: 96 },
   { key: 'direction', label: 'direction', width: 200 },
   { key: 'course', label: 'course_year', width: 70, num: true },
@@ -395,7 +394,6 @@ function FiltersSheet({
 function StudentDetails({ s }: { s: AdminStudent }) {
   const { t, lang } = useI18n();
   const rows: [Key, string | null | undefined][] = [
-    ['col_login', s.login],
     ['group', s.group],
     ['direction', s.direction],
     ['course_year', s.course],
