@@ -311,6 +311,10 @@ public class LmsBot extends TelegramLongPollingBot {
             case "⚡ Avtokirish":
             case "⚡ Автокириш":
             case "⚡ Auto sign-in":       handleAutoLogin(chatId, userId); break;
+            case "🗂 Мои аккаунты":
+            case "🗂 Hisoblarim":
+            case "🗂 Ҳисобларим":
+            case "🗂 My accounts":        showCreds(chatId, userId); break;
             case "/logout":
             case "🚪 Chiqish":
             case "🚪 Выйти":
@@ -480,6 +484,13 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if ("back_main".equals(data)) {
             send(chatId, tr(userId, "🏠 <b>Главное меню</b>", "🏠 <b>Asosiy menyu</b>", "🏠 <b>Асосий меню</b>", "🏠 <b>Main menu</b>"),
                     mainMenuKeyboard(userId));
+        } else if ("creds_add".equals(data)) {
+            askForLogin(chatId, userId);
+        } else if (data.startsWith("credsel_")) {
+            lmsService.credentials().select(userId, data.substring("credsel_".length()));
+            showCreds(chatId, userId);
+        } else if (data.startsWith("creddel_")) {
+            removeCreds(chatId, userId, data.substring("creddel_".length()));
         } else if ("creds_yes".equals(data)) {
             saveCredsAnswer(chatId, userId, true);
         } else if ("creds_no".equals(data)) {
@@ -1027,8 +1038,10 @@ public class LmsBot extends TelegramLongPollingBot {
     private void offerSaveCreds(long chatId, long userId) {
         String[] c = pendingCreds.remove(userId);
         if (c == null) return;
-        CredentialStore.Creds saved = lmsService.credentials().load(userId);
-        if (saved != null && saved.login().equals(c[1]) && saved.password().equals(c[2])) return;
+        for (CredentialStore.Creds saved : lmsService.credentials().all(userId)) {
+            // Уже сохранён с тем же паролем — спрашивать второй раз незачем.
+            if (saved.login().equals(c[1]) && saved.password().equals(c[2])) return;
+        }
         pendingCreds.put(userId, c);
         InlineKeyboardMarkup kb = markup(List.of(
                 List.of(inlineBtn(tr(userId, "✅ Сохранить", "✅ Saqlash", "✅ Сақлаш", "✅ Save"), "creds_yes")),
@@ -1059,7 +1072,7 @@ public class LmsBot extends TelegramLongPollingBot {
                     "👌 Nothing was saved."), null);
             return;
         }
-        lmsService.credentials().save(userId, new CredentialStore.Creds(c[0], c[1], c[2]));
+        lmsService.credentials().add(userId, new CredentialStore.Creds(c[0], c[1], c[2]));
         send(chatId, tr(userId,
                 "✅ Сохранено. В следующий раз нажмите «⚡ Автовход».",
                 "✅ Saqlandi. Keyingi safar «⚡ Avtokirish» tugmasini bosing.",
@@ -1067,9 +1080,49 @@ public class LmsBot extends TelegramLongPollingBot {
                 "✅ Saved. Next time just tap «⚡ Auto sign-in»."), null);
     }
 
+    /** Список сохранённых аккаунтов: выбрать, каким входить, или удалить лишние. */
+    private void showCreds(long chatId, long userId) {
+        java.util.List<CredentialStore.Creds> list = lmsService.credentials().all(userId);
+        String selected = lmsService.credentials().selectedId(userId);
+        java.util.List<java.util.List<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton>> rows =
+                new ArrayList<>();
+        for (CredentialStore.Creds c : list) {
+            String mark = c.id().equals(selected) ? "✅ " : "▫️ ";
+            String kind = "oneid".equals(c.method()) ? "OneID" : "LMS";
+            rows.add(List.of(
+                    inlineBtn(mark + c.login() + " · " + kind, "credsel_" + c.id()),
+                    inlineBtn("🗑", "creddel_" + c.id())));
+        }
+        rows.add(List.of(inlineBtn(tr(userId,
+                "➕ Добавить аккаунт", "➕ Hisob qo'shish", "➕ Ҳисоб қўшиш", "➕ Add account"), "creds_add")));
+
+        String head = list.isEmpty()
+                ? tr(userId,
+                    "🗂 <b>Мои аккаунты</b>\n\nПока ничего не сохранено. Войдите и согласитесь сохранить данные — аккаунт появится здесь.",
+                    "🗂 <b>Hisoblarim</b>\n\nHozircha hech narsa saqlanmagan. Tizimga kiring va saqlashga rozi bo'ling — hisob shu yerda paydo bo'ladi.",
+                    "🗂 <b>Ҳисобларим</b>\n\nҲозирча ҳеч нарса сақланмаган. Тизимга киринг ва сақлашга рози бўлинг — ҳисоб шу ерда пайдо бўлади.",
+                    "🗂 <b>My accounts</b>\n\nNothing saved yet. Sign in and agree to save — the account will show up here.")
+                : tr(userId,
+                    "🗂 <b>Мои аккаунты</b>\n\n<blockquote>Отмеченный ✅ используется кнопкой «⚡ Автовход». Нажмите на другой, чтобы выбрать его, или 🗑 — чтобы удалить.</blockquote>",
+                    "🗂 <b>Hisoblarim</b>\n\n<blockquote>✅ bilan belgilangani «⚡ Avtokirish» tugmasida ishlatiladi. Boshqasini tanlash uchun bosing, o'chirish uchun 🗑.</blockquote>",
+                    "🗂 <b>Ҳисобларим</b>\n\n<blockquote>✅ билан белгиланган «⚡ Автокириш» тугмасида ишлатилади. Бошқасини танлаш учун босинг, ўчириш учун 🗑.</blockquote>",
+                    "🗂 <b>My accounts</b>\n\n<blockquote>The one marked ✅ is used by «⚡ Auto sign-in». Tap another to pick it, or 🗑 to delete.</blockquote>");
+        send(chatId, head, markup(rows));
+    }
+
+    private void removeCreds(long chatId, long userId, String id) {
+        lmsService.credentials().remove(userId, id);
+        send(chatId, tr(userId,
+                "🗑 Аккаунт удалён.",
+                "🗑 Hisob o'chirildi.",
+                "🗑 Ҳисоб ўчирилди.",
+                "🗑 Account deleted."), loginKeyboard(userId));
+        showCreds(chatId, userId);
+    }
+
     /** Кнопка «Автовход»: бот сам подставляет сохранённые данные и входит. */
     private void handleAutoLogin(long chatId, long userId) {
-        CredentialStore.Creds c = lmsService.credentials().load(userId);
+        CredentialStore.Creds c = lmsService.credentials().selected(userId);
         if (c == null) {
             send(chatId, tr(userId,
                     "🤷 Сохранённых данных нет — войдите обычным способом.",
@@ -1093,11 +1146,18 @@ public class LmsBot extends TelegramLongPollingBot {
         resetUserCaches(userId);
         userLogin.remove(userId);
         pendingCreds.remove(userId);
+        String tail = lmsService.credentials().has(userId)
+                ? tr(userId,
+                    "\n\nСохранённые аккаунты остались — «⚡ Автовход» вернёт вас одним нажатием, а удалить их можно в «🗂 Мои аккаунты».",
+                    "\n\nSaqlangan hisoblar joyida — «⚡ Avtokirish» bir bosishda qaytaradi, o'chirish «🗂 Hisoblarim» da.",
+                    "\n\nСақланган ҳисоблар жойида — «⚡ Автокириш» бир босишда қайтаради, ўчириш «🗂 Ҳисобларим» да.",
+                    "\n\nSaved accounts are still there — «⚡ Auto sign-in» brings you back in one tap, delete them in «🗂 My accounts».")
+                : "";
         send(chatId, tr(userId,
                 "👋 Вы вышли из системы.\n\nЧтобы войти снова: /login",
                 "👋 Tizimdan chiqtingiz.\n\nQayta kirish: /login",
                 "👋 Тизимдан чиқдингиз.\n\nҚайта кириш: /login",
-                "👋 You've signed out.\n\nTo sign in again: /login"), loginKeyboard(userId));
+                "👋 You've signed out.\n\nTo sign in again: /login") + tail, loginKeyboard(userId));
     }
 
     private void sendMainMenu(long chatId, long userId) {
@@ -2817,6 +2877,7 @@ public class LmsBot extends TelegramLongPollingBot {
         if (lmsService.credentials().has(userId)) {
             KeyboardRow auto = new KeyboardRow();
             auto.add(new KeyboardButton(autoLoginLabel(userId)));
+            auto.add(new KeyboardButton(credsMenuLabel(userId)));
             rows.add(auto);
         }
         rows.add(signIn);
@@ -2826,9 +2887,13 @@ public class LmsBot extends TelegramLongPollingBot {
         return m;
     }
 
-    /** Подпись кнопки автовхода; варианты повторены в разборе текста сообщений. */
+    /** Подписи кнопок; варианты повторены в разборе текста сообщений. */
     private String autoLoginLabel(long userId) {
         return tr(userId, "⚡ Автовход", "⚡ Avtokirish", "⚡ Автокириш", "⚡ Auto sign-in");
+    }
+
+    private String credsMenuLabel(long userId) {
+        return tr(userId, "🗂 Мои аккаунты", "🗂 Hisoblarim", "🗂 Ҳисобларим", "🗂 My accounts");
     }
 
     private ReplyKeyboardMarkup mainMenuKeyboard(long userId) {
@@ -3058,7 +3123,7 @@ public class LmsBot extends TelegramLongPollingBot {
                     "⚠️ Сначала войдите в систему! /login",
                     "⚠️ Avval tizimga kiring! /login",
                     "⚠️ Аввал тизимга киринг! /login",
-                    "⚠️ Sign in first! /login"), null);
+                    "⚠️ Sign in first! /login"), loginKeyboard(userId));
             return false;
         }
         return true;

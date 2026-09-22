@@ -639,10 +639,10 @@ public class LmsService {
         loggedInMap.remove(userId);
         clients.remove(userId);
         oneIdSessions.remove(userId);
-        // Выход должен быть настоящим: без этого сессия поднялась бы обратно по токену,
-        // а кнопка автовхода вернула бы пользователя в аккаунт, из которого он вышел.
+        // Без этого сессия поднялась бы обратно по сохранённому токену.
+        // Сами учётные данные не трогаем: ими управляет меню «Мои аккаунты»,
+        // и выход из одного аккаунта не должен стирать список остальных.
         oneIdTokens.clear(userId);
-        credentials.clear(userId);
         invalidateSemesters(userId);
         try {
             // Also clear persistent cookies so user is fully logged out
