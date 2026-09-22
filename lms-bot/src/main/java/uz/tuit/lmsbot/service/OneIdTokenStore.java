@@ -3,14 +3,9 @@ package uz.tuit.lmsbot.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
@@ -30,25 +25,16 @@ public class OneIdTokenStore {
     /** JWT и момент, когда он перестаёт действовать (0 — в токене не было exp). */
     public record Token(String jwt, long expiresAt) {}
 
-    private static final byte[] MAGIC = "LMSID1".getBytes(StandardCharsets.US_ASCII);
     /** Токен с остатком жизни меньше минуты считаем протухшим: не успеет доехать. */
     private static final long SKEW_MS = 60_000;
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final SecureRandom random = new SecureRandom();
+    private final SecretBox box;
     private final Path dir;
-    private final byte[] key;
 
     public OneIdTokenStore(Path sessionDir, String botToken) {
         this.dir = sessionDir;
-        String secret = System.getenv("STATE_KEY");
-        if (secret == null || secret.isBlank()) secret = botToken;
-        try {
-            this.key = MessageDigest.getInstance("SHA-256")
-                    .digest(("lmsbot-oneid|" + secret).getBytes(StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        this.box = new SecretBox("lmsbot-oneid", botToken, "LMSID1");
     }
 
     private Path file(long userId) {
@@ -65,7 +51,7 @@ public class OneIdTokenStore {
                     .put("saved", System.currentTimeMillis())
                     .toString().getBytes(StandardCharsets.UTF_8);
             Files.createDirectories(dir);
-            Files.write(file(userId), encrypt(plain));
+            Files.write(file(userId), box.seal(plain));
             System.out.println("🔑 OneID-токен сохранён u=" + userId + " до "
                     + (exp > 0 ? java.time.Instant.ofEpochMilli(exp) : "неизвестно"));
         } catch (Exception e) {
@@ -78,7 +64,7 @@ public class OneIdTokenStore {
         Path f = file(userId);
         if (!Files.exists(f)) return null;
         try {
-            JsonNode json = mapper.readTree(decrypt(Files.readAllBytes(f)));
+            JsonNode json = mapper.readTree(box.open(Files.readAllBytes(f)));
             String jwt = json.path("jwt").asText(null);
             if (jwt == null || jwt.isBlank()) return null;
             long exp = json.path("exp").asLong(0);
@@ -109,27 +95,5 @@ public class OneIdTokenStore {
         } catch (Exception e) {
             return 0;
         }
-    }
-
-    private byte[] encrypt(byte[] plain) throws Exception {
-        byte[] iv = new byte[12];
-        random.nextBytes(iv);
-        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-        c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"), new GCMParameterSpec(128, iv));
-        byte[] enc = c.doFinal(plain);
-        byte[] out = new byte[MAGIC.length + iv.length + enc.length];
-        System.arraycopy(MAGIC, 0, out, 0, MAGIC.length);
-        System.arraycopy(iv, 0, out, MAGIC.length, iv.length);
-        System.arraycopy(enc, 0, out, MAGIC.length + iv.length, enc.length);
-        return out;
-    }
-
-    private byte[] decrypt(byte[] data) throws Exception {
-        if (data.length < MAGIC.length + 12) throw new IllegalArgumentException("too short");
-        for (int i = 0; i < MAGIC.length; i++) if (data[i] != MAGIC[i]) throw new IllegalArgumentException("bad magic");
-        byte[] iv = java.util.Arrays.copyOfRange(data, MAGIC.length, MAGIC.length + 12);
-        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-        c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"), new GCMParameterSpec(128, iv));
-        return c.doFinal(data, MAGIC.length + 12, data.length - MAGIC.length - 12);
     }
 }

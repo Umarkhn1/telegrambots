@@ -19,6 +19,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import uz.tuit.lmsbot.config.AppConfig;
 import uz.tuit.lmsbot.model.*;
+import uz.tuit.lmsbot.service.CredentialStore;
 import uz.tuit.lmsbot.service.LmsService;
 
 import java.io.File;
@@ -65,6 +66,11 @@ public class LmsBot extends TelegramLongPollingBot {
     private final Map<Long, String>       tempLogin    = new ConcurrentHashMap<>();
     private final Map<Long, String>       tempOneIdLogin = new ConcurrentHashMap<>();
     private final Map<Long, String>       userLogin    = new ConcurrentHashMap<>();
+    /**
+     * Логин и пароль только что вошедшего — {способ, логин, пароль} — пока он не ответил,
+     * сохранять ли их для автовхода. На диск попадают лишь после согласия.
+     */
+    private final Map<Long, String[]>     pendingCreds = new ConcurrentHashMap<>();
     private final Map<Long, String>       tmpOldPass   = new ConcurrentHashMap<>();
     private final Map<Long, String>       tmpNewPass   = new ConcurrentHashMap<>();
     private final Map<Long, List<Course>> userCourses  = new ConcurrentHashMap<>();
@@ -301,6 +307,10 @@ public class LmsBot extends TelegramLongPollingBot {
             case "🔑 Войти":
             case "🔑 Sign in":
             case "🔑 Кириш":             askForLogin(chatId, userId); break;
+            case "⚡ Автовход":
+            case "⚡ Avtokirish":
+            case "⚡ Автокириш":
+            case "⚡ Auto sign-in":       handleAutoLogin(chatId, userId); break;
             case "/logout":
             case "🚪 Chiqish":
             case "🚪 Выйти":
@@ -470,6 +480,10 @@ public class LmsBot extends TelegramLongPollingBot {
         } else if ("back_main".equals(data)) {
             send(chatId, tr(userId, "🏠 <b>Главное меню</b>", "🏠 <b>Asosiy menyu</b>", "🏠 <b>Асосий меню</b>", "🏠 <b>Main menu</b>"),
                     mainMenuKeyboard(userId));
+        } else if ("creds_yes".equals(data)) {
+            saveCredsAnswer(chatId, userId, true);
+        } else if ("creds_no".equals(data)) {
+            saveCredsAnswer(chatId, userId, false);
         } else if ("auth_lms".equals(data)) {
             askForLmsLogin(chatId, userId);
         } else if ("auth_oneid".equals(data)) {
@@ -806,6 +820,14 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void handleOneIdLogin(long chatId, long userId, String login, String password) {
+        handleOneIdLogin(chatId, userId, login, password, true);
+    }
+
+    private void handleOneIdLogin(long chatId, long userId, String login, String password, boolean offerSave) {
+        // Пароль держим в памяти до ответа на вопрос о сохранении; откажется — забудем.
+        if (offerSave) pendingCreds.put(userId, new String[]{"oneid", login, password});
+        // При автовходе через меню этот шаг пропускается, а шагу с кодом 2FA логин нужен.
+        if (login != null && !login.isBlank()) tempOneIdLogin.put(userId, login);
         sendProgress(chatId, tr(userId,
                 "⏳ Проверяем данные в OneID...",
                 "⏳ OneID ma'lumotlari tekshirilmoqda...",
@@ -829,6 +851,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 case OK -> finishOneId(chatId, userId, login);
                 default -> {
                     tempOneIdLogin.remove(userId);
+                    pendingCreds.remove(userId);
                     sendOneIdError(chatId, userId, res.message);
                 }
             }
@@ -848,6 +871,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 finishOneId(chatId, userId, login);
             } else {
                 tempOneIdLogin.remove(userId);
+                pendingCreds.remove(userId);
                 sendOneIdError(chatId, userId, res.message);
             }
         });
@@ -872,7 +896,9 @@ public class LmsBot extends TelegramLongPollingBot {
                             "✅ <b>Signed in with OneID!</b>\n\nChoose an item from the menu below 👇"),
                     mainMenuKeyboard(userId));
             onBotLogin(chatId, userId);
+            offerSaveCreds(chatId, userId);
         } else {
+            pendingCreds.remove(userId);
             send(chatId, tr(userId,
                             "❌ <b>Не удалось связать OneID с LMS</b>\n\n<blockquote>Возможно, ваш аккаунт OneID не привязан к lms.tuit.uz. Попробуйте ещё раз.</blockquote>",
                             "❌ <b>OneID ni LMS bilan bog'lab bo'lmadi</b>\n\n<blockquote>OneID hisobingiz lms.tuit.uz ga bog'lanmagan bo'lishi mumkin. Qayta urinib ko'ring.</blockquote>",
@@ -894,6 +920,11 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void handleLogin(long chatId, long userId, String login, String password) {
+        handleLogin(chatId, userId, login, password, true);
+    }
+
+    private void handleLogin(long chatId, long userId, String login, String password, boolean offerSave) {
+        if (offerSave) pendingCreds.put(userId, new String[]{"lms", login, password});
         sendProgress(chatId, tr(userId,
                 "⏳ Входим в систему...",
                 "⏳ Tizimga kirilmoqda...",
@@ -911,6 +942,7 @@ public class LmsBot extends TelegramLongPollingBot {
                         markup(List.of(List.of(inlineBtn(tr(userId,
                                 "🆔 Войти через OneID", "🆔 OneID orqali kirish", "🆔 OneID орқали кириш", "🆔 Sign in with OneID"),
                                 "auth_oneid")))));
+                pendingCreds.remove(userId);
                 return;
             }
             if (res == LmsService.LoginResult.ERROR) {
@@ -920,6 +952,7 @@ public class LmsBot extends TelegramLongPollingBot {
                                 "⚠️ <b>LMS жавоб бермаяпти.</b>\n\nБироздан кейин қайта киринг.",
                                 "⚠️ <b>LMS is not responding.</b>\n\nPlease try signing in a bit later."),
                         loginKeyboard(userId));
+                pendingCreds.remove(userId);
                 return;
             }
             boolean ok = res == LmsService.LoginResult.OK;
@@ -933,7 +966,9 @@ public class LmsBot extends TelegramLongPollingBot {
                                 "✅ <b>Signed in!</b>\n\nChoose an item from the menu below 👇"),
                         mainMenuKeyboard(userId));
                 onBotLogin(chatId, userId);
+                offerSaveCreds(chatId, userId);
             } else {
+                pendingCreds.remove(userId);
                 send(chatId, tr(userId,
                                 "❌ <b>Неверный логин или пароль!</b>\n\nПопробуйте ещё раз.",
                                 "❌ <b>Login yoki parol noto'g'ri!</b>\n\nQayta urinib ko'ring.",
@@ -981,10 +1016,83 @@ public class LmsBot extends TelegramLongPollingBot {
         if (lmsService.isSemesterDetected(userId)) userSemester.put(userId, semesterId);
     }
 
+    // ─────────────────────────────────────────────
+    //  АВТОВХОД
+    //  Кнопка появляется на клавиатуре этапа авторизации, если пользователь сам
+    //  разрешил сохранить логин и пароль. Хранятся они не в базе, а в шифрованном
+    //  файле рядом с сессиями (CredentialStore), и /logout их удаляет.
+    // ─────────────────────────────────────────────
+
+    /** Спрашивает согласие на сохранение; молчит, если сохранять нечего или уже сохранено. */
+    private void offerSaveCreds(long chatId, long userId) {
+        String[] c = pendingCreds.remove(userId);
+        if (c == null) return;
+        CredentialStore.Creds saved = lmsService.credentials().load(userId);
+        if (saved != null && saved.login().equals(c[1]) && saved.password().equals(c[2])) return;
+        pendingCreds.put(userId, c);
+        InlineKeyboardMarkup kb = markup(List.of(
+                List.of(inlineBtn(tr(userId, "✅ Сохранить", "✅ Saqlash", "✅ Сақлаш", "✅ Save"), "creds_yes")),
+                List.of(inlineBtn(tr(userId, "🚫 Не сохранять", "🚫 Saqlanmasin", "🚫 Сақланмасин", "🚫 Don't save"), "creds_no"))
+        ));
+        send(chatId, tr(userId,
+                "💾 <b>Сохранить логин и пароль для автовхода?</b>\n\n"
+                        + "<blockquote>Тогда при следующем входе хватит одной кнопки «⚡ Автовход» — вводить ничего не придётся.\n\n"
+                        + "Данные шифруются и хранятся только для вашего аккаунта. Команда /logout удаляет их.</blockquote>",
+                "💾 <b>Avtokirish uchun login va parol saqlansinmi?</b>\n\n"
+                        + "<blockquote>Keyingi safar «⚡ Avtokirish» tugmasining o'zi yetadi — hech narsa kiritish shart emas.\n\n"
+                        + "Ma'lumotlar shifrlanadi va faqat sizning hisobingiz uchun saqlanadi. /logout ularni o'chiradi.</blockquote>",
+                "💾 <b>Автокириш учун логин ва парол сақлансинми?</b>\n\n"
+                        + "<blockquote>Кейинги сафар «⚡ Автокириш» тугмасининг ўзи етади — ҳеч нарса киритиш шарт эмас.\n\n"
+                        + "Маълумотлар шифрланади ва фақат сизнинг ҳисобингиз учун сақланади. /logout уларни ўчиради.</blockquote>",
+                "💾 <b>Save your login and password for auto sign-in?</b>\n\n"
+                        + "<blockquote>Next time the «⚡ Auto sign-in» button alone will be enough — nothing to type.\n\n"
+                        + "The data is encrypted and kept for your account only. /logout deletes it.</blockquote>"), kb);
+    }
+
+    private void saveCredsAnswer(long chatId, long userId, boolean save) {
+        String[] c = pendingCreds.remove(userId);
+        if (!save || c == null) {
+            send(chatId, tr(userId,
+                    "👌 Ничего не сохранил.",
+                    "👌 Hech narsa saqlanmadi.",
+                    "👌 Ҳеч нарса сақланмади.",
+                    "👌 Nothing was saved."), null);
+            return;
+        }
+        lmsService.credentials().save(userId, new CredentialStore.Creds(c[0], c[1], c[2]));
+        send(chatId, tr(userId,
+                "✅ Сохранено. В следующий раз нажмите «⚡ Автовход».",
+                "✅ Saqlandi. Keyingi safar «⚡ Avtokirish» tugmasini bosing.",
+                "✅ Сақланди. Кейинги сафар «⚡ Автокириш» тугмасини босинг.",
+                "✅ Saved. Next time just tap «⚡ Auto sign-in»."), null);
+    }
+
+    /** Кнопка «Автовход»: бот сам подставляет сохранённые данные и входит. */
+    private void handleAutoLogin(long chatId, long userId) {
+        CredentialStore.Creds c = lmsService.credentials().load(userId);
+        if (c == null) {
+            send(chatId, tr(userId,
+                    "🤷 Сохранённых данных нет — войдите обычным способом.",
+                    "🤷 Saqlangan ma'lumot yo'q — odatdagidek kiring.",
+                    "🤷 Сақланган маълумот йўқ — одатдагидек киринг.",
+                    "🤷 Nothing is saved — please sign in the usual way."), loginKeyboard(userId));
+            return;
+        }
+        send(chatId, tr(userId,
+                "⚡ Входим как <b>" + esc(c.login()) + "</b>...",
+                "⚡ <b>" + esc(c.login()) + "</b> sifatida kirilmoqda...",
+                "⚡ <b>" + esc(c.login()) + "</b> сифатида кирилмоқда...",
+                "⚡ Signing in as <b>" + esc(c.login()) + "</b>..."), null);
+        // offerSave=false: данные уже сохранены, второй раз спрашивать незачем.
+        if ("oneid".equals(c.method())) handleOneIdLogin(chatId, userId, c.login(), c.password(), false);
+        else                            handleLogin(chatId, userId, c.login(), c.password(), false);
+    }
+
     private void handleLogout(long chatId, long userId) {
         lmsService.logout(userId);
         resetUserCaches(userId);
         userLogin.remove(userId);
+        pendingCreds.remove(userId);
         send(chatId, tr(userId,
                 "👋 Вы вышли из системы.\n\nЧтобы войти снова: /login",
                 "👋 Tizimdan chiqtingiz.\n\nQayta kirish: /login",
@@ -2701,13 +2809,26 @@ public class LmsBot extends TelegramLongPollingBot {
     // ─────────────────────────────────────────────
 
     private ReplyKeyboardMarkup loginKeyboard(long userId) {
-        String label = tr(userId, "🔑 Войти", "🔑 Kirish", "🔑 Кириш", "🔑 Sign in");
-        KeyboardRow row = new KeyboardRow();
-        row.add(new KeyboardButton(label));
+        KeyboardRow signIn = new KeyboardRow();
+        signIn.add(new KeyboardButton(tr(userId, "🔑 Войти", "🔑 Kirish", "🔑 Кириш", "🔑 Sign in")));
+        List<KeyboardRow> rows = new ArrayList<>();
+        // Кнопка живёт только на этой клавиатуре, то есть пока пользователь не вошёл:
+        // после входа Telegram получает mainMenuKeyboard, и автовход исчезает сам.
+        if (lmsService.credentials().has(userId)) {
+            KeyboardRow auto = new KeyboardRow();
+            auto.add(new KeyboardButton(autoLoginLabel(userId)));
+            rows.add(auto);
+        }
+        rows.add(signIn);
         ReplyKeyboardMarkup m = new ReplyKeyboardMarkup();
-        m.setKeyboard(List.of(row));
+        m.setKeyboard(rows);
         m.setResizeKeyboard(true);
         return m;
+    }
+
+    /** Подпись кнопки автовхода; варианты повторены в разборе текста сообщений. */
+    private String autoLoginLabel(long userId) {
+        return tr(userId, "⚡ Автовход", "⚡ Avtokirish", "⚡ Автокириш", "⚡ Auto sign-in");
     }
 
     private ReplyKeyboardMarkup mainMenuKeyboard(long userId) {

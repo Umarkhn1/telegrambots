@@ -47,10 +47,18 @@ public class LmsService {
 
     /** JWT OneID вошедших пользователей — из него поднимается новая сессия LMS. */
     private final OneIdTokenStore oneIdTokens;
+    /** Логин и пароль тех, кто согласился на автовход. */
+    private final CredentialStore credentials;
 
     public LmsService(AppConfig config) {
         this.config = config;
-        this.oneIdTokens = new OneIdTokenStore(sessionDir(), config.getBot().getToken());
+        String token = config.getBot().getToken();
+        this.oneIdTokens = new OneIdTokenStore(sessionDir(), token);
+        this.credentials = new CredentialStore(sessionDir(), token);
+    }
+
+    public CredentialStore credentials() {
+        return credentials;
     }
 
     // ─────────────────────────────────────────────
@@ -631,8 +639,10 @@ public class LmsService {
         loggedInMap.remove(userId);
         clients.remove(userId);
         oneIdSessions.remove(userId);
-        // Выход должен быть настоящим: без этого сессия поднялась бы обратно по токену.
+        // Выход должен быть настоящим: без этого сессия поднялась бы обратно по токену,
+        // а кнопка автовхода вернула бы пользователя в аккаунт, из которого он вышел.
         oneIdTokens.clear(userId);
+        credentials.clear(userId);
         invalidateSemesters(userId);
         try {
             // Also clear persistent cookies so user is fully logged out
