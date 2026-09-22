@@ -45,8 +45,12 @@ public class LmsService {
         return one.length() > 220 ? one.substring(0, 220) + "..." : one;
     }
 
+    /** JWT OneID вошедших пользователей — из него поднимается новая сессия LMS. */
+    private final OneIdTokenStore oneIdTokens;
+
     public LmsService(AppConfig config) {
         this.config = config;
+        this.oneIdTokens = new OneIdTokenStore(sessionDir(), config.getBot().getToken());
     }
 
     // ─────────────────────────────────────────────
@@ -156,6 +160,9 @@ public class LmsService {
             loggedInMap.put(userId, success);
             if (success) {
                 invalidateSemesters(userId);
+                // Вход по паролю LMS мог сменить аккаунт: старый токен OneID поднял бы
+                // сессию предыдущего пользователя, и данные пришли бы чужие.
+                oneIdTokens.clear(userId);
                 return LoginResult.OK;
             }
             if (oneIdRequired(responseBody)) {
@@ -425,17 +432,32 @@ public class LmsService {
      * callbackUrl LMS тем же cookie jar — после этого сессия LMS авторизована.
      */
     public boolean oneIdFinish(long userId) {
-        try {
-            OneIdSession s = oneIdSessions.get(userId);
-            if (s == null || s.jwt == null) return false;
+        OneIdSession s = oneIdSessions.get(userId);
+        if (s == null || s.jwt == null) return false;
+        boolean success = ssoExchange(userId, s.jwt, s.tokenId, s.clientId);
+        oneIdSessions.remove(userId);
+        loggedInMap.put(userId, success);
+        if (success) {
+            invalidateSemesters(userId);
+            // Токен переживает и сон сервиса, и деплой: по нему сессия поднимется сама.
+            oneIdTokens.save(userId, s.jwt);
+        }
+        return success;
+    }
 
+    /**
+     * Обменивает JWT OneID на сессию LMS: sso/v1/generate выдаёт одноразовый код,
+     * его забирает callbackUrl LMS тем же cookie jar. Пароль при этом не нужен.
+     */
+    private boolean ssoExchange(long userId, String jwt, String tokenId, String clientId) {
+        try {
             String payload = mapper.createObjectNode()
-                    .put("uuid", s.tokenId)
-                    .put("scope", s.clientId)
+                    .put("uuid", tokenId)
+                    .put("scope", clientId)
                     .toString();
 
             Request gen = oneIdReq("sso/v1/generate")
-                    .header("Authorization", "Bearer " + s.jwt)
+                    .header("Authorization", "Bearer " + jwt)
                     .post(RequestBody.create(payload, JSON_UTF8))
                     .build();
 
@@ -482,13 +504,38 @@ public class LmsService {
                     userId, target, finalUrl, success, html.length());
             dbg("ONEID cookies u=%d -> %s", userId, cookieDump(userId));
 
-            oneIdSessions.remove(userId);
-            loggedInMap.put(userId, success);
-            if (success) invalidateSemesters(userId);
             return success;
 
         } catch (Exception e) {
-            System.err.println("[LmsService] OneID finish error: " + e.getMessage());
+            System.err.println("[LmsService] OneID sso exchange error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Поднимает сессию LMS по сохранённому JWT OneID, без участия пользователя.
+     * Вызывать только когда сессия точно мертва: oneIdStart очищает cookie jar.
+     */
+    public boolean reauthOneId(long userId) {
+        OneIdTokenStore.Token token = oneIdTokens.load(userId);
+        if (token == null) return false;
+        try {
+            // Нужны свежие token_id/client_id — старые одноразовые.
+            OneIdSession s = oneIdStart(userId);
+            boolean ok = ssoExchange(userId, token.jwt(), s.tokenId, s.clientId);
+            oneIdSessions.remove(userId);
+            loggedInMap.put(userId, ok);
+            if (ok) {
+                invalidateSemesters(userId);
+                System.out.println("♻️ Сессия LMS восстановлена по OneID-токену u=" + userId);
+            } else {
+                // Токен отозван или протух раньше времени — больше им не пользуемся.
+                oneIdTokens.clear(userId);
+                System.out.println("⚠️ OneID-токен больше не подходит u=" + userId + ", нужен вход вручную");
+            }
+            return ok;
+        } catch (Exception e) {
+            System.err.println("[LmsService] OneID reauth " + userId + ": " + e.getMessage());
             return false;
         }
     }
@@ -535,30 +582,17 @@ public class LmsService {
     }
 
     /**
-     * Проверяет сохранённые cookie: если сессия LMS ещё жива — помечает пользователя
-     * как авторизованного. Нужно после перезапуска бота, т.к. loggedInMap живёт в памяти.
+     * Возвращает пользователя в строй после перезапуска или сна сервиса: loggedInMap
+     * живёт в памяти, а cookie — на диске. Если сессия на стороне LMS уже истекла
+     * (она умирает примерно через два часа простоя), молча поднимаем новую по
+     * сохранённому JWT OneID — пользователь ничего не замечает.
      */
     public boolean restoreSession(long userId) {
-        try {
-            // /dashboard без сессии отдаёт 404 (не редирект!), поэтому проверяем
-            // /student/info: без сессии он уводит на /auth/login с формой пароля.
-            Request req = new Request.Builder()
-                    .url(config.getLms().getBaseUrl() + "/student/info")
-                    .header("User-Agent", userAgent())
-                    .build();
-            String finalUrl, html;
-            try (Response resp = getClient(userId).newCall(req).execute()) {
-                finalUrl = resp.request().url().toString();
-                html     = resp.body() != null ? resp.body().string() : "";
-            }
-            boolean ok = !finalUrl.contains("/auth/login")
-                    && !html.contains("name=\"password\"")
-                    && finalUrl.contains("/student/info");
-            if (ok) loggedInMap.put(userId, true);
-            return ok;
-        } catch (Exception e) {
-            return false;
-        }
+        Boolean alive = probeSession(userId);
+        if (Boolean.TRUE.equals(alive)) return true;
+        // null — LMS не ответила: о сессии ничего не известно, сносить её нельзя.
+        if (alive == null) return false;
+        return reauthOneId(userId);
     }
 
     /**
@@ -597,6 +631,8 @@ public class LmsService {
         loggedInMap.remove(userId);
         clients.remove(userId);
         oneIdSessions.remove(userId);
+        // Выход должен быть настоящим: без этого сессия поднялась бы обратно по токену.
+        oneIdTokens.clear(userId);
         invalidateSemesters(userId);
         try {
             // Also clear persistent cookies so user is fully logged out

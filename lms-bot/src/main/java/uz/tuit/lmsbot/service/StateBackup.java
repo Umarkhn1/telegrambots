@@ -63,23 +63,30 @@ public class StateBackup {
         return out;
     }
 
-    /** Id пользователей, у которых на диске есть сессия LMS. */
+    /**
+     * Id пользователей, которых стоит проверить при старте: у кого на диске есть
+     * cookie LMS либо токен OneID — по токену сессия поднимется, даже если cookie мертва.
+     */
     public List<Long> sessionUsers() {
-        List<Long> out = new ArrayList<>();
+        java.util.LinkedHashSet<Long> out = new java.util.LinkedHashSet<>();
         try {
             for (Path p : files()) {
                 String n = p.getFileName().toString();
-                if (n.startsWith("cookies_") && n.endsWith(".json")) {
-                    try { out.add(Long.parseLong(n.substring(8, n.length() - 5))); } catch (NumberFormatException ignored) {}
+                if (!n.endsWith(".json")) continue;
+                for (String prefix : new String[]{"cookies_", "oneid_"}) {
+                    if (!n.startsWith(prefix)) continue;
+                    try { out.add(Long.parseLong(n.substring(prefix.length(), n.length() - 5))); }
+                    catch (NumberFormatException ignored) {}
                 }
             }
         } catch (IOException ignored) {}
-        return out;
+        return new ArrayList<>(out);
     }
 
     /**
-     * Отпечаток «важных» изменений: кто вошёл/вышел, языки, список студентов.
-     * Сами cookie LMS меняются на каждом запросе, их по отпечатку не отслеживаем.
+     * Отпечаток «важных» изменений: кто вошёл/вышел, языки, список студентов, токены OneID.
+     * Сами cookie LMS меняются на каждом запросе, их содержимое по отпечатку не отслеживаем —
+     * иначе копия перезаливалась бы каждые три минуты.
      */
     public String fingerprint() {
         try {
@@ -87,7 +94,7 @@ public class StateBackup {
             for (Path p : files()) {
                 String rel = root.relativize(p).toString();
                 md.update(rel.getBytes(StandardCharsets.UTF_8));
-                if (!rel.startsWith("sessions")) md.update(Files.readAllBytes(p));
+                if (!p.getFileName().toString().startsWith("cookies_")) md.update(Files.readAllBytes(p));
             }
             return java.util.HexFormat.of().formatHex(md.digest());
         } catch (Exception e) {

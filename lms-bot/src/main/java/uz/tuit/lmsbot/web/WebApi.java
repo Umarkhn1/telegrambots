@@ -59,9 +59,58 @@ public class WebApi {
         this.bot = bot;
     }
 
-    /** Поднимает HTTP-сервер (health + API + фронтенд) на указанном порту. */
+    // ─────────────────────────────────────────────
+    //  WEBHOOK
+    // ─────────────────────────────────────────────
+
+    /** Апдейты обрабатываем отдельно от HTTP-потоков: поход в LMS занимает секунды. */
+    private final ExecutorService updates = Executors.newFixedThreadPool(8, r -> {
+        Thread t = new Thread(r, "tg-update");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Telegram добавляет поля быстрее, чем обновляется библиотека, — лишние игнорируем. */
+    private static final com.fasterxml.jackson.databind.ObjectMapper UPDATE_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper()
+                    .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+    /** Путь webhook: секретный и стабильный между перезапусками, выводится из токена бота. */
+    public static String webhookPath(String botToken) {
+        return "/tg/" + digest("path|" + botToken);
+    }
+
+    /** Значение заголовка X-Telegram-Bot-Api-Secret-Token — второй барьер после пути. */
+    public static String webhookSecret(String botToken) {
+        return digest("secret|" + botToken);
+    }
+
+    private static String digest(String s) {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(s.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(h).substring(0, 32);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void onWebhookUpdate(byte[] body) {
+        updates.submit(() -> {
+            try {
+                bot.onUpdateReceived(UPDATE_MAPPER.readValue(
+                        body, org.telegram.telegrambots.meta.api.objects.Update.class));
+            } catch (Exception e) {
+                System.err.println("[WebApi] webhook update: " + e);
+            }
+        });
+    }
+
+    /** Поднимает HTTP-сервер (health + API + фронтенд + webhook) на указанном порту. */
     public void start(int port) throws Exception {
-        WebServer s = new WebServer(config.getBot().getToken());
+        String token = config.getBot().getToken();
+        WebServer s = new WebServer(token);
+        s.webhook(webhookPath(token), webhookSecret(token), this::onWebhookUpdate);
 
         s.get("/api/me", this::me);
 
@@ -147,7 +196,9 @@ public class WebApi {
             if (alive != null) lastProbe.put(uid, now);
             if (Boolean.FALSE.equals(alive)) {
                 dropCache(uid);
-                return false;
+                // Сессия истекла на стороне LMS — пробуем поднять её по токену OneID,
+                // чтобы мини-приложение не выкидывало на экран входа.
+                return lms.reauthOneId(uid);
             }
         }
         return true;

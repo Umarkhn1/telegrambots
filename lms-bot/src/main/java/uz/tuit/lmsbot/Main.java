@@ -33,8 +33,13 @@ public class Main {
         // обработаются с пустым диском.
         bot.restoreState();
 
-        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-        botsApi.registerBot(bot);
+        // Хостинги вроде Render считают веб-сервис упавшим, если он не слушает $PORT.
+        // На этом же порту живут API и фронтенд мини-приложения и приём webhook,
+        // поэтому сервер поднимаем до регистрации бота: Telegram проверяет адрес
+        // webhook сразу же, и отвечать на эту проверку должно уже быть кому.
+        boolean web = startWebServer(config, lmsService, bot);
+
+        if (!(web && startWebhook(config, bot))) startLongPolling(bot);
         bot.applyBotCommands();
 
         // ✅ НОВОЕ: чистая остановка всех потоков при Ctrl+C или kill
@@ -44,33 +49,85 @@ public class Main {
         }));
 
         System.out.println("✅ Bot is running! Username: @" + config.getBot().getUsername());
-
-        // Хостинги вроде Render считают веб-сервис упавшим, если он не слушает $PORT.
-        // На этом же порту живут API и фронтенд мини-приложения.
-        startWebServer(config, lmsService, bot);
         startKeepAlive();
     }
 
-    private static void startWebServer(AppConfig config, LmsService lmsService, LmsBot bot) {
+    private static boolean startWebServer(AppConfig config, LmsService lmsService, LmsBot bot) {
         String port = System.getenv("PORT");
         if (port == null || port.isBlank()) {
             System.out.println("🌐 PORT не задан — HTTP-сервер и мини-приложение выключены");
-            return;
+            return false;
         }
         try {
             new WebApi(config, lmsService, bot).start(Integer.parseInt(port.trim()));
             System.out.println("🌐 HTTP on :" + port + " (health /, API /api/, app /app/)");
         } catch (Exception e) {
             System.err.println("[Main] web server: " + e.getMessage());
-            return;
+            return false;
         }
         // Адрес мини-приложения: явный WEBAPP_URL или публичный адрес сервиса на Render.
         String url = System.getenv("WEBAPP_URL");
         if (url == null || url.isBlank()) {
-            String ext = System.getenv("RENDER_EXTERNAL_URL");
-            if (ext != null && !ext.isBlank()) url = (ext.endsWith("/") ? ext : ext + "/") + "app/";
+            String base = publicUrl();
+            if (base != null) url = base + "app/";
         }
         bot.applyWebApp(url);
+        return true;
+    }
+
+    /** Публичный https-адрес сервиса со слэшем на конце либо null. */
+    private static String publicUrl() {
+        String url = System.getenv("WEBHOOK_URL");
+        if (url == null || url.isBlank()) url = System.getenv("RENDER_EXTERNAL_URL");
+        if (url == null || url.isBlank()) return null;
+        url = url.trim();
+        if (!url.startsWith("https://")) return null;   // Telegram принимает только https
+        return url.endsWith("/") ? url : url + "/";
+    }
+
+    /**
+     * Webhook вместо long polling: апдейт приходит обычным POST на наш адрес, а значит
+     * сообщение пользователя само будит уснувший сервис. При long polling спящий сервис
+     * просто не забирает апдейты, и бот молчит, пока его не разбудит кто-то извне.
+     *
+     * Выключается переменной WEBHOOK=off — тогда работает старый режим.
+     */
+    private static boolean startWebhook(AppConfig config, LmsBot bot) {
+        if ("off".equalsIgnoreCase(System.getenv("WEBHOOK"))) return false;
+        String base = publicUrl();
+        if (base == null) {
+            System.out.println("🌐 Публичный https-адрес неизвестен — webhook пропущен");
+            return false;
+        }
+        String token = config.getBot().getToken();
+        String url = base.substring(0, base.length() - 1) + WebApi.webhookPath(token);
+        try {
+            bot.execute(org.telegram.telegrambots.meta.api.methods.updates.SetWebhook.builder()
+                    .url(url)
+                    .secretToken(WebApi.webhookSecret(token))
+                    // Апдейты, накопившиеся за сон, нужны: их и так не больше суточной очереди.
+                    .dropPendingUpdates(false)
+                    .maxConnections(20)
+                    .build());
+            System.out.println("🪝 Webhook: " + url.replaceAll("/tg/.*", "/tg/***"));
+            return true;
+        } catch (Exception e) {
+            // Не смогли — лучше работать хуже, чем не работать: откатываемся на polling.
+            System.err.println("[Main] setWebhook: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static void startLongPolling(LmsBot bot) throws Exception {
+        // Пока webhook установлен, getUpdates отвечает 409 — снимаем его.
+        try {
+            bot.execute(org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook.builder()
+                    .dropPendingUpdates(false).build());
+        } catch (Exception e) {
+            System.err.println("[Main] deleteWebhook: " + e.getMessage());
+        }
+        new TelegramBotsApi(DefaultBotSession.class).registerBot(bot);
+        System.out.println("📡 Режим long polling");
     }
 
     /** Каждые сколько минут дёргать собственный адрес, чтобы сервис не уснул. */

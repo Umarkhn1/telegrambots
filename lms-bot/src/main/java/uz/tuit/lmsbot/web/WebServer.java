@@ -120,13 +120,60 @@ public class WebServer {
     void post(String regex, Handler h)       { routes.add(new Route("POST", Pattern.compile(regex), true,  h)); }
     void publicGet(String regex, Handler h)  { routes.add(new Route("GET",  Pattern.compile(regex), false, h)); }
 
+    private String webhookPath;
+    private String webhookSecret;
+    private java.util.function.Consumer<byte[]> webhookSink;
+
+    /** Приём апдейтов Telegram по webhook: тело POST уходит в sink как есть. */
+    void webhook(String path, String secret, java.util.function.Consumer<byte[]> sink) {
+        this.webhookPath = path;
+        this.webhookSecret = secret;
+        this.webhookSink = sink;
+    }
+
     void start(int port) throws IOException {
         HttpServer http = HttpServer.create(new InetSocketAddress(port), 0);
         http.createContext("/api/", this::handleApi);
         http.createContext("/app", this::handleStatic);
+        if (webhookPath != null) http.createContext(webhookPath, this::handleWebhook);
         http.createContext("/", WebServer::handleHealth);
         http.setExecutor(Executors.newFixedThreadPool(16));
         http.start();
+    }
+
+    // ─────────────────────────────────────────────
+    //  WEBHOOK
+    // ─────────────────────────────────────────────
+
+    /** Больше апдейт быть не может: Telegram шлёт максимум ~1 МБ. */
+    private static final int WEBHOOK_LIMIT = 1024 * 1024;
+
+    private void handleWebhook(HttpExchange ex) {
+        try {
+            if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+                ex.sendResponseHeaders(405, -1);
+                return;
+            }
+            // Адрес webhook знает только Telegram, но заголовок проверяем всё равно:
+            // без него любой, кто узнал путь, слал бы боту поддельные апдейты.
+            String secret = ex.getRequestHeaders().getFirst("X-Telegram-Bot-Api-Secret-Token");
+            if (webhookSecret != null && !webhookSecret.equals(secret)) {
+                ex.sendResponseHeaders(403, -1);
+                return;
+            }
+            byte[] body;
+            try (InputStream in = ex.getRequestBody()) {
+                body = in.readNBytes(WEBHOOK_LIMIT);
+            }
+            // Отвечаем до обработки: Telegram ждёт ответа и повторяет апдейт, если
+            // мы задумались, а поход в LMS занимает секунды.
+            ex.sendResponseHeaders(200, -1);
+            webhookSink.accept(body);
+        } catch (IOException e) {
+            System.err.println("[WebServer] webhook: " + e.getMessage());
+        } finally {
+            ex.close();
+        }
     }
 
     // ─────────────────────────────────────────────

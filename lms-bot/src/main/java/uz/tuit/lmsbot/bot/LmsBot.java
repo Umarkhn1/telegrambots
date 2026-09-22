@@ -2277,6 +2277,29 @@ public class LmsBot extends TelegramLongPollingBot {
             }
         }, 15, 60, TimeUnit.SECONDS);
         scheduler.scheduleWithFixedDelay(this::tickStateBackup, 3, 3, TimeUnit.MINUTES);
+        scheduler.scheduleWithFixedDelay(this::tickSessionSweep, 5, SESSION_SWEEP_MIN, TimeUnit.MINUTES);
+    }
+
+    /**
+     * Реже, чем LMS убивает сессию за простой (около двух часов), — с хорошим запасом
+     * на случай, если сервис часть времени спал.
+     */
+    private static final int SESSION_SWEEP_MIN = 25;
+
+    /**
+     * Держит сессии живыми и чинит сломанные. Каждому, у кого на диске есть cookie или
+     * токен OneID, делается один запрос к LMS: вошедшим он обновляет время простоя, и
+     * сессия не истекает вовсе; остальных — возвращает в строй (при старте LMS могла не
+     * ответить, и тогда напоминания молча пропускали бы такого пользователя, пока он
+     * сам не напишет боту).
+     */
+    private void tickSessionSweep() {
+        if (!stateRestored) return;
+        for (Long uid : stateBackup.sessionUsers()) {
+            executor.submit(() -> {
+                if (lmsService.restoreSession(uid)) lastChatId.putIfAbsent(uid, uid);
+            });
+        }
     }
 
     /**
@@ -2907,7 +2930,9 @@ public class LmsBot extends TelegramLongPollingBot {
     // ─────────────────────────────────────────────
 
     private boolean checkLogin(long chatId, long userId) {
-        if (!lmsService.isLoggedIn(userId)) {
+        // Флаг входа живёт в памяти: после перезапуска или сна сервиса он пуст, хотя
+        // cookie и токен OneID на месте. Сначала пробуем поднять сессию молча.
+        if (!lmsService.isLoggedIn(userId) && !lmsService.restoreSession(userId)) {
             send(chatId, tr(userId,
                     "⚠️ Сначала войдите в систему! /login",
                     "⚠️ Avval tizimga kiring! /login",
