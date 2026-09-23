@@ -66,13 +66,72 @@ public class LmsService {
     // ─────────────────────────────────────────────
 
     private OkHttpClient getClient(long userId) {
-        return clients.computeIfAbsent(userId, id -> new OkHttpClient.Builder()
-                .cookieJar(jars.compute(userId, (k, v) -> new PersistentCookieJar(sessionDir(), userId)))
-                .followRedirects(true)
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .build());
+        return clients.computeIfAbsent(userId, id -> {
+            OkHttpClient.Builder b = new OkHttpClient.Builder()
+                    .cookieJar(jars.compute(userId, (k, v) -> new PersistentCookieJar(sessionDir(), userId)))
+                    .followRedirects(true)
+                    // Хост OneID умеет просто не отвечать; ждать полминуты незачем,
+                    // пользователю нужен быстрый внятный отказ.
+                    .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (EGOV_PROXY != null) {
+                b.proxySelector(EGOV_PROXY_SELECTOR);
+                if (EGOV_PROXY_AUTH != null) b.proxyAuthenticator((route, resp) ->
+                        resp.request().newBuilder().header("Proxy-Authorization", EGOV_PROXY_AUTH).build());
+            }
+            return b.build();
+        });
+    }
+
+    // ─────────────────────────────────────────────
+    //  ПРОКСИ ДЛЯ EGOV
+    //  С некоторых адресов id.egov.uz и sso.egov.uz просто не отвечают: соединение
+    //  висит до таймаута, хотя lms.tuit.uz с того же сервера открывается мгновенно.
+    //  ONEID_PROXY=http://[логин:пароль@]хост:порт уводит туда только запросы к egov.uz,
+    //  всё остальное продолжает ходить напрямую.
+    // ─────────────────────────────────────────────
+
+    private static final java.net.Proxy EGOV_PROXY = parseProxy(System.getenv("ONEID_PROXY"));
+    private static final String EGOV_PROXY_AUTH = parseProxyAuth(System.getenv("ONEID_PROXY"));
+
+    private static final java.net.ProxySelector EGOV_PROXY_SELECTOR = new java.net.ProxySelector() {
+        @Override public java.util.List<java.net.Proxy> select(java.net.URI uri) {
+            String h = uri == null ? null : uri.getHost();
+            boolean egov = h != null && (h.equals("egov.uz") || h.endsWith(".egov.uz"));
+            return java.util.List.of(egov && EGOV_PROXY != null ? EGOV_PROXY : java.net.Proxy.NO_PROXY);
+        }
+        @Override public void connectFailed(java.net.URI uri, java.net.SocketAddress sa, java.io.IOException e) {
+            System.err.println("[LmsService] прокси не отвечает для " + uri + ": " + e.getMessage());
+        }
+    };
+
+    private static java.net.Proxy parseProxy(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            java.net.URI u = java.net.URI.create(raw.contains("://") ? raw.trim() : "http://" + raw.trim());
+            int port = u.getPort() > 0 ? u.getPort() : 8080;
+            java.net.Proxy.Type type = "socks".equalsIgnoreCase(u.getScheme()) || "socks5".equalsIgnoreCase(u.getScheme())
+                    ? java.net.Proxy.Type.SOCKS : java.net.Proxy.Type.HTTP;
+            System.out.println("🔀 Запросы к egov.uz идут через " + type + " " + u.getHost() + ":" + port);
+            return new java.net.Proxy(type, new java.net.InetSocketAddress(u.getHost(), port));
+        } catch (Exception e) {
+            System.err.println("[LmsService] ONEID_PROXY не разобран: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static String parseProxyAuth(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            java.net.URI u = java.net.URI.create(raw.contains("://") ? raw.trim() : "http://" + raw.trim());
+            String info = u.getUserInfo();
+            if (info == null || info.isBlank()) return null;
+            return "Basic " + java.util.Base64.getEncoder()
+                    .encodeToString(info.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Path sessionDir() {
@@ -214,13 +273,15 @@ public class LmsService {
 
     /** Результат шага OneID-авторизации. */
     public static class OneIdResult {
-        public enum Status { OK, NEED_SMS, ERROR }
+        public enum Status { OK, NEED_SMS, ERROR, UNREACHABLE }
         public final Status status;
         public final String message;
         private OneIdResult(Status s, String m) { this.status = s; this.message = m; }
         static OneIdResult ok()              { return new OneIdResult(Status.OK, null); }
         static OneIdResult needSms()         { return new OneIdResult(Status.NEED_SMS, null); }
         static OneIdResult error(String msg) { return new OneIdResult(Status.ERROR, msg); }
+        /** Сам OneID не ответил — отличать от отказа, иначе выглядит как неверный пароль. */
+        static OneIdResult unreachable()     { return new OneIdResult(Status.UNREACHABLE, null); }
     }
 
     /**
@@ -317,8 +378,19 @@ public class LmsService {
 
         } catch (Exception e) {
             System.err.println("[LmsService] OneID login error: " + e.getMessage());
-            return OneIdResult.error(null);
+            return unreachable(e) ? OneIdResult.unreachable() : OneIdResult.error(null);
         }
+    }
+
+    /** Сбой сети, а не отказ OneID: соединение не встало или оборвалось. */
+    private static boolean unreachable(Exception e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.net.SocketTimeoutException
+                    || t instanceof java.net.ConnectException
+                    || t instanceof java.net.UnknownHostException
+                    || t instanceof java.net.NoRouteToHostException) return true;
+        }
+        return false;
     }
 
     /** Номер в формате OneID (+998XXXXXXXXX) или null, если номер не узбекский. */
@@ -360,7 +432,7 @@ public class LmsService {
 
         } catch (Exception e) {
             System.err.println("[LmsService] OneID mobile sms error: " + e.getMessage());
-            return OneIdResult.error(null);
+            return unreachable(e) ? OneIdResult.unreachable() : OneIdResult.error(null);
         }
     }
 
@@ -400,7 +472,7 @@ public class LmsService {
 
         } catch (Exception e) {
             System.err.println("[LmsService] OneID mobile login error: " + e.getMessage());
-            return OneIdResult.error(null);
+            return unreachable(e) ? OneIdResult.unreachable() : OneIdResult.error(null);
         }
     }
 
@@ -436,7 +508,7 @@ public class LmsService {
 
         } catch (Exception e) {
             System.err.println("[LmsService] OneID confirm error: " + e.getMessage());
-            return OneIdResult.error(null);
+            return unreachable(e) ? OneIdResult.unreachable() : OneIdResult.error(null);
         }
     }
 

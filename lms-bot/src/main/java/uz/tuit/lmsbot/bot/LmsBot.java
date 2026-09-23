@@ -860,6 +860,10 @@ public class LmsBot extends TelegramLongPollingBot {
                                     + "and enter the <b>authentication code</b>:"), null);
                 }
                 case OK -> finishOneId(chatId, userId, login);
+                case UNREACHABLE -> {
+                    tempOneIdLogin.remove(userId);
+                    sendOneIdUnreachable(chatId, userId);
+                }
                 default -> {
                     tempOneIdLogin.remove(userId);
                     pendingCreds.remove(userId);
@@ -880,6 +884,9 @@ public class LmsBot extends TelegramLongPollingBot {
             LmsService.OneIdResult res = lmsService.oneIdConfirm(userId, login, code);
             if (res.status == LmsService.OneIdResult.Status.OK) {
                 finishOneId(chatId, userId, login);
+            } else if (res.status == LmsService.OneIdResult.Status.UNREACHABLE) {
+                tempOneIdLogin.remove(userId);
+                sendOneIdUnreachable(chatId, userId);
             } else {
                 tempOneIdLogin.remove(userId);
                 pendingCreds.remove(userId);
@@ -917,6 +924,17 @@ public class LmsBot extends TelegramLongPollingBot {
                             "❌ <b>Could not link OneID to LMS</b>\n\n<blockquote>Your OneID account may not be linked to lms.tuit.uz. Please try again.</blockquote>"),
                     loginKeyboard(userId));
         }
+    }
+
+    /** OneID не отвечает: это не про пароль, и вход по логину LMS в это время работает. */
+    private void sendOneIdUnreachable(long chatId, long userId) {
+        pendingCreds.remove(userId);
+        send(chatId, tr(userId,
+                "🚧 <b>OneID сейчас недоступен</b>\n\n<blockquote>Сервер id.egov.uz не отвечает — пароль тут ни при чём. Попробуйте позже или войдите логином и паролем LMS.</blockquote>",
+                "🚧 <b>OneID hozir ishlamayapti</b>\n\n<blockquote>id.egov.uz javob bermayapti — parol aybdor emas. Keyinroq urinib ko'ring yoki LMS login va paroli bilan kiring.</blockquote>",
+                "🚧 <b>OneID ҳозир ишламаяпти</b>\n\n<blockquote>id.egov.uz жавоб бермаяпти — парол айбдор эмас. Кейинроқ уриниб кўринг ёки LMS логин ва пароли билан киринг.</blockquote>",
+                "🚧 <b>OneID is unavailable right now</b>\n\n<blockquote>id.egov.uz is not responding — your password is fine. Try later, or sign in with your LMS login and password.</blockquote>"),
+                loginKeyboard(userId));
     }
 
     private void sendOneIdError(long chatId, long userId, String oneIdMessage) {
