@@ -59,6 +59,45 @@ public class WebApi {
         this.bot = bot;
     }
 
+    /**
+     * Доступность внешних хостов из самого контейнера: по адресу на каждую A/AAAA-запись,
+     * с временем установки TCP-соединения. Нужен, когда бот получает «Connect timed out»,
+     * а снаружи те же адреса открываются — снаружи это не проверить никак.
+     *
+     * Открыт по ключу webhook: наружу торчит только он, а секретов в ответе нет.
+     */
+    private Object diagNet(Req r) {
+        if (!webhookSecret(config.getBot().getToken()).equals(r.q("key"))) throw new ApiError(403, "forbidden");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (String host : new String[]{"lms.tuit.uz", "id.egov.uz", "sso.egov.uz", "api.telegram.org"}) {
+            java.net.InetAddress[] addrs;
+            try {
+                addrs = java.net.InetAddress.getAllByName(host);
+            } catch (Exception e) {
+                rows.add(new LinkedHashMap<>(Map.of("host", host, "dns", "FAIL: " + e.getMessage())));
+                continue;
+            }
+            for (java.net.InetAddress a : addrs) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("host", host);
+                row.put("ip", a.getHostAddress());
+                row.put("family", a instanceof java.net.Inet6Address ? "IPv6" : "IPv4");
+                long t0 = System.nanoTime();
+                try (java.net.Socket sock = new java.net.Socket()) {
+                    sock.connect(new java.net.InetSocketAddress(a, 443), 8000);
+                    row.put("ms", (System.nanoTime() - t0) / 1_000_000);
+                    row.put("ok", true);
+                } catch (Exception e) {
+                    row.put("ms", (System.nanoTime() - t0) / 1_000_000);
+                    row.put("ok", false);
+                    row.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+                rows.add(row);
+            }
+        }
+        return Map.of("egress", rows);
+    }
+
     // ─────────────────────────────────────────────
     //  WEBHOOK
     // ─────────────────────────────────────────────
@@ -142,6 +181,7 @@ public class WebApi {
         s.post("/api/upload", this::upload);
 
         s.get("/api/admin/students", this::adminStudents);
+        s.publicGet("/api/diag/net", this::diagNet);
 
         s.start(port);
     }
