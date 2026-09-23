@@ -28,8 +28,22 @@ public class CredentialStore {
 
     /** method: "oneid" — логин и пароль OneID, "lms" — учётная запись lms.tuit.uz. */
     public record Creds(String method, String login, String password) {
-        /** Короткий и устойчивый ключ для callback-данных кнопок. */
         public String id() { return method + ":" + login; }
+
+        /**
+         * Короткий ключ для callback-данных кнопки. Логин туда не кладём: Telegram
+         * отводит на callback_data 64 байта, а логином может оказаться почта или
+         * что угодно длиной сверх лимита — кнопка тогда не отправляется вовсе.
+         */
+        public String key() {
+            try {
+                byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(id().getBytes(StandardCharsets.UTF_8));
+                return java.util.HexFormat.of().formatHex(h).substring(0, 12);
+            } catch (Exception e) {
+                return "0";
+            }
+        }
     }
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -69,7 +83,7 @@ public class CredentialStore {
         if (list.size() == 1) return list.get(0);
         JsonNode root = read(userId);
         String sel = root == null ? null : root.path("selected").asText(null);
-        for (Creds c : list) if (c.id().equals(sel)) return c;
+        for (Creds c : list) if (c.key().equals(sel)) return c;
         return list.get(0);
     }
 
@@ -77,9 +91,9 @@ public class CredentialStore {
         return !all(userId).isEmpty();
     }
 
-    public synchronized String selectedId(long userId) {
+    public synchronized String selectedKey(long userId) {
         Creds c = selected(userId);
-        return c == null ? null : c.id();
+        return c == null ? null : c.key();
     }
 
     // ─────────────────────────────────────────────
@@ -92,21 +106,21 @@ public class CredentialStore {
         List<Creds> list = all(userId);
         list.removeIf(x -> x.id().equals(c.id()));
         list.add(c);
-        write(userId, list, c.id());
+        write(userId, list, c.key());
     }
 
-    public synchronized void remove(long userId, String id) {
+    public synchronized void remove(long userId, String key) {
         List<Creds> list = all(userId);
-        String sel = selectedId(userId);
-        list.removeIf(x -> x.id().equals(id));
+        String sel = selectedKey(userId);
+        list.removeIf(x -> x.key().equals(key));
         if (list.isEmpty()) { clear(userId); return; }
-        write(userId, list, id.equals(sel) ? list.get(0).id() : sel);
+        write(userId, list, key.equals(sel) ? list.get(0).key() : sel);
     }
 
-    public synchronized void select(long userId, String id) {
+    public synchronized void select(long userId, String key) {
         List<Creds> list = all(userId);
         for (Creds c : list) {
-            if (c.id().equals(id)) { write(userId, list, id); return; }
+            if (c.key().equals(key)) { write(userId, list, key); return; }
         }
     }
 

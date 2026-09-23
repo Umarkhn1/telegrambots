@@ -721,7 +721,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void askForLoginSync(long chatId, long userId) {
         // Сессия могла пережить перезапуск бота — проверяем сохранённые cookie.
-        if (!lmsService.isLoggedIn(userId) && lmsService.restoreSession(userId)) {
+        if (!lmsService.isLoggedIn(userId) && !loggingIn(userId) && lmsService.restoreSession(userId)) {
             send(chatId, tr(userId,
                             "✅ <b>Вы уже вошли в систему</b>\n\nЧтобы сменить аккаунт — /logout",
                             "✅ <b>Siz allaqachon tizimdasiz</b>\n\nHisobni almashtirish uchun — /logout",
@@ -1083,15 +1083,15 @@ public class LmsBot extends TelegramLongPollingBot {
     /** Список сохранённых аккаунтов: выбрать, каким входить, или удалить лишние. */
     private void showCreds(long chatId, long userId) {
         java.util.List<CredentialStore.Creds> list = lmsService.credentials().all(userId);
-        String selected = lmsService.credentials().selectedId(userId);
+        String selected = lmsService.credentials().selectedKey(userId);
         java.util.List<java.util.List<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton>> rows =
                 new ArrayList<>();
         for (CredentialStore.Creds c : list) {
-            String mark = c.id().equals(selected) ? "✅ " : "▫️ ";
+            String mark = c.key().equals(selected) ? "✅ " : "▫️ ";
             String kind = "oneid".equals(c.method()) ? "OneID" : "LMS";
             rows.add(List.of(
-                    inlineBtn(mark + c.login() + " · " + kind, "credsel_" + c.id()),
-                    inlineBtn("🗑", "creddel_" + c.id())));
+                    inlineBtn(mark + c.login() + " · " + kind, "credsel_" + c.key()),
+                    inlineBtn("🗑", "creddel_" + c.key())));
         }
         rows.add(List.of(inlineBtn(tr(userId,
                 "➕ Добавить аккаунт", "➕ Hisob qo'shish", "➕ Ҳисоб қўшиш", "➕ Add account"), "creds_add")));
@@ -2464,6 +2464,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private void tickSessionSweep() {
         if (!stateRestored) return;
         for (Long uid : stateBackup.sessionUsers()) {
+            if (loggingIn(uid)) continue;
             executor.submit(() -> {
                 if (lmsService.restoreSession(uid)) lastChatId.putIfAbsent(uid, uid);
             });
@@ -3115,10 +3116,20 @@ public class LmsBot extends TelegramLongPollingBot {
     //  HELPERS
     // ─────────────────────────────────────────────
 
+    /**
+     * Идёт ли прямо сейчас диалог входа. Во время него сессию восстанавливать нельзя:
+     * восстановление начинается с чистого cookie jar и убило бы наполовину пройденный
+     * вход — например, ожидание пароля или кода подтверждения.
+     */
+    private boolean loggingIn(long userId) {
+        String st = userState.getOrDefault(userId, "IDLE");
+        return st.startsWith("WAIT_LOGIN") || st.startsWith("WAIT_PASSWORD") || st.startsWith("WAIT_ONEID");
+    }
+
     private boolean checkLogin(long chatId, long userId) {
         // Флаг входа живёт в памяти: после перезапуска или сна сервиса он пуст, хотя
         // cookie и токен OneID на месте. Сначала пробуем поднять сессию молча.
-        if (!lmsService.isLoggedIn(userId) && !lmsService.restoreSession(userId)) {
+        if (!lmsService.isLoggedIn(userId) && (loggingIn(userId) || !lmsService.restoreSession(userId))) {
             send(chatId, tr(userId,
                     "⚠️ Сначала войдите в систему! /login",
                     "⚠️ Avval tizimga kiring! /login",

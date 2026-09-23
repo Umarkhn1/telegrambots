@@ -203,9 +203,14 @@ public class LmsService {
         String phone;
         String actionId;
         long controlCode;
+        /** Когда диалог входа начался: брошенный на полпути не должен мешать вечно. */
+        final long started = System.currentTimeMillis();
     }
 
     private final Map<Long, OneIdSession> oneIdSessions = new ConcurrentHashMap<>();
+
+    /** Сколько ждём человека на шагах входа, прежде чем считать диалог брошенным. */
+    private static final long LOGIN_DIALOG_MS = 10L * 60 * 1000;
 
     /** Результат шага OneID-авторизации. */
     public static class OneIdResult {
@@ -525,6 +530,14 @@ public class LmsService {
      * Вызывать только когда сессия точно мертва: oneIdStart очищает cookie jar.
      */
     public boolean reauthOneId(long userId) {
+        // Пользователь прямо сейчас входит руками: oneIdStart ниже стёр бы cookie jar
+        // вместе с сессией, которой выдан его token_id, и ввод пароля или SMS-кода
+        // провалился бы. Ждать нечего — он и так вот-вот войдёт.
+        OneIdSession pending = oneIdSessions.get(userId);
+        if (pending != null) {
+            if (System.currentTimeMillis() - pending.started < LOGIN_DIALOG_MS) return false;
+            oneIdSessions.remove(userId);   // диалог бросили — запись больше не мешает
+        }
         OneIdTokenStore.Token token = oneIdTokens.load(userId);
         if (token == null) return false;
         try {
