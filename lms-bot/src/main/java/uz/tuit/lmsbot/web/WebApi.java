@@ -98,6 +98,52 @@ public class WebApi {
         return Map.of("egress", rows);
     }
 
+    /**
+     * Трассировка начала входа через OneID: с /login/oneid по каждому редиректу до
+     * страницы id.egov.uz, откуда oneIdStart берёт token_id. Показывает, на каком
+     * именно шаге цепочка встаёт, — по логу бота этого не видно, там только итог.
+     */
+    private Object diagOneId(Req r) {
+        if (!webhookSecret(config.getBot().getToken()).equals(r.q("key"))) throw new ApiError(403, "forbidden");
+        okhttp3.OkHttpClient c = new okhttp3.OkHttpClient.Builder()
+                .followRedirects(false)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+
+        List<Map<String, Object>> hops = new ArrayList<>();
+        String url = config.getLms().getBaseUrl() + "/login/oneid";
+        for (int i = 0; i < 10 && url != null; i++) {
+            Map<String, Object> hop = new LinkedHashMap<>();
+            hop.put("step", i + 1);
+            hop.put("url", url);
+            long t0 = System.nanoTime();
+            try (okhttp3.Response resp = c.newCall(new okhttp3.Request.Builder()
+                    .url(url).header("User-Agent", "Mozilla/5.0").build()).execute()) {
+                hop.put("code", resp.code());
+                hop.put("ms", (System.nanoTime() - t0) / 1_000_000);
+                String next = resp.header("Location");
+                hop.put("location", next);
+                hops.add(hop);
+                if (next == null) break;
+                url = next.startsWith("http") ? next
+                        : okhttp3.HttpUrl.parse(url).newBuilder().encodedPath(next).build().toString();
+            } catch (Exception e) {
+                hop.put("ms", (System.nanoTime() - t0) / 1_000_000);
+                hop.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+                hops.add(hop);
+                break;
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("hops", hops);
+        Map<String, Object> last = hops.isEmpty() ? Map.of() : hops.get(hops.size() - 1);
+        out.put("verdict", last.containsKey("error")
+                ? "цепочка оборвалась на " + last.get("url")
+                : "дошли до конца: " + last.get("url"));
+        return out;
+    }
+
     // ─────────────────────────────────────────────
     //  WEBHOOK
     // ─────────────────────────────────────────────
@@ -182,6 +228,7 @@ public class WebApi {
 
         s.get("/api/admin/students", this::adminStudents);
         s.publicGet("/api/diag/net", this::diagNet);
+        s.publicGet("/api/diag/oneid", this::diagOneId);
 
         s.start(port);
     }
