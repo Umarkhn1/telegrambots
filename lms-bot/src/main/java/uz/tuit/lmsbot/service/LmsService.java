@@ -70,11 +70,13 @@ public class LmsService {
             OkHttpClient.Builder b = new OkHttpClient.Builder()
                     .cookieJar(jars.compute(userId, (k, v) -> new PersistentCookieJar(sessionDir(), userId)))
                     .followRedirects(true)
-                    // Хост OneID умеет просто не отвечать; ждать полминуты незачем,
-                    // пользователю нужен быстрый внятный отказ.
-                    .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+                    // Хост OneID умеет просто не отвечать. Три попытки по восемь секунд —
+                    // мигание сети переживаем незаметно, а на полностью мёртвом хосте
+                    // пользователь получает внятный отказ секунд через двадцать пять.
+                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS);
+                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .addInterceptor(CONNECT_RETRY);
             if (EGOV_PROXY != null) {
                 b.proxySelector(EGOV_PROXY_SELECTOR);
                 if (EGOV_PROXY_AUTH != null) b.proxyAuthenticator((route, resp) ->
@@ -82,6 +84,55 @@ public class LmsService {
             }
             return b.build();
         });
+    }
+
+    // ─────────────────────────────────────────────
+    //  ПОВТОР ПРИ ОБРЫВЕ СВЯЗИ
+    //  Связь Render с узбекскими хостами периодически проваливается на минуты:
+    //  соединение не встаёт, и единичный промах выглядит как сломанный вход —
+    //  особенно для нового пользователя, которому нечего восстанавливать.
+    //
+    //  Повторяем только отказы установки соединения: запрос до сервера не дошёл,
+    //  значит ни пароль, ни SMS-код не отправились дважды. Таймаут чтения, когда
+    //  запрос уже ушёл, не повторяем никогда.
+    // ─────────────────────────────────────────────
+
+    private static final int CONNECT_ATTEMPTS = 3;
+
+    private static final Interceptor CONNECT_RETRY = chain -> {
+        java.io.IOException last = null;
+        for (int attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
+            try {
+                return chain.proceed(chain.request());
+            } catch (java.io.IOException e) {
+                if (!connectFailure(e) || attempt == CONNECT_ATTEMPTS) throw e;
+                last = e;
+                dbg("RETRY %d/%d %s: %s", attempt, CONNECT_ATTEMPTS,
+                        chain.request().url().host(), e.getMessage());
+                try {
+                    Thread.sleep(700L * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+        throw last;
+    };
+
+    /** Соединение не установилось: сервер ничего не получил, повтор безопасен. */
+    private static boolean connectFailure(java.io.IOException e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.net.ConnectException
+                    || t instanceof java.net.NoRouteToHostException
+                    || t instanceof java.net.UnknownHostException) return true;
+            if (t instanceof java.net.SocketTimeoutException) {
+                String m = t.getMessage();
+                // «Connect timed out» — соединение; «Read timed out» — ответ, его не трогаем.
+                return m != null && m.toLowerCase(java.util.Locale.ROOT).contains("connect");
+            }
+        }
+        return false;
     }
 
     // ─────────────────────────────────────────────
