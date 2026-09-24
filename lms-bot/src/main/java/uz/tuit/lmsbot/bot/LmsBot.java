@@ -3037,9 +3037,17 @@ public class LmsBot extends TelegramLongPollingBot {
         return null;
     }
 
+    /** Telegram отводит на callback_data 64 байта и отвергает всё сообщение целиком. */
+    private static final int CALLBACK_LIMIT = 64;
+
     private InlineKeyboardButton inlineBtn(String text, String data) {
         InlineKeyboardButton btn = new InlineKeyboardButton();
         btn.setText(text);
+        if (data != null && data.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > CALLBACK_LIMIT) {
+            // Раньше такое сообщение просто не отправлялось, и понять почему было нельзя.
+            System.err.println("[LmsBot] callback_data длиннее " + CALLBACK_LIMIT + " байт, кнопка «"
+                    + text + "» не будет работать: " + data);
+        }
         btn.setCallbackData(data);
         return btn;
     }
@@ -3248,15 +3256,26 @@ public class LmsBot extends TelegramLongPollingBot {
         return max;
     }
 
+    /**
+     * Ключ дедлайна — он же уезжает в callback_data кнопок напоминания, а там у
+     * Telegram 64 байта. Раньше сюда клали заголовок задания, обрезанный по сорока
+     * СИМВОЛАМ: кириллица занимает по два байта, и кнопка выходила за лимит — всё
+     * сообщение с напоминанием молча не отправлялось. Теперь от заголовка берётся
+     * короткий хэш, и длина ключа не зависит ни от языка, ни от названия.
+     */
     private String deadlineKey(int courseId, long dl, String task) {
-        String safe = safeKey(task).replace(" ", "");
-        return courseId + "-" + dl + "-" + safe;
+        return courseId + "-" + dl + "-" + shortHash(task);
     }
 
-    private String safeKey(String s) {
-        if (s == null) return "";
-        String t = s.trim();
-        return t.length() > 40 ? t.substring(0, 40) : t;
+    private static String shortHash(String s) {
+        if (s == null || s.isBlank()) return "0";
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(s.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(h).substring(0, 10);
+        } catch (Exception e) {
+            return "0";
+        }
     }
 
     private boolean markOnce(long userId, String key) {
