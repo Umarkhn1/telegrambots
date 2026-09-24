@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion';
-import { BookOpen, CalendarDays, GraduationCap, House, UserRound, type LucideIcon } from 'lucide-react';
-import { TABS, type Tab } from '../lib/app';
+import { BookOpen, CalendarDays, ClipboardCheck, GraduationCap, House, UserRound, type LucideIcon } from 'lucide-react';
+import { type Tab } from '../lib/app';
 import { useI18n, type Key } from '../lib/i18n';
+import { useTT } from '../lib/ti18n';
 import { haptic } from '../lib/tg';
 
-const ITEMS: Record<Tab, { icon: LucideIcon; label: Key }> = {
+const ITEMS: Record<Exclude<Tab, 'grading'>, { icon: LucideIcon; label: Key }> = {
   home: { icon: House, label: 'nav_home' },
   courses: { icon: BookOpen, label: 'nav_courses' },
   schedule: { icon: CalendarDays, label: 'nav_schedule' },
@@ -13,8 +14,9 @@ const ITEMS: Record<Tab, { icon: LucideIcon; label: Key }> = {
 };
 
 /** Плавающая нижняя панель: закруглённая, с ползунком, который переезжает к активному разделу. */
-export function BottomNav({ tab, onChange, hidden }: { tab: Tab; onChange: (t: Tab) => void; hidden: boolean }) {
+export function BottomNav({ tabs, tab, onChange, hidden }: { tabs: Tab[]; tab: Tab; onChange: (t: Tab) => void; hidden: boolean }) {
   const { t } = useI18n();
+  const tt = useTT();
   return (
     <motion.nav
       className="nav"
@@ -22,8 +24,9 @@ export function BottomNav({ tab, onChange, hidden }: { tab: Tab; onChange: (t: T
       animate={hidden ? { y: 120, opacity: 0 } : { y: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 360, damping: 34 }}
     >
-      {TABS.map((key) => {
-        const { icon: Icon, label } = ITEMS[key];
+      {tabs.map((key) => {
+        const Icon = key === 'grading' ? ClipboardCheck : ITEMS[key].icon;
+        const text = key === 'grading' ? tt('nav_grading') : t(ITEMS[key].label);
         const active = key === tab;
         return (
           <button
@@ -45,7 +48,7 @@ export function BottomNav({ tab, onChange, hidden }: { tab: Tab; onChange: (t: T
             >
               <Icon size={22} strokeWidth={active ? 2.3 : 1.9} />
             </motion.span>
-            <span className="nav-label">{t(label)}</span>
+            <span className="nav-label">{text}</span>
           </button>
         );
       })}

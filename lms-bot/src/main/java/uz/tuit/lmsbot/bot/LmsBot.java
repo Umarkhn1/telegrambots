@@ -55,14 +55,16 @@ public class LmsBot extends TelegramLongPollingBot {
     // ─────────────────────────────────────────────
 
     private final AppConfig config;
-    private final LmsService lmsService;
-    private final uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule;
+    final LmsService lmsService;
+    final uz.tuit.lmsbot.service.SemesterSchedule semesterSchedule;
+    /** Кабинет преподавателя и тьютора: меню, кнопки «t:…», диалоги T_*, напоминания. */
+    private final TeacherBot teacherBot;
     private final uz.tuit.lmsbot.service.StudentRegistry students;
     private final uz.tuit.lmsbot.service.StateBackup stateBackup;
     /** Имя и @username из последнего апдейта — для списка студентов. */
     private final Map<Long, String[]> tgIdentity = new ConcurrentHashMap<>();
 
-    private final Map<Long, String>       userState    = new ConcurrentHashMap<>();
+    final Map<Long, String>       userState    = new ConcurrentHashMap<>();
     private final Map<Long, String>       tempLogin    = new ConcurrentHashMap<>();
     private final Map<Long, String>       tempOneIdLogin = new ConcurrentHashMap<>();
     private final Map<Long, String>       userLogin    = new ConcurrentHashMap<>();
@@ -79,7 +81,7 @@ public class LmsBot extends TelegramLongPollingBot {
     private final Map<Long, Map<Integer, Map<String, List<CalendarEntry>>>> userCalendars = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, CalendarEntry.FileAttachment>>      pendingFiles  = new ConcurrentHashMap<>();
     private final Map<Long, Map<Integer, List<Activity>>> userActivities = new ConcurrentHashMap<>();
-    private final Map<Long, Long>                         lastChatId     = new ConcurrentHashMap<>();
+    final Map<Long, Long>                         lastChatId     = new ConcurrentHashMap<>();
 
     /** За сколько минут до первой пары присылать сводку на день. */
     private static final int DAY_DIGEST_BEFORE_MIN = 60;
@@ -100,7 +102,7 @@ public class LmsBot extends TelegramLongPollingBot {
         int activityIndex;
     }
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(20);
+    final ExecutorService executor = Executors.newFixedThreadPool(20);
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final Map<Long, PendingUpload> pendingUpload = new ConcurrentHashMap<>();
 
@@ -135,6 +137,7 @@ public class LmsBot extends TelegramLongPollingBot {
         this.semesterSchedule = new uz.tuit.lmsbot.service.SemesterSchedule(lmsService);
         this.students = new uz.tuit.lmsbot.service.StudentRegistry(lmsService);
         this.stateBackup = new uz.tuit.lmsbot.service.StateBackup(config.getBot().getToken());
+        this.teacherBot = new TeacherBot(this, lmsService);
         startSchedulers();
     }
 
@@ -176,10 +179,23 @@ public class LmsBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (state.startsWith("T_") && (msg.hasDocument() || msg.hasPhoto())) {
+            teacherBot.onFile(chatId, userId, msg, state);
+            return;
+        }
+
         if (!msg.hasText()) return;
         String text = msg.getText().trim();
 
         if (handleGlobalCommands(chatId, userId, text, msg.getFrom().getFirstName())) return;
+
+        // Диалоги преподавателя (оценка, новая активность, заявление, материал).
+        // Кнопка меню сбрасывает состояние в handleGlobalCommands — читаем его заново.
+        state = userState.getOrDefault(userId, "IDLE");
+        if (state.startsWith("T_")) {
+            teacherBot.onText(chatId, userId, text, state);
+            return;
+        }
 
         if ("WAIT_OLD_PASSWORD".equals(state)) {
             tmpOldPass.put(userId, text);
@@ -297,6 +313,8 @@ public class LmsBot extends TelegramLongPollingBot {
             return;
         }
 
+        if (lmsService.isTeacher(userId) && teacherBot.onMenu(chatId, userId, text)) return;
+
         switch (text) {
             case "/start":
                 if (!hasLang(userId)) sendLanguageChoice(chatId);
@@ -364,6 +382,10 @@ public class LmsBot extends TelegramLongPollingBot {
 
         answerCallback(update.getCallbackQuery().getId());
 
+        if (data.startsWith("t:") || data.startsWith("tc_") || data.startsWith("tf_")) {
+            teacherBot.onCallback(chatId, userId, messageId, data);
+            return;
+        }
         if (data.startsWith("lang_")) {
             String lang = data.substring("lang_".length());
             setUserLang(userId, lang);
@@ -503,6 +525,10 @@ public class LmsBot extends TelegramLongPollingBot {
             askForOneIdLogin(chatId, userId);
         } else if ("oneid_mobile".equals(data)) {
             askForOneIdPhone(chatId, userId);
+        } else if ("oneid_qr".equals(data)) {
+            startOneIdQr(chatId, userId);
+        } else if ("oneid_qr_x".equals(data)) {
+            cancelOneIdQr(chatId, userId, messageId);
         } else if ("settings".equals(data)) {
             showSettings(chatId, userId);
         } else if ("settings_lang".equals(data)) {
@@ -580,7 +606,7 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
-    private void edit(long chatId, int messageId, String text, InlineKeyboardMarkup markup) {
+    void edit(long chatId, int messageId, String text, InlineKeyboardMarkup markup) {
         dropProgress(chatId);
         try {
             EditMessageText edit = new EditMessageText();
@@ -652,6 +678,7 @@ public class LmsBot extends TelegramLongPollingBot {
                         + "🎓 an interactive app — the «LMS» button left of the message field\n\n"
                         + (in ? "You're already signed in — pick a section in the menu below 👇" : "To get started, sign in to your account 👇")
                         + "\n\n<i>Author:" + AUTHOR + "</i>");
+        if (in && lmsService.isTeacher(userId)) text = teacherBot.welcome(userId, name);
         send(chatId, text, in ? mainMenuKeyboard(userId) : loginKeyboard(userId));
         if (in) sendAppAfterLogin(chatId, userId);
     }
@@ -766,13 +793,176 @@ public class LmsBot extends TelegramLongPollingBot {
                 List.of(inlineBtn(tr(userId,
                         "🔑 Логин и пароль", "🔑 Login va parol", "🔑 Логин ва парол", "🔑 Login and password"), "oneid_pw")),
                 List.of(inlineBtn(tr(userId,
-                        "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)"), "oneid_mobile"))
+                        "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)", "📱 Mobile ID (SMS)"), "oneid_mobile")),
+                List.of(inlineBtn(tr(userId,
+                        "📷 QR-код", "📷 QR-kod", "📷 QR-код", "📷 QR code"), "oneid_qr"))
         ));
         send(chatId, tr(userId,
                 "🆔 <b>Вход через OneID</b>\n\nВыберите способ:",
                 "🆔 <b>OneID orqali kirish</b>\n\nUsulni tanlang:",
                 "🆔 <b>OneID орқали кириш</b>\n\nУсулни танланг:",
                 "🆔 <b>Sign in with OneID</b>\n\nChoose a method:"), kb);
+    }
+
+    // ─────────────────────────────────────────────
+    //  ONEID ПО QR-КОДУ
+    //  Бот присылает QR картинкой; её сканируют приложением OneID — с другого экрана или
+    //  со скриншота из галереи. Код живёт ~30 секунд, поэтому картинка в том же сообщении
+    //  подменяется новой, пока человек не войдёт, не нажмёт «Отмена» или не выйдет время.
+    // ─────────────────────────────────────────────
+
+    /** Сколько ждём сканирования, прежде чем бросить попытку. */
+    private static final long QR_WAIT_MS = 5L * 60 * 1000;
+    /** Номер попытки входа по QR: новая попытка или отмена останавливают прежний опрос. */
+    private final Map<Long, Integer> qrAttempt = new ConcurrentHashMap<>();
+
+    private String qrCaption(long userId, long expiresAt) {
+        long sec = Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000);
+        return tr(userId,
+                "📷 <b>Вход через OneID по QR-коду</b>\n\n"
+                        + "1. Откройте приложение <b>OneID</b> и выберите сканирование QR-кода.\n"
+                        + "2. Наведите камеру на этот код — или сделайте скриншот и выберите его из галереи.\n"
+                        + "3. Подтвердите вход в приложении — бот войдёт сам.\n\n"
+                        + "<i>Код действует ~" + sec + " с и обновляется автоматически.</i>",
+                "📷 <b>OneID orqali QR-kod bilan kirish</b>\n\n"
+                        + "1. <b>OneID</b> ilovasini oching va QR-kodni skanerlashni tanlang.\n"
+                        + "2. Kamerani shu kodga qarating — yoki skrinshot olib, uni galereyadan tanlang.\n"
+                        + "3. Ilovada kirishni tasdiqlang — bot o'zi kiradi.\n\n"
+                        + "<i>Kod ~" + sec + " s amal qiladi va avtomatik yangilanadi.</i>",
+                "📷 <b>OneID орқали QR-код билан кириш</b>\n\n"
+                        + "1. <b>OneID</b> иловасини очинг ва QR-кодни сканерлашни танланг.\n"
+                        + "2. Камерани шу кодга қаратинг — ёки скриншот олиб, уни галереядан танланг.\n"
+                        + "3. Иловада киришни тасдиқланг — бот ўзи киради.\n\n"
+                        + "<i>Код ~" + sec + " с амал қилади ва автоматик янгиланади.</i>",
+                "📷 <b>Sign in with OneID by QR code</b>\n\n"
+                        + "1. Open the <b>OneID</b> app and choose QR code scanning.\n"
+                        + "2. Point the camera at this code — or take a screenshot and pick it from the gallery.\n"
+                        + "3. Confirm the sign-in in the app — the bot will sign you in.\n\n"
+                        + "<i>The code is valid for ~" + sec + " s and refreshes automatically.</i>");
+    }
+
+    private InlineKeyboardMarkup qrCancelKeyboard(long userId) {
+        return markup(List.of(List.of(inlineBtn(tr(userId, "❌ Отмена", "❌ Bekor qilish", "❌ Бекор қилиш", "❌ Cancel"), "oneid_qr_x"))));
+    }
+
+    private void startOneIdQr(long chatId, long userId) {
+        int attempt = qrAttempt.merge(userId, 1, Integer::sum);
+        // Пока ждём сканирования, сессию не восстанавливаем: это стёрло бы token_id входа.
+        userState.put(userId, "WAIT_ONEID_QR");
+        sendProgress(chatId, tr(userId, "⏳ Получаю QR-код...", "⏳ QR-kod olinmoqda...", "⏳ QR-код олинмоқда...", "⏳ Getting a QR code..."));
+        Thread t = new Thread(() -> runOneIdQr(chatId, userId, attempt), "oneid-qr-" + userId);
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private boolean qrActive(long userId, int attempt) {
+        return qrAttempt.getOrDefault(userId, 0) == attempt && "WAIT_ONEID_QR".equals(userState.get(userId));
+    }
+
+    private void runOneIdQr(long chatId, long userId, int attempt) {
+        Integer photoId = null;
+        try {
+            LmsService.OneIdQr qr = lmsService.oneIdQrStart(userId);
+            photoId = sendQrPhoto(chatId, userId, qr, null);
+            long deadline = System.currentTimeMillis() + QR_WAIT_MS;
+            while (qrActive(userId, attempt) && System.currentTimeMillis() < deadline) {
+                Thread.sleep(3000);
+                if (!qrActive(userId, attempt)) break;
+                LmsService.QrStatus st = lmsService.oneIdQrCheck(userId);
+                if (st == LmsService.QrStatus.OK) {
+                    userState.put(userId, "IDLE");
+                    deleteMessage(chatId, photoId);
+                    finishOneId(chatId, userId, null);
+                    return;
+                }
+                if (st == LmsService.QrStatus.UNREACHABLE) {
+                    userState.put(userId, "IDLE");
+                    deleteMessage(chatId, photoId);
+                    sendOneIdUnreachable(chatId, userId);
+                    return;
+                }
+                if (st == LmsService.QrStatus.ERROR) {
+                    userState.put(userId, "IDLE");
+                    deleteMessage(chatId, photoId);
+                    sendOneIdError(chatId, userId, null);
+                    return;
+                }
+                // Код истёк или вот-вот истечёт — меняем картинку в том же сообщении.
+                if (st == LmsService.QrStatus.EXPIRED || System.currentTimeMillis() > qr.expiresAt() - 4000) {
+                    qr = lmsService.oneIdQrNext(userId);
+                    photoId = sendQrPhoto(chatId, userId, qr, photoId);
+                }
+            }
+            if (!qrActive(userId, attempt)) {
+                // Ушли в другой раздел или начали новую попытку — старый код больше не нужен.
+                deleteMessage(chatId, photoId);
+            } else {
+                userState.put(userId, "IDLE");
+                lmsService.oneIdQrCancel(userId);
+                deleteMessage(chatId, photoId);
+                send(chatId, tr(userId,
+                        "⌛ Время ожидания вышло. Чтобы получить новый QR-код: /login",
+                        "⌛ Kutish vaqti tugadi. Yangi QR-kod uchun: /login",
+                        "⌛ Кутиш вақти тугади. Янги QR-код учун: /login",
+                        "⌛ Time is up. To get a new QR code: /login"), loginKeyboard(userId));
+            }
+        } catch (Exception e) {
+            System.err.println("[LmsBot] OneID QR " + userId + ": " + e.getMessage());
+            if (qrActive(userId, attempt)) userState.put(userId, "IDLE");
+            deleteMessage(chatId, photoId);
+            if (e instanceof java.io.IOException) sendOneIdUnreachable(chatId, userId);
+            else sendOneIdError(chatId, userId, null);
+        }
+    }
+
+    /** Присылает QR или подменяет картинку в уже отправленном сообщении. Возвращает id сообщения. */
+    private Integer sendQrPhoto(long chatId, long userId, LmsService.OneIdQr qr, Integer messageId) throws Exception {
+        byte[] png = uz.tuit.lmsbot.util.QrImage.png(qr.payload(), 600);
+        if (messageId != null) {
+            try {
+                org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto media =
+                        new org.telegram.telegrambots.meta.api.objects.media.InputMediaPhoto();
+                media.setMedia(new java.io.ByteArrayInputStream(png), "oneid-qr.png");
+                media.setCaption(qrCaption(userId, qr.expiresAt()));
+                media.setParseMode("HTML");
+                execute(org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageMedia.builder()
+                        .chatId(String.valueOf(chatId)).messageId(messageId).media(media)
+                        .replyMarkup(qrCancelKeyboard(userId)).build());
+                return messageId;
+            } catch (Exception e) {
+                // Сообщение удалили — пришлём новое.
+                System.err.println("[LmsBot] QR edit: " + e.getMessage());
+            }
+        }
+        dropProgress(chatId);
+        SendPhoto p = new SendPhoto();
+        p.setChatId(String.valueOf(chatId));
+        p.setPhoto(new InputFile(new java.io.ByteArrayInputStream(png), "oneid-qr.png"));
+        p.setCaption(qrCaption(userId, qr.expiresAt()));
+        p.setParseMode("HTML");
+        p.setReplyMarkup(qrCancelKeyboard(userId));
+        return execute(p).getMessageId();
+    }
+
+    private void cancelOneIdQr(long chatId, long userId, int messageId) {
+        qrAttempt.merge(userId, 1, Integer::sum);
+        if ("WAIT_ONEID_QR".equals(userState.get(userId))) userState.put(userId, "IDLE");
+        lmsService.oneIdQrCancel(userId);
+        deleteMessage(chatId, messageId);
+        send(chatId, tr(userId, "❌ Вход по QR-коду отменён.", "❌ QR-kod bilan kirish bekor qilindi.",
+                "❌ QR-код билан кириш бекор қилинди.", "❌ QR code sign-in cancelled."), loginKeyboard(userId));
+    }
+
+    private void deleteMessage(long chatId, Integer messageId) {
+        if (messageId == null) return;
+        try {
+            DeleteMessage del = new DeleteMessage();
+            del.setChatId(String.valueOf(chatId));
+            del.setMessageId(messageId);
+            execute(del);
+        } catch (Exception ignored) {
+            // Уже удалено или старше 48 часов.
+        }
     }
 
     private void askForOneIdPhone(long chatId, long userId) {
@@ -1028,20 +1218,21 @@ public class LmsBot extends TelegramLongPollingBot {
         lastDeadlinesListNotifyTs.remove(userId);
         deadlineMeta.remove(userId);
         lastDeadlineItems.remove(userId);
+        teacherBot.reset(userId);
     }
 
     /**
      * Семестры приходят только из LMS. Пока список не получен, id неизвестен (-1),
      * и слать запрос с выдуманным номером нельзя — вернётся пустота.
      */
-    private boolean checkSemester(long chatId, long userId, int semesterId) {
+    boolean checkSemester(long chatId, long userId, int semesterId) {
         if (semesterId > 0) return true;
         send(chatId, t(userId, "sem.unavailable"), null);
         return false;
     }
 
     /** Запоминать семестр можно, только если он реально вычитан из LMS. */
-    private void rememberSemester(long userId, int semesterId) {
+    void rememberSemester(long userId, int semesterId) {
         if (lmsService.isSemesterDetected(userId)) userSemester.put(userId, semesterId);
     }
 
@@ -1547,7 +1738,7 @@ public class LmsBot extends TelegramLongPollingBot {
     //  SCHEDULE
     // ─────────────────────────────────────────────
 
-    private void showSchedule(long chatId, long userId, int semesterId) {
+    void showSchedule(long chatId, long userId, int semesterId) {
         if (!checkLogin(chatId, userId)) return;
         if (!checkSemester(chatId, userId, semesterId)) return;
         sendProgress(chatId, t(userId, "sched.loading"));
@@ -1577,7 +1768,7 @@ public class LmsBot extends TelegramLongPollingBot {
         });
     }
 
-    private String[] dayNames(long userId) {
+    String[] dayNames(long userId) {
         return switch (lang(userId)) {
             case "ru"     -> new String[]{"","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"};
             case "uz_cyr" -> new String[]{"","Душанба","Сешанба","Чоршанба","Пайшанба","Жума","Шанба","Якшанба"};
@@ -1586,7 +1777,7 @@ public class LmsBot extends TelegramLongPollingBot {
         };
     }
 
-    private String kindLabel(long userId, String kind) {
+    String kindLabel(long userId, String kind) {
         return switch (kind) {
             case uz.tuit.lmsbot.service.SemesterSchedule.PRACTICE -> tr(userId, "Практика", "Amaliyot", "Амалиёт", "Practice");
             case uz.tuit.lmsbot.service.SemesterSchedule.LAB -> tr(userId, "Лабораторная", "Laboratoriya", "Лаборатория", "Lab");
@@ -2051,7 +2242,7 @@ public class LmsBot extends TelegramLongPollingBot {
             sb.append(label).append(": <b>").append(esc(value)).append("</b>\n");
     }
 
-    private void showProfilePhoto(long chatId, long userId) {
+    void showProfilePhoto(long chatId, long userId) {
         if (!checkLogin(chatId, userId)) return;
         sendProgress(chatId, tr(userId, "⏳ Загружаю фото...", "⏳ Foto yuklanmoqda...", "⏳ Фото юкланмоқда...", "⏳ Loading photo..."));
         executor.submit(() -> {
@@ -2458,6 +2649,7 @@ public class LmsBot extends TelegramLongPollingBot {
                 // Авто-рассылка ПОЛНОГО списка дедлайнов отключена — он только по кнопке.
                 // Автоматически напоминаем лишь о срочных (≤2 дней).
                 tickUrgentDeadlineReminders();
+                teacherBot.tick();
             } catch (Exception e) {
                 System.err.println("[LmsBot] Scheduler error: " + e.getMessage());
             }
@@ -2582,7 +2774,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void tickNbReminders() {
         for (Long userId : new ArrayList<>(lastChatId.keySet())) {
-            if (!lmsService.isLoggedIn(userId)) continue;
+            if (!lmsService.isLoggedIn(userId) || lmsService.isTeacher(userId)) continue;
             Long chatId = lastChatId.get(userId);
             if (chatId == null) continue;
             long nowTs = System.currentTimeMillis();
@@ -2619,7 +2811,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void tickDeadlinesListReminder() {
         for (Long userId : new ArrayList<>(lastChatId.keySet())) {
-            if (!lmsService.isLoggedIn(userId)) continue;
+            if (!lmsService.isLoggedIn(userId) || lmsService.isTeacher(userId)) continue;
             Long chatId = lastChatId.get(userId);
             if (chatId == null) continue;
 
@@ -2664,7 +2856,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void tickUrgentDeadlineReminders() {
         for (Long userId : new ArrayList<>(lastChatId.keySet())) {
-            if (!lmsService.isLoggedIn(userId)) continue;
+            if (!lmsService.isLoggedIn(userId) || lmsService.isTeacher(userId)) continue;
             Long chatId = lastChatId.get(userId);
             if (chatId == null) continue;
 
@@ -2836,7 +3028,8 @@ public class LmsBot extends TelegramLongPollingBot {
         }
         if (isDeadlinesListCommand(t)) {
             userState.put(userId, "IDLE");
-            showDeadlinesList(chatId, userId);
+            if (lmsService.isTeacher(userId)) teacherBot.showGrading(chatId, userId, null);
+            else showDeadlinesList(chatId, userId);
             return true;
         }
         if (t.startsWith("/dump ")) {
@@ -2869,7 +3062,7 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private boolean isMainMenuNav(String t) {
-        return t.equals("📚 Mening fanlarim") || t.equals("📚 Мои предметы") || t.equals("📚 Менинг фанларим")
+        return teacherBot.isMenuText(t) || t.equals("📚 Mening fanlarim") || t.equals("📚 Мои предметы") || t.equals("📚 Менинг фанларим")
                 || t.equals("📅 Dars jadvali") || t.equals("📅 Расписание") || t.equals("📅 Дарс жадвали")
                 || t.equals("📖 O'quv reja") || t.equals("📖 Учебный план") || t.equals("📖 Ўқув режа")
                 || t.equals("🏆 Yakuniy imtihon") || t.equals("🏆 Итоговый экзамен") || t.equals("🏆 Якуний имтиҳон")
@@ -2887,7 +3080,7 @@ public class LmsBot extends TelegramLongPollingBot {
     //  KEYBOARDS
     // ─────────────────────────────────────────────
 
-    private ReplyKeyboardMarkup loginKeyboard(long userId) {
+    ReplyKeyboardMarkup loginKeyboard(long userId) {
         KeyboardRow signIn = new KeyboardRow();
         signIn.add(new KeyboardButton(tr(userId, "🔑 Войти", "🔑 Kirish", "🔑 Кириш", "🔑 Sign in")));
         List<KeyboardRow> rows = new ArrayList<>();
@@ -2916,6 +3109,7 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private ReplyKeyboardMarkup mainMenuKeyboard(long userId) {
+        if (lmsService.isTeacher(userId)) return teacherBot.menuKeyboard(userId);
         String myCourses = tr(userId, "📚 Мои предметы", "📚 Mening fanlarim", "📚 Менинг фанларим", "📚 My subjects");
         String schedule  = tr(userId, "📅 Расписание", "📅 Dars jadvali", "📅 Дарс жадвали", "📅 Timetable");
         String plan      = tr(userId, "📖 Учебный план", "📖 O'quv reja", "📖 Ўқув режа", "📖 Study plan");
@@ -2957,7 +3151,7 @@ public class LmsBot extends TelegramLongPollingBot {
     /** Сколько семестров показываем на одной странице. */
     private static final int SEM_PAGE_SIZE = 4;
 
-    private InlineKeyboardMarkup buildSemesterKeyboard(long userId, String prefix) {
+    InlineKeyboardMarkup buildSemesterKeyboard(long userId, String prefix) {
         return buildSemesterKeyboard(userId, prefix, 0);
     }
 
@@ -3018,7 +3212,7 @@ public class LmsBot extends TelegramLongPollingBot {
         ));
     }
 
-    private InlineKeyboardMarkup markup(List<List<InlineKeyboardButton>> rows) {
+    InlineKeyboardMarkup markup(List<List<InlineKeyboardButton>> rows) {
         InlineKeyboardMarkup m = new InlineKeyboardMarkup();
         m.setKeyboard(rows);
         return m;
@@ -3040,7 +3234,7 @@ public class LmsBot extends TelegramLongPollingBot {
     /** Telegram отводит на callback_data 64 байта и отвергает всё сообщение целиком. */
     private static final int CALLBACK_LIMIT = 64;
 
-    private InlineKeyboardButton inlineBtn(String text, String data) {
+    InlineKeyboardButton inlineBtn(String text, String data) {
         InlineKeyboardButton btn = new InlineKeyboardButton();
         btn.setText(text);
         if (data != null && data.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > CALLBACK_LIMIT) {
@@ -3056,7 +3250,7 @@ public class LmsBot extends TelegramLongPollingBot {
     //  LOCALIZATION  t() / tr()
     // ─────────────────────────────────────────────
 
-    private String lang(long userId) {
+    String lang(long userId) {
         loadLangFromStore(userId);
         return userLang.getOrDefault(userId, "uz_lat");
     }
@@ -3077,11 +3271,11 @@ public class LmsBot extends TelegramLongPollingBot {
         return userLang.containsKey(userId);
     }
 
-    private String tr(long userId, String ru, String uzLat, String uzCyr, String en) {
+    String tr(long userId, String ru, String uzLat, String uzCyr, String en) {
         return switch (lang(userId)) { case "ru" -> ru; case "uz_cyr" -> uzCyr; case "en" -> en; default -> uzLat; };
     }
 
-    private String t(long userId, String key) {
+    String t(long userId, String key) {
         String l = lang(userId);
         return switch (key) {
             case "common.no_data"        -> switch(l){ case "ru"->"📭 Данные не найдены."; case "en"->"📭 No data found.";        case "uz_cyr"->"📭 Маълумот топилмади.";        default->"📭 Ma'lumot topilmadi."; };
@@ -3152,7 +3346,7 @@ public class LmsBot extends TelegramLongPollingBot {
         return st.startsWith("WAIT_LOGIN") || st.startsWith("WAIT_PASSWORD") || st.startsWith("WAIT_ONEID");
     }
 
-    private boolean checkLogin(long chatId, long userId) {
+    boolean checkLogin(long chatId, long userId) {
         // Флаг входа живёт в памяти: после перезапуска или сна сервиса он пуст, хотя
         // cookie и токен OneID на месте. Сначала пробуем поднять сессию молча.
         if (!lmsService.isLoggedIn(userId) && (loggingIn(userId) || !lmsService.restoreSession(userId))) {
@@ -3173,14 +3367,14 @@ public class LmsBot extends TelegramLongPollingBot {
      * Сообщение о ходе работы: живёт ровно до следующего сообщения боту в этот чат.
      * Раньше все «⏳ Загружаю…» оставались в переписке навсегда.
      */
-    private void sendProgress(long chatId, String text) {
+    void sendProgress(long chatId, String text) {
         dropProgress(chatId);
         Integer id = execSend(chatId, text, null);
         if (id != null) progressMsg.put(chatId, id);
     }
 
     /** Убирает «⏳ …», если оно ещё висит. Вызывается перед любой новой отправкой. */
-    private void dropProgress(long chatId) {
+    void dropProgress(long chatId) {
         Integer id = progressMsg.remove(chatId);
         if (id == null) return;
         try {
@@ -3193,12 +3387,12 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
-    private void send(long chatId, String text, Object keyboard) {
+    void send(long chatId, String text, Object keyboard) {
         dropProgress(chatId);
         execSend(chatId, text, keyboard);
     }
 
-    private Integer execSend(long chatId, String text, Object keyboard) {
+    Integer execSend(long chatId, String text, Object keyboard) {
         try {
             SendMessage msg = new SendMessage();
             msg.setChatId(String.valueOf(chatId));
@@ -3278,11 +3472,11 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
-    private boolean markOnce(long userId, String key) {
+    boolean markOnce(long userId, String key) {
         return sentReminders.computeIfAbsent(userId, k -> Collections.newSetFromMap(new ConcurrentHashMap<>())).add(key);
     }
 
-    private String truncateTopic(String topic, int maxLen) {
+    String truncateTopic(String topic, int maxLen) {
         if (topic == null) return "";
         String t = topic.trim();
         return t.length() <= maxLen ? t : t.substring(0, Math.max(0, maxLen - 1)) + "…";
@@ -3358,7 +3552,7 @@ public class LmsBot extends TelegramLongPollingBot {
         return "\n📐 <i>" + esc(truncateTopic(sb.toString(), 120)) + "</i>";
     }
 
-    private String gradeIcon(int g) { return switch(g){ case 5->"🟢"; case 4->"🔵"; case 3->"🟡"; case 2->"🔴"; default->"⬜"; }; }
+    String gradeIcon(int g) { return switch(g){ case 5->"🟢"; case 4->"🔵"; case 3->"🟡"; case 2->"🔴"; default->"⬜"; }; }
 
     private String gpaComment(long userId, double gpa) {
         if (gpa >= 4.5) return tr(userId, "Отличный результат! Так держать! 🚀", "A'lo natija! Davom eting! 🚀", "Аъло натижа! Давом этинг! 🚀", "Excellent result! Keep it up! 🚀");
@@ -3404,11 +3598,11 @@ public class LmsBot extends TelegramLongPollingBot {
         return switch(m){ case 1->"1 минут"; case 30->"30 минут"; case 60->"1 соат"; case 180->"3 соат"; case 300->"5 соат"; default->m+" мин"; };
     }
 
-    private int getDefaultSemesterId(long userId) {
+    int getDefaultSemesterId(long userId) {
         return lmsService.getCurrentSemesterId(userId);
     }
 
-    private String esc(String text) {
+    String esc(String text) {
         if (text == null) return "";
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }

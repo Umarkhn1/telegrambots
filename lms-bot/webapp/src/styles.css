@@ -1404,3 +1404,11 @@ svg {
   gap: 8px;
   margin-top: 6px;
 }
+
+/* ─── Кабинет преподавателя ─── */
+
+.input.plain { padding: 0 14px; }
+textarea.input { height: auto; min-height: 92px; padding: 12px 14px; resize: vertical; line-height: 1.4; font-family: inherit; }
+.crit-row { display: grid; grid-template-columns: 1fr 110px; gap: 8px; align-items: center; }
+.crit-max { position: absolute; right: 12px; font-size: 13px; color: var(--text-3); pointer-events: none; }
+.pick-list { display: flex; flex-direction: column; gap: 8px; }

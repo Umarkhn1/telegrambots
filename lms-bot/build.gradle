@@ -30,6 +30,9 @@ dependencies {
     // HTML Parser
     implementation 'org.jsoup:jsoup:1.17.2'
 
+    // QR-код для входа через OneID
+    implementation 'com.google.zxing:core:3.5.3'
+
     // Jackson (JSON + YAML)
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.16.1'

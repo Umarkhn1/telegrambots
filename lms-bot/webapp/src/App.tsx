@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from './components/BottomNav';
 import { Emblem, Empty } from './components/ui';
 import { api, SESSION_LOST } from './lib/api';
-import { AppContext, TABS, type AppState, type Route, type Tab, type ThemePref } from './lib/app';
+import { AppContext, tabsFor, type AppState, type Route, type Tab, type ThemePref } from './lib/app';
 import { LangContext, makeT } from './lib/i18n';
 import { invalidate } from './lib/query';
 import { haptic, initData, paintChrome, tg, useBackButton } from './lib/tg';
@@ -18,6 +18,11 @@ import { Home } from './screens/Home';
 import { Login } from './screens/Login';
 import { Profile } from './screens/Profile';
 import { Schedule } from './screens/Schedule';
+import { TeacherCourse } from './screens/teacher/TeacherCourse';
+import { Grading, TeacherCourses, TeacherHome } from './screens/teacher/TeacherHome';
+import { Appeals, Material, Materials, TeacherFinals } from './screens/teacher/TeacherMore';
+import { TeacherProfile } from './screens/teacher/TeacherProfile';
+import { TutorGroup, TutorGroups, TutorStudentScreen } from './screens/teacher/Tutor';
 
 const store = {
   get(key: string) {
@@ -194,7 +199,9 @@ export function App() {
       />
     );
   } else {
-    const dir = TABS.indexOf(tab) >= TABS.indexOf(prevTab.current) ? 1 : -1;
+    const tabs = tabsFor(me);
+    const teacher = me.role === 'teacher';
+    const dir = tabs.indexOf(tab) >= tabs.indexOf(prevTab.current) ? 1 : -1;
     const top = stack[stack.length - 1];
     body = (
       <AppContext.Provider value={app}>
@@ -208,11 +215,12 @@ export function App() {
             exit={{ opacity: 0, x: dir * -28 }}
             transition={{ duration: 0.24, ease: [0.2, 0.8, 0.2, 1] }}
           >
-            {tab === 'home' && <Home />}
-            {tab === 'courses' && <Courses />}
+            {tab === 'home' && (teacher ? <TeacherHome /> : <Home />)}
+            {tab === 'courses' && (teacher ? <TeacherCourses /> : <Courses />)}
             {tab === 'schedule' && <Schedule />}
-            {tab === 'grades' && <Grades />}
-            {tab === 'profile' && <Profile />}
+            {tab === 'grades' && !teacher && <Grades />}
+            {tab === 'grading' && teacher && <Grading />}
+            {tab === 'profile' && (teacher ? <TeacherProfile /> : <Profile />)}
           </motion.div>
         </AnimatePresence>
 
@@ -229,11 +237,19 @@ export function App() {
               {top.name === 'course' && <CourseDetail course={top.course} onBack={pop} />}
               {top.name === 'deadlines' && <Deadlines onBack={pop} />}
               {top.name === 'admin' && me.admin && <Admin onBack={pop} />}
+              {top.name === 'tcourse' && <TeacherCourse course={top.course} column={top.column} onBack={pop} />}
+              {top.name === 'appeals' && <Appeals onBack={pop} />}
+              {top.name === 'materials' && <Materials onBack={pop} />}
+              {top.name === 'material' && <Material subject={top.subject} onBack={pop} />}
+              {top.name === 'finals' && <TeacherFinals onBack={pop} />}
+              {top.name === 'tutor' && <TutorGroups onBack={pop} />}
+              {top.name === 'tgroup' && <TutorGroup group={top.group} onBack={pop} />}
+              {top.name === 'tstudent' && <TutorStudentScreen id={top.id} name={top.title} onBack={pop} />}
             </motion.div>
           )}
         </AnimatePresence>
 
-        <BottomNav tab={tab} onChange={app.setTab} hidden={stack.length > 0} />
+        <BottomNav tabs={tabs} tab={tab} onChange={app.setTab} hidden={stack.length > 0} />
       </AppContext.Provider>
     );
   }

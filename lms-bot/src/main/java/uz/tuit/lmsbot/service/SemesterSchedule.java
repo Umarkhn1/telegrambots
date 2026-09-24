@@ -114,6 +114,14 @@ public class SemesterSchedule {
     }
 
     private Result build(long userId, int semesterId) {
+        if (lms.isTeacher(userId)) {
+            try {
+                return buildTeacher(userId, semesterId);
+            } catch (Exception e) {
+                System.err.println("[SemesterSchedule] teacher " + userId + ": " + e.getMessage());
+                return null;
+            }
+        }
         List<Slot> slots = new ArrayList<>();
         for (ScheduleEvent ev : lms.getSchedule(userId, semesterId)) {
             Slot s = parseSlot(ev);
@@ -179,6 +187,115 @@ public class SemesterSchedule {
 
         LocalDate lastDay = marked.isEmpty() ? end : marked.get(marked.size() - 1).date();
         return new Result(marked, first, lastDay.isBefore(first) ? first : lastDay);
+    }
+
+    /**
+     * Расписание преподавателя. У него точнее, чем у студента: календарный план потока
+     * (/teacher/calendar/show/{id}) содержит дату каждого занятия, а недельная сетка
+     * даёт к ней время и аудиторию. Пары ставим на даты плана; поток без плана
+     * протягиваем по сетке, как у студентов.
+     */
+    private Result buildTeacher(long userId, int semesterId) throws Exception {
+        TeacherService ts = lms.teacher();
+        List<Slot> slots = new ArrayList<>();
+        for (ScheduleEvent ev : ts.schedule(userId, semesterId)) {
+            Slot s = parseSlot(ev);
+            if (s != null) slots.add(s);
+        }
+        List<TeacherService.TCourse> courses = ts.courses(userId, semesterId);
+        if (slots.isEmpty() && courses.isEmpty()) return null;
+
+        Map<Integer, TeacherService.TCalendar> calendars = new ConcurrentHashMap<>();
+        List<Future<?>> futures = new ArrayList<>();
+        for (TeacherService.TCourse c : courses) {
+            futures.add(pool.submit(() -> {
+                try {
+                    calendars.put(c.id(), ts.calendar(userId, c.id()));
+                } catch (Exception e) {
+                    System.err.println("[SemesterSchedule] calendar " + c.id() + ": " + e.getMessage());
+                }
+            }));
+        }
+        for (Future<?> f : futures) {
+            try { f.get(60, TimeUnit.SECONDS); } catch (Exception ignored) {}
+        }
+
+        List<Lesson> lessons = new ArrayList<>();
+        Set<String> planned = new HashSet<>();
+        LocalDate min = null, max = null;
+        for (TeacherService.TCourse c : courses) {
+            TeacherService.TCalendar cal = calendars.get(c.id());
+            if (cal == null) continue;
+            List<Slot> own = new ArrayList<>();
+            for (Slot s : slots) if (s.stream() != null && s.stream().equalsIgnoreCase(cal.stream())) own.add(s);
+            String kind = teacherKind(c.type(), cal.stream());
+            for (TeacherService.TLesson l : cal.lessons()) {
+                LocalDate d = parseDate(l.date());
+                if (d == null) continue;
+                Slot slot = null;
+                for (Slot s : own) if (s.day() == d.getDayOfWeek()) { slot = s; break; }
+                // Перенесённое занятие может выпасть на другой день — время берём у потока.
+                if (slot == null && !own.isEmpty()) slot = own.get(0);
+                if (slot == null) continue;
+                planned.add(cal.stream().toLowerCase(Locale.ROOT));
+                long ts0 = d.atTime(slot.time()).atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
+                lessons.add(new Lesson(d, slot.time().toString().substring(0, 5), ts0, c.subject(), kind,
+                        slot.room(), "", cal.stream(), l.topic(), c.id(), false));
+                if (min == null || d.isBefore(min)) min = d;
+                if (max == null || d.isAfter(max)) max = d;
+            }
+        }
+
+        // Потоки, у которых календарный план ещё не сформирован, — по недельной сетке.
+        List<Slot> rest = new ArrayList<>();
+        for (Slot s : slots) if (s.stream() == null || !planned.contains(s.stream().toLowerCase(Locale.ROOT))) rest.add(s);
+        if (!rest.isEmpty()) {
+            LocalDate sampleMin = rest.stream().map(Slot::sample).min(LocalDate::compareTo).orElseThrow();
+            LocalDate first = monday(min != null && min.isBefore(sampleMin) ? min : sampleMin);
+            LocalDate end = max != null ? max : fallbackEnd(sampleMin);
+            for (LocalDate d = first; !d.isAfter(end); d = d.plusDays(1)) {
+                int side = ChronoUnit.WEEKS.between(first, monday(d)) % 2 == 0 ? 2 : 3;
+                for (Slot s : rest) {
+                    if (s.day() != d.getDayOfWeek() || (s.side() != 1 && s.side() != side)) continue;
+                    Integer courseId = null;
+                    String kind = s.kind();
+                    for (TeacherService.TCourse c : courses) {
+                        TeacherService.TCalendar cal = calendars.get(c.id());
+                        if (cal != null && s.stream() != null && s.stream().equalsIgnoreCase(cal.stream())) {
+                            courseId = c.id();
+                            kind = teacherKind(c.type(), s.stream());
+                        }
+                    }
+                    long ts0 = d.atTime(s.time()).atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
+                    lessons.add(new Lesson(d, s.time().toString().substring(0, 5), ts0, s.subject(), kind,
+                            s.room(), "", s.stream(), null, courseId, false));
+                }
+            }
+        }
+        if (lessons.isEmpty()) return null;
+        lessons.sort(Comparator.comparingLong(Lesson::ts));
+
+        Map<String, Integer> lastIdx = new HashMap<>();
+        for (int i = 0; i < lessons.size(); i++)
+            lastIdx.put(norm(lessons.get(i).subject()) + "|" + lessons.get(i).stream(), i);
+        Set<Integer> lastSet = new HashSet<>(lastIdx.values());
+        List<Lesson> marked = new ArrayList<>(lessons.size());
+        for (int i = 0; i < lessons.size(); i++) {
+            Lesson l = lessons.get(i);
+            marked.add(lastSet.contains(i) ? new Lesson(l.date(), l.time(), l.ts(), l.subject(), l.kind(), l.room(),
+                    l.teacher(), l.stream(), l.topic(), l.courseId(), true) : l);
+        }
+        LocalDate first = monday(marked.get(0).date());
+        return new Result(marked, first, marked.get(marked.size() - 1).date());
+    }
+
+    /** Вид занятия по типу потока из «Мои предметы» («Лекция», «Практика», «Лаборатория»…). */
+    static String teacherKind(String type, String stream) {
+        String t = type == null ? "" : type.toLowerCase(Locale.ROOT);
+        if (t.contains("лек") || t.contains("lec") || t.contains("ma'ruza") || t.contains("maruza") || t.contains("маъруза")) return LECTURE;
+        if (t.contains("лаб") || t.contains("lab")) return LAB;
+        if (t.contains("прак") || t.contains("prac") || t.contains("amal") || t.contains("семин") || t.contains("sem")) return PRACTICE;
+        return kindOf(stream);
     }
 
     /** Преподаватель пары: в «Мои предметы» у каждого преподавателя указан его поток. */

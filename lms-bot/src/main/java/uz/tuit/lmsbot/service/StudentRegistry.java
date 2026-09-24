@@ -39,6 +39,10 @@ public class StudentRegistry {
         public String studyType;
         public String language;
         public Double gpa;
+        /** student или teacher — по меню LMS. */
+        public String role;
+        /** Кафедра преподавателя. */
+        public String department;
         public long firstSeen;
         public long lastSeen;
         /** Когда профиль последний раз перечитывался из LMS. */
@@ -164,6 +168,11 @@ public class StudentRegistry {
         Student s = students.get(uid);
         if (s == null) return;
         try {
+            if (lms.isTeacher(uid)) {
+                refreshTeacher(uid, s);
+                return;
+            }
+            s.role = "student";
             StudentInfo info = lms.getStudentInfo(uid);
             if (info != null && info.getFullName() != null) {
                 s.fullName = info.getFullName();
@@ -184,6 +193,21 @@ public class StudentRegistry {
         } catch (Exception e) {
             System.err.println("[StudentRegistry] refresh " + uid + ": " + e.getMessage());
         }
+    }
+
+    /** Преподаватель: ФИО, пол, дата рождения и кафедра со страницы «Информация». */
+    private void refreshTeacher(long uid, Student s) throws Exception {
+        TeacherService.TeacherInfo info = lms.teacher().info(uid);
+        s.role = "teacher";
+        if (info.fullName() != null) s.fullName = info.fullName();
+        for (String[] f : info.fields()) {
+            String label = f[0].toLowerCase(java.util.Locale.ROOT);
+            if (label.contains("кафедр") || label.contains("kafedra") || label.contains("department")) s.department = f[1];
+            else if (label.startsWith("дата рожд") || label.contains("tug") || label.contains("birth")) s.birthDate = f[1];
+            else if (label.equals("пол") || label.contains("jins") || label.contains("gender")) s.gender = f[1];
+        }
+        s.profileUpdated = System.currentTimeMillis();
+        dirty = true;
     }
 
     /** GPA по оценённым предметам — так же, как считает бот. */

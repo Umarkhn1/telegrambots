@@ -279,7 +279,7 @@ function ContractCard({ q }: { q: ReturnType<typeof useQuery<Contract>> }) {
   );
 }
 
-function PasswordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function PasswordSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
   const [old, setOld] = useState('');

@@ -183,6 +183,7 @@ export function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
           className={o.value === value ? 'active' : ''}
           onClick={() => {
             if (o.value !== value) {
@@ -216,6 +217,7 @@ export function Chips<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
           className={'chip' + (o.value === value ? ' active' : '')}
           onClick={() => {
             if (o.value !== value) {

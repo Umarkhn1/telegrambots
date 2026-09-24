@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { CircleAlert, Eye, EyeOff, Globe, KeyRound, LoaderCircle, Smartphone, UserRound } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { LanguageSheet } from '../components/LanguageSheet';
 import { Emblem, Segmented } from '../components/ui';
 import { api, ApiError } from '../lib/api';
@@ -9,7 +9,7 @@ import { haptic, useBackButton } from '../lib/tg';
 import type { OneIdResponse } from '../lib/types';
 
 type Method = 'lms' | 'oneid';
-type OneIdWay = 'password' | 'mobile';
+type OneIdWay = 'password' | 'mobile' | 'qr';
 type Step = 'form' | 'code';
 
 function Field({
@@ -48,6 +48,83 @@ function PasswordInput({ value, onChange, autoComplete }: { value: string; onCha
         {shown ? <EyeOff size={18} /> : <Eye size={18} />}
       </button>
     </>
+  );
+}
+
+/**
+ * Вход по QR-коду OneID: сервер рисует код и сам меняет его, когда тот истекает (~30 с);
+ * приложение раз в 3 секунды спрашивает, отсканирован ли он, — как страница id.egov.uz.
+ */
+function QrPanel({ onDone, onError }: { onDone: () => Promise<void>; onError: (msg: string) => void }) {
+  const { t } = useI18n();
+  const [image, setImage] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const exp = useRef(0);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const fail = (reason?: string) => {
+      if (!alive) return;
+      onError(reason === 'link' ? t('err_link') : reason === 'unreachable' ? t('error_network') : t('err_oneid'));
+    };
+    const poll = async () => {
+      if (!alive) return;
+      try {
+        const res = await api.qrCheck(exp.current);
+        if (!alive) return;
+        if (res.status === 'OK') {
+          haptic('success');
+          await onDone();
+          return;
+        }
+        if (res.status === 'ERROR') return fail(res.reason);
+        if (res.image && res.expiresAt) {
+          setImage(res.image);
+          setExpiresAt(res.expiresAt);
+          exp.current = res.expiresAt;
+        }
+      } catch {
+        /* сбой одного опроса — пробуем дальше */
+      }
+      timer = setTimeout(poll, 3000);
+    };
+    api
+      .qrStart()
+      .then((res) => {
+        if (!alive) return;
+        if (res.status !== 'PENDING' || !res.image || !res.expiresAt) return fail(res.reason);
+        setImage(res.image);
+        setExpiresAt(res.expiresAt);
+        exp.current = res.expiresAt;
+        timer = setTimeout(poll, 3000);
+      })
+      .catch(() => fail('unreachable'));
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+      clearInterval(tick);
+      api.qrCancel().catch(() => {});
+    };
+    // Опрос живёт, пока открыта вкладка QR.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const left = Math.max(0, Math.round((expiresAt - now) / 1000));
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      {image ? (
+        <img src={image} alt="QR" style={{ width: 220, height: 220, borderRadius: 12, background: '#fff' }} />
+      ) : (
+        <div style={{ width: 220, height: 220, display: 'grid', placeItems: 'center' }}>
+          <LoaderCircle size={24} className="spin" color="var(--text-3)" />
+        </div>
+      )}
+      <div className="row-sub" style={{ textAlign: 'center', marginTop: 0 }}>{t('qr_hint')}</div>
+      {image && <div className="row-sub tabular" style={{ marginTop: 0 }}>{t('qr_waiting')} · {t('qr_valid', { s: left })}</div>}
+    </div>
   );
 }
 
@@ -100,7 +177,7 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || (step === 'form' && method === 'oneid' && way === 'qr')) return;
     setError('');
     setBusy(true);
     try {
@@ -227,9 +304,12 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
                     options={[
                       { value: 'password', label: t('oneid_password') },
                       { value: 'mobile', label: t('oneid_mobile') },
+                      { value: 'qr', label: t('oneid_qr') },
                     ]}
                   />
-                  {way === 'password' ? (
+                  {way === 'qr' ? (
+                    <QrPanel onDone={onDone} onError={fail} />
+                  ) : way === 'password' ? (
                     <>
                       <Field label={t('f_oneid_login')} icon={<UserRound size={18} />}>
                         <input
@@ -275,10 +355,12 @@ export function Login({ onDone }: { onDone: () => Promise<void> }) {
             )}
           </AnimatePresence>
 
+          {!(step === 'form' && method === 'oneid' && way === 'qr') && (
           <button className="btn" type="submit" disabled={!canSubmit || busy} style={{ marginTop: 4 }}>
             {busy && <LoaderCircle size={18} className="spin" />}
             {step === 'code' ? t('confirm') : method === 'oneid' && way === 'mobile' ? t('get_code') : t('sign_in')}
           </button>
+          )}
 
           {step === 'code' && (
             <button

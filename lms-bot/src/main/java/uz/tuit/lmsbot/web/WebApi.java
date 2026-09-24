@@ -53,10 +53,13 @@ public class WebApi {
     private final Map<String, FileTicket> tickets = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
 
+    private final TeacherApi teacherApi;
+
     public WebApi(AppConfig config, LmsService lms, LmsBot bot) {
         this.config = config;
         this.lms = lms;
         this.bot = bot;
+        this.teacherApi = new TeacherApi(lms, bot);
     }
 
     /**
@@ -204,6 +207,9 @@ public class WebApi {
         s.post("/api/auth/oneid/confirm", this::authOneIdConfirm);
         s.post("/api/auth/mobile/send", this::authMobileSend);
         s.post("/api/auth/mobile/confirm", this::authMobileConfirm);
+        s.post("/api/auth/qr/start", this::authQrStart);
+        s.post("/api/auth/qr/check", this::authQrCheck);
+        s.post("/api/auth/qr/cancel", r -> { lms.oneIdQrCancel(r.uid()); return null; });
         s.post("/api/auth/logout", this::logout);
 
         s.get("/api/semesters", r -> { requireLogin(r); return semesters(r.uid()); });
@@ -227,6 +233,7 @@ public class WebApi {
         s.post("/api/upload", this::upload);
 
         s.get("/api/admin/students", this::adminStudents);
+        teacherApi.register(s);
         s.publicGet("/api/diag/net", this::diagNet);
         s.publicGet("/api/diag/oneid", this::diagOneId);
 
@@ -259,6 +266,8 @@ public class WebApi {
         out.put("loggedIn", loggedIn);
         out.put("botUsername", config.getBot().getUsername());
         out.put("admin", AppConfig.isAdmin(uid));
+        out.put("role", loggedIn && lms.isTeacher(uid) ? "teacher" : "student");
+        out.put("tutor", loggedIn && lms.hasTutor(uid));
         if (loggedIn) {
             out.put("semesters", semesters(uid));
             int cur = lms.getCurrentSemesterId(uid);
@@ -346,6 +355,48 @@ public class WebApi {
 
     private Object authMobileConfirm(Req r) throws Exception {
         return oneIdResult(r, null, lms.oneIdMobileConfirm(r.uid(), r.str("code").trim()));
+    }
+
+    /**
+     * Вход по QR-коду OneID. Картинку рисует сервер (PNG data URL); приложение раз в
+     * 3 секунды спрашивает /check, а сервер сам меняет истёкший код и отдаёт новую картинку.
+     */
+    private Object authQrStart(Req r) throws Exception {
+        try {
+            return qrJson("PENDING", lms.oneIdQrStart(r.uid()));
+        } catch (java.io.IOException e) {
+            return Map.of("status", "ERROR", "reason", "unreachable");
+        }
+    }
+
+    private Object authQrCheck(Req r) throws Exception {
+        long uid = r.uid();
+        LmsService.QrStatus st = lms.oneIdQrCheck(uid);
+        switch (st) {
+            case OK:
+                if (lms.oneIdFinish(uid)) {
+                    onLoggedIn(r, null);
+                    return Map.of("status", "OK");
+                }
+                return Map.of("status", "ERROR", "reason", "link");
+            case UNREACHABLE:
+                return Map.of("status", "ERROR", "reason", "unreachable");
+            case ERROR:
+                return Map.of("status", "ERROR");
+            default:
+                // Истёк или истекает — сразу выдаём следующий код.
+                long left = r.json().path("expiresAt").asLong(0) - System.currentTimeMillis();
+                if (st == LmsService.QrStatus.EXPIRED || left < 4000) return qrJson("PENDING", lms.oneIdQrNext(uid));
+                return Map.of("status", "PENDING");
+        }
+    }
+
+    private static Map<String, Object> qrJson(String status, LmsService.OneIdQr qr) throws Exception {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("status", status);
+        m.put("image", "data:image/png;base64," + Base64.getEncoder().encodeToString(uz.tuit.lmsbot.util.QrImage.png(qr.payload(), 600)));
+        m.put("expiresAt", qr.expiresAt());
+        return m;
     }
 
     /** OK от OneID — это ещё не вход: надо обменять токен на сессию LMS. */
@@ -697,12 +748,14 @@ public class WebApi {
     //  ADMIN
     // ─────────────────────────────────────────────
 
-    private static final List<String> FILTERS = List.of("group", "course", "direction", "gender", "studyType", "language");
+    private static final List<String> FILTERS = List.of("role", "group", "course", "direction", "department", "gender", "studyType", "language");
 
     private static String field(StudentRegistry.Student s, String name) {
         return switch (name) {
             case "fullName" -> s.fullName != null ? s.fullName : s.tgName;
             case "group" -> s.group;
+            case "role" -> s.role;
+            case "department" -> s.department;
             case "direction" -> s.direction;
             case "course" -> s.course;
             case "gender" -> s.gender;
@@ -815,6 +868,8 @@ public class WebApi {
             m.put("studyType", s.studyType);
             m.put("language", s.language);
             m.put("gpa", s.gpa);
+            m.put("role", s.role);
+            m.put("department", s.department);
             m.put("firstSeen", s.firstSeen);
             m.put("lastSeen", s.lastSeen);
             items.add(m);
@@ -955,6 +1010,7 @@ public class WebApi {
 
     private void dropCache(long uid) {
         bot.semesterSchedule().invalidate(uid);
+        teacherApi.dropAll(uid);
         String prefix = uid + "|";
         cache.keySet().removeIf(k -> k.startsWith(prefix));
     }

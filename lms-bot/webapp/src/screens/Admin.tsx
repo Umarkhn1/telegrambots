@@ -246,7 +246,8 @@ export function Admin({ onBack }: { onBack: () => void }) {
                           <span className={'badge ' + gpaTone(s.gpa)} style={{ height: 22 }}>{s.gpa.toFixed(2)}</span>
                         ) : c.key === 'fullName' ? (
                           <>
-                            <div className="td-name">{cell(s, c.key, t, lang)}</div>
+                            <div className="td-name">{s.role === 'teacher' ? '👨‍🏫 ' : ''}{cell(s, c.key, t, lang)}</div>
+                            {s.role === 'teacher' && s.department && <div className="td-sub">{s.department}</div>}
                             {s.tgUsername && <div className="td-sub">@{s.tgUsername}</div>}
                           </>
                         ) : (

@@ -61,11 +61,217 @@ public class LmsService {
         return credentials;
     }
 
+    public String baseUrl() {
+        return config.getLms().getBaseUrl();
+    }
+
+    private final TeacherService teacher = new TeacherService(this);
+
+    /** Кабинет преподавателя и тьютора — та же сессия LMS. */
+    public TeacherService teacher() {
+        return teacher;
+    }
+
+    // ─────────────────────────────────────────────
+    //  РОЛЬ АККАУНТА
+    //  Один и тот же вход (логин LMS или OneID) ведёт и студентов, и преподавателей.
+    //  Кто перед нами, видно по меню LMS: у преподавателя там /teacher/…, а если ему
+    //  дана группа — ещё и переключатель /select-role/tutor. Роль хранится рядом с
+    //  cookie (sessions/role_<id>.json) и вместе с ними попадает в резервную копию,
+    //  иначе после деплоя преподавателя проверяли бы по студенческим страницам.
+    // ─────────────────────────────────────────────
+
+    public enum Role { STUDENT, TEACHER }
+
+    private record RoleInfo(Role role, boolean tutor) {}
+
+    private final Map<Long, RoleInfo> roles = new ConcurrentHashMap<>();
+
+    /** Роль по меню страницы LMS; null — меню на странице нет (форма входа, ошибка). */
+    static Role roleFromHtml(String html) {
+        if (html == null) return null;
+        if (html.contains("/teacher/my-course") || html.contains("select-role/teacher") || html.contains("/tutor/groups"))
+            return Role.TEACHER;
+        if (html.contains("/student/")) return Role.STUDENT;
+        return null;
+    }
+
+    /** Может ли преподаватель переключиться в режим тьютора (ему дана группа). */
+    static boolean tutorFromHtml(String html) {
+        return html != null && (html.contains("select-role/tutor") || html.contains("select-role/teacher"));
+    }
+
+    private Path roleFile(long userId) {
+        return sessionDir().resolve("role_" + userId + ".json");
+    }
+
+    public Role role(long userId) {
+        RoleInfo r = roles.get(userId);
+        if (r == null) {
+            r = loadRole(userId);
+            if (r != null) roles.put(userId, r);
+        }
+        return r != null ? r.role() : Role.STUDENT;
+    }
+
+    public boolean isTeacher(long userId) {
+        return role(userId) == Role.TEACHER;
+    }
+
+    /** Преподаватель с группой: в меню появляется раздел тьютора. */
+    public boolean hasTutor(long userId) {
+        role(userId);
+        RoleInfo r = roles.get(userId);
+        return r != null && r.role() == Role.TEACHER && r.tutor();
+    }
+
+    private RoleInfo loadRole(long userId) {
+        try {
+            Path f = roleFile(userId);
+            if (!Files.exists(f)) return null;
+            JsonNode n = mapper.readTree(Files.readAllBytes(f));
+            Role role = "teacher".equals(n.path("role").asText()) ? Role.TEACHER : Role.STUDENT;
+            return new RoleInfo(role, n.path("tutor").asBoolean(false));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Запоминает роль по странице LMS. Страница без меню роль не меняет. */
+    void noteRole(long userId, String html) {
+        Role role = roleFromHtml(html);
+        if (role == null) return;
+        // Ссылка «Преподаватель» в меню есть только в режиме тьютора.
+        if (role == Role.TEACHER) activeRole.put(userId, html.contains("select-role/teacher") ? "tutor" : "teacher");
+        RoleInfo next = new RoleInfo(role, role == Role.TEACHER && tutorFromHtml(html));
+        RoleInfo prev = roles.put(userId, next);
+        if (next.equals(prev) && Files.exists(roleFile(userId))) return;
+        if (prev == null || prev.role() != role) invalidateSemesters(userId);
+        try {
+            Files.createDirectories(sessionDir());
+            Files.write(roleFile(userId), mapper.createObjectNode()
+                    .put("role", role == Role.TEACHER ? "teacher" : "student")
+                    .put("tutor", next.tutor()).toString().getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            System.err.println("[LmsService] role save " + userId + ": " + e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  РЕЖИМ ПРЕПОДАВАТЕЛЬ / ТЬЮТОР
+    //  Разделы тьютора LMS открывает только в режиме тьютора, преподавательские —
+    //  только в режиме преподавателя. Режим переключается ссылкой /select-role/… и
+    //  живёт в сессии, поэтому запросы одного пользователя не должны перемешаться:
+    //  работа в режиме тьютора идёт под исключительным замком, а после неё сессия
+    //  сразу возвращается к преподавателю — в том же виде её видит и сайт.
+    // ─────────────────────────────────────────────
+
+    /** В каком режиме сейчас сессия преподавателя на стороне LMS: teacher или tutor. */
+    private final Map<Long, String> activeRole = new ConcurrentHashMap<>();
+    private final Map<Long, java.util.concurrent.locks.ReentrantReadWriteLock> roleLocks = new ConcurrentHashMap<>();
+
+    private java.util.concurrent.locks.ReentrantReadWriteLock roleLock(long userId) {
+        return roleLocks.computeIfAbsent(userId, k -> new java.util.concurrent.locks.ReentrantReadWriteLock());
+    }
+
+    /** Запрос к разделам преподавателя: параллельно с такими же, но не во время работы тьютора. */
+    <T> T asTeacher(long userId, java.util.concurrent.Callable<T> call) throws Exception {
+        java.util.concurrent.locks.ReentrantReadWriteLock lock = roleLock(userId);
+        lock.readLock().lock();
+        // Режим проверяем уже под замком: пока держим чтение, тьютор его не сменит.
+        // null — режим неизвестен (после перезапуска или неудачного переключения).
+        if (!"teacher".equals(activeRole.get(userId))) {
+            lock.readLock().unlock();
+            lock.writeLock().lock();
+            try {
+                switchRole(userId, "teacher");
+                lock.readLock().lock();
+            } finally {
+                lock.writeLock().unlock();
+            }
+        }
+        try {
+            return call.call();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Страница преподавателя без переключения режима — для проверки сессии, семестров
+     * и фото. Замок чтения не даёт попасть в момент, когда сессия в режиме тьютора.
+     */
+    private <T> T teacherRead(long userId, java.util.concurrent.Callable<T> call) throws Exception {
+        if (!isTeacher(userId)) return call.call();
+        java.util.concurrent.locks.Lock lock = roleLock(userId).readLock();
+        lock.lock();
+        try {
+            return call.call();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Запрос к разделам тьютора: переключает сессию и после работы возвращает её назад. */
+    <T> T asTutor(long userId, java.util.concurrent.Callable<T> call) throws Exception {
+        java.util.concurrent.locks.ReentrantReadWriteLock lock = roleLock(userId);
+        lock.writeLock().lock();
+        try {
+            switchRole(userId, "tutor");
+            try {
+                return call.call();
+            } finally {
+                try {
+                    switchRole(userId, "teacher");
+                } catch (Exception e) {
+                    // Не вернулись — следующий запрос преподавателя переключит сам.
+                    activeRole.put(userId, "tutor");
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void switchRole(long userId, String role) throws Exception {
+        if (role.equals(activeRole.get(userId))) return;
+        String base = config.getLms().getBaseUrl();
+        String html = getHtml(userId, base + "/select-role/" + role, base + "/dashboard/news");
+        boolean ok = "tutor".equals(role)
+                ? html.contains("/tutor/groups") || html.contains("select-role/teacher")
+                : html.contains("/teacher/my-course");
+        if (!ok) {
+            activeRole.remove(userId);
+            throw new IllegalStateException("LMS не переключила режим на " + role);
+        }
+        activeRole.put(userId, role);
+    }
+
+    private void clearRole(long userId) {
+        roles.remove(userId);
+        try { Files.deleteIfExists(roleFile(userId)); } catch (Exception ignored) {}
+    }
+
+    /**
+     * Роль сразу после входа. Страница, на которую LMS привела после входа, обычно уже
+     * с меню; если нет — открываем корень сайта, он ведёт на дашборд своей роли.
+     */
+    private void detectRoleAfterLogin(long userId, String landingHtml) {
+        clearRole(userId);
+        noteRole(userId, landingHtml);
+        if (roles.containsKey(userId)) return;
+        try {
+            noteRole(userId, getHtml(userId, config.getLms().getBaseUrl() + "/", config.getLms().getBaseUrl() + "/"));
+        } catch (Exception e) {
+            System.err.println("[LmsService] role detect " + userId + ": " + e.getMessage());
+        }
+    }
+
     // ─────────────────────────────────────────────
     //  HTTP CLIENT PER USER
     // ─────────────────────────────────────────────
 
-    private OkHttpClient getClient(long userId) {
+    OkHttpClient getClient(long userId) {
         return clients.computeIfAbsent(userId, id -> {
             OkHttpClient.Builder b = new OkHttpClient.Builder()
                     .cookieJar(jars.compute(userId, (k, v) -> new PersistentCookieJar(sessionDir(), userId)))
@@ -281,6 +487,7 @@ public class LmsService {
                 // Вход по паролю LMS мог сменить аккаунт: старый токен OneID поднял бы
                 // сессию предыдущего пользователя, и данные пришли бы чужие.
                 oneIdTokens.clear(userId);
+                detectRoleAfterLogin(userId, responseBody);
                 return LoginResult.OK;
             }
             if (oneIdRequired(responseBody)) {
@@ -313,6 +520,9 @@ public class LmsService {
         String phone;
         String actionId;
         long controlCode;
+        // Вход по QR: текущий код и его hash
+        String qrCode;
+        String qrHash;
         /** Когда диалог входа начался: брошенный на полпути не должен мешать вечно. */
         final long started = System.currentTimeMillis();
     }
@@ -527,6 +737,83 @@ public class LmsService {
         }
     }
 
+    // ─────────────────────────────────────────────
+    //  ONEID ПО QR-КОДУ
+    //  Как на id.egov.uz (вкладка «QR»): identity/auth/qr/generate выдаёт {hash, code},
+    //  в QR кладётся base64 от JSON {"hash":…,"code":…}; приложение OneID сканирует его,
+    //  а сайт раз в 3 секунды спрашивает identity/auth/qr/check — после сканирования
+    //  там приходит JWT. Код живёт около 30 секунд (дальше «QR code not found», code 58),
+    //  поэтому его надо обновлять. token_id/client_id — от того же /login/oneid, что и
+    //  у остальных способов, так что дальше вход завершает обычный oneIdFinish.
+    // ─────────────────────────────────────────────
+
+    /** Содержимое QR-кода и когда он перестанет действовать. */
+    public record OneIdQr(String payload, long expiresAt) {}
+
+    public enum QrStatus { PENDING, OK, EXPIRED, ERROR, UNREACHABLE }
+
+    /** Срок жизни кода на стороне OneID (страница id.egov.uz обновляет его по такому же таймеру). */
+    public static final long QR_TTL_MS = 30_000;
+
+    /** Начало входа по QR: новая сессия LMS для OneID и первый код. */
+    public OneIdQr oneIdQrStart(long userId) throws Exception {
+        oneIdStart(userId);
+        return oneIdQrNext(userId);
+    }
+
+    /** Новый код в том же диалоге входа — прежний истёк. */
+    public OneIdQr oneIdQrNext(long userId) throws Exception {
+        OneIdSession s = oneIdSessions.get(userId);
+        if (s == null) throw new IllegalStateException("OneID: диалог входа не начат");
+        String body;
+        try (Response resp = getClient(userId).newCall(oneIdReq("identity/auth/qr/generate").get().build()).execute()) {
+            body = resp.body() != null ? resp.body().string() : "";
+            if (!resp.isSuccessful()) throw new IllegalStateException("OneID qr/generate: HTTP " + resp.code());
+        }
+        JsonNode json = mapper.readTree(body);
+        s.qrHash = json.path("hash").asText(null);
+        s.qrCode = json.path("code").asText(null);
+        if (s.qrHash == null || s.qrCode == null) throw new IllegalStateException("OneID qr/generate: нет hash/code");
+        // Тот же порядок полей, что даёт JSON.stringify({hash, code}) на странице OneID.
+        String inner = mapper.createObjectNode().put("hash", s.qrHash).put("code", s.qrCode).toString();
+        return new OneIdQr(java.util.Base64.getEncoder().encodeToString(inner.getBytes(StandardCharsets.UTF_8)),
+                System.currentTimeMillis() + QR_TTL_MS);
+    }
+
+    /** Отсканирован ли код. OK — токен получен, можно вызывать oneIdFinish. */
+    public QrStatus oneIdQrCheck(long userId) {
+        OneIdSession s = oneIdSessions.get(userId);
+        if (s == null || s.qrCode == null) return QrStatus.ERROR;
+        try {
+            String payload = mapper.createObjectNode().put("code", s.qrCode).put("hash", s.qrHash).toString();
+            Request req = oneIdReq("identity/auth/qr/check").post(RequestBody.create(payload, JSON_UTF8)).build();
+            int code;
+            String body;
+            try (Response resp = getClient(userId).newCall(req).execute()) {
+                code = resp.code();
+                body = resp.body() != null ? resp.body().string() : "";
+            }
+            JsonNode json = body.isBlank() ? mapper.createObjectNode() : mapper.readTree(body);
+            if (json.hasNonNull("token")) {
+                s.jwt = json.get("token").asText();
+                return QrStatus.OK;
+            }
+            // 58 — «QR code not found»: код истёк, нужен новый.
+            if (json.path("code").asInt(-1) == 58) return QrStatus.EXPIRED;
+            if (code < 400) return QrStatus.PENDING;
+            dbg("ONEID qr check u=%d code=%d body=%s", userId, code, snip(body));
+            return QrStatus.ERROR;
+        } catch (Exception e) {
+            return unreachable(e) ? QrStatus.UNREACHABLE : QrStatus.ERROR;
+        }
+    }
+
+    /** Отказ от входа по QR: диалог больше не держит сессию. */
+    public void oneIdQrCancel(long userId) {
+        OneIdSession s = oneIdSessions.get(userId);
+        if (s != null && s.qrCode != null && s.jwt == null) oneIdSessions.remove(userId);
+    }
+
     /** Шаг 2b. Подтверждение входа 2FA-кодом из приложения OneID (когда OneID вернул code=2). */
     public OneIdResult oneIdConfirm(long userId, String login, String smsCode) {
         try {
@@ -570,7 +857,7 @@ public class LmsService {
     public boolean oneIdFinish(long userId) {
         OneIdSession s = oneIdSessions.get(userId);
         if (s == null || s.jwt == null) return false;
-        boolean success = ssoExchange(userId, s.jwt, s.tokenId, s.clientId);
+        boolean success = ssoExchange(userId, s.jwt, s.tokenId, s.clientId, true);
         oneIdSessions.remove(userId);
         loggedInMap.put(userId, success);
         if (success) {
@@ -585,7 +872,7 @@ public class LmsService {
      * Обменивает JWT OneID на сессию LMS: sso/v1/generate выдаёт одноразовый код,
      * его забирает callbackUrl LMS тем же cookie jar. Пароль при этом не нужен.
      */
-    private boolean ssoExchange(long userId, String jwt, String tokenId, String clientId) {
+    private boolean ssoExchange(long userId, String jwt, String tokenId, String clientId, boolean freshLogin) {
         try {
             String payload = mapper.createObjectNode()
                     .put("uuid", tokenId)
@@ -640,6 +927,12 @@ public class LmsService {
                     userId, target, finalUrl, success, html.length());
             dbg("ONEID cookies u=%d -> %s", userId, cookieDump(userId));
 
+            if (success) {
+                // Новый вход мог быть в другой аккаунт — роль определяем заново;
+                // при восстановлении по токену это тот же человек, роль лишь уточняем.
+                if (freshLogin || !roles.containsKey(userId) && loadRole(userId) == null) detectRoleAfterLogin(userId, html);
+                else noteRole(userId, html);
+            }
             return success;
 
         } catch (Exception e) {
@@ -666,7 +959,7 @@ public class LmsService {
         try {
             // Нужны свежие token_id/client_id — старые одноразовые.
             OneIdSession s = oneIdStart(userId);
-            boolean ok = ssoExchange(userId, token.jwt(), s.tokenId, s.clientId);
+            boolean ok = ssoExchange(userId, token.jwt(), s.tokenId, s.clientId, false);
             oneIdSessions.remove(userId);
             loggedInMap.put(userId, ok);
             if (ok) {
@@ -719,6 +1012,7 @@ public class LmsService {
     private void resetSession(long userId) {
         clients.remove(userId);
         loggedInMap.remove(userId);
+        activeRole.remove(userId);
         invalidateSemesters(userId);
         try {
             new PersistentCookieJar(sessionDir(), userId).clear();
@@ -745,22 +1039,32 @@ public class LmsService {
      * Протухшую сессию помечает как невошедшую, cookie не стирает.
      */
     public Boolean probeSession(long userId) {
+        // Преподавателю студенческая страница недоступна — проверяем по его собственной.
+        String path = isTeacher(userId) ? "/teacher/my-course" : "/student/info";
         try {
             Request req = new Request.Builder()
-                    .url(config.getLms().getBaseUrl() + "/student/info")
+                    .url(config.getLms().getBaseUrl() + path)
                     .header("User-Agent", userAgent())
                     .build();
-            String finalUrl, html;
-            try (Response resp = getClient(userId).newCall(req).execute()) {
-                if (resp.code() >= 500) return null;
-                finalUrl = resp.request().url().toString();
-                html     = resp.body() != null ? resp.body().string() : "";
+            String[] got = teacherRead(userId, () -> {
+                try (Response resp = getClient(userId).newCall(req).execute()) {
+                    if (resp.code() >= 500) return null;
+                    return new String[]{resp.request().url().toString(), resp.body() != null ? resp.body().string() : ""};
+                }
+            });
+            if (got == null) return null;
+            String finalUrl = got[0], html = got[1];
+            boolean loginForm = finalUrl.contains("/auth/login") || html.contains("name=\"password\"");
+            // Роль могла оказаться другой (например, первый вход преподавателя до
+            // появления ролей): страница с меню LMS — значит, сессия жива.
+            Role seen = loginForm ? null : roleFromHtml(html);
+            boolean ok = !loginForm && (finalUrl.contains(path) || seen != null);
+            if (ok) {
+                noteRole(userId, html);
+                loggedInMap.put(userId, true);
+            } else {
+                loggedInMap.remove(userId);
             }
-            boolean ok = !finalUrl.contains("/auth/login")
-                    && !html.contains("name=\"password\"")
-                    && finalUrl.contains("/student/info");
-            if (ok) loggedInMap.put(userId, true);
-            else    loggedInMap.remove(userId);
             return ok;
         } catch (Exception e) {
             return null;
@@ -780,6 +1084,8 @@ public class LmsService {
         // и выход из одного аккаунта не должен стирать список остальных.
         oneIdTokens.clear(userId);
         invalidateSemesters(userId);
+        clearRole(userId);
+        activeRole.remove(userId);
         try {
             // Also clear persistent cookies so user is fully logged out
             new PersistentCookieJar(sessionDir(), userId).clear();
@@ -1290,11 +1596,13 @@ public class LmsService {
         // запасной семестр из конфига — верный способ получить пустые списки.
         if (!isLoggedIn(userId)) return null;
         String base = config.getLms().getBaseUrl();
-        String[] pages = { "/student/my-courses", "/student/schedule", "/student/final-exams", "/student/attendance" };
+        String[] pages = isTeacher(userId)
+                ? new String[]{ "/teacher/my-course", "/teacher/schedule", "/teacher/subject" }
+                : new String[]{ "/student/my-courses", "/student/schedule", "/student/final-exams", "/student/attendance" };
 
         for (String page : pages) {
             try {
-                String html = getHtml(userId, base + page, base + "/dashboard");
+                String html = teacherRead(userId, () -> getHtml(userId, base + page, base + "/dashboard"));
                 if (html == null || html.contains("name=\"password\"")) continue;
                 Document doc = Jsoup.parse(html);
 
@@ -1674,7 +1982,7 @@ public class LmsService {
         return cleaned;
     }
 
-    private String getJson(long userId, String url, String referer) throws Exception {
+    String getJson(long userId, String url, String referer) throws Exception {
         Request req = new Request.Builder()
                 .url(url)
                 .header("X-Requested-With", "XMLHttpRequest")
@@ -1691,7 +1999,7 @@ public class LmsService {
         }
     }
 
-    private String getHtml(long userId, String url, String referer) throws Exception {
+    String getHtml(long userId, String url, String referer) throws Exception {
         Request req = new Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent())
@@ -1706,13 +2014,13 @@ public class LmsService {
         }
     }
 
-    private String extractCsrf(String html) {
+    static String extractCsrf(String html) {
         Pattern p = Pattern.compile("name=\"_token\"\\s+value=\"([^\"]+)\"");
         Matcher m = p.matcher(html);
         return m.find() ? m.group(1) : null;
     }
 
-    private String userAgent() {
+    static String userAgent() {
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     }
@@ -1724,9 +2032,10 @@ public class LmsService {
     /** Фото студента (data:image/...): сначала со страницы «Информация», затем со смены пароля. */
     public String getProfilePhotoDataUrl(long userId) {
         String base = config.getLms().getBaseUrl();
-        for (String path : new String[]{"/student/info", "/profile/password"}) {
+        String info = isTeacher(userId) ? "/teacher/information" : "/student/info";
+        for (String path : new String[]{info, "/profile/password"}) {
             try {
-                Document doc = Jsoup.parse(getHtml(userId, base + path, base + path));
+                Document doc = Jsoup.parse(teacherRead(userId, () -> getHtml(userId, base + path, base + path)));
                 for (Element img : doc.select("img[src^=data:image]")) {
                     String src = img.attr("src");
                     // Иконки и заглушки короткие; настоящее фото — килобайты base64.
