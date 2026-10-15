@@ -397,10 +397,12 @@ public class TeacherBot {
                 case "co" -> showCourse(chatId, uid, msgId, i(p[1]));
                 case "cal" -> showCalendar(chatId, uid, msgId, i(p[1]));
                 case "att" -> showAttendance(chatId, uid, msgId, i(p[1]), i(p[2]));
-                case "ab" -> toggleAbsent(chatId, uid, msgId, i(p[1]));
-                case "abs" -> confirmSaveAttendance(chatId, uid, msgId);
-                case "abs!" -> saveAttendance(chatId, uid, msgId);
-                case "abv" -> { AttDraft d = attDrafts.get(uid); if (d != null) renderDraft(chatId, uid, msgId, d); }
+                case "sz" -> snoozeMenu(chatId, uid, p[1], String.join(":", Arrays.copyOfRange(p, 2, p.length)));
+                case "szu" -> snoozeUnit(chatId, uid, p[1], p[2], String.join(":", Arrays.copyOfRange(p, 3, p.length)));
+                case "ab" -> toggleAbsent(chatId, uid, msgId, i(p[1]), i(p[2]), i(p[3]));
+                case "abs" -> confirmSaveAttendance(chatId, uid, msgId, i(p[1]), i(p[2]));
+                case "abs!" -> saveAttendance(chatId, uid, msgId, i(p[1]), i(p[2]));
+                case "abv" -> backToDraft(chatId, uid, msgId, i(p[1]), i(p[2]));
                 case "rl" -> rollCall(chatId, uid, msgId, i(p[1]), p.length > 2 ? p[2] : null);
                 case "gs" -> showSheet(chatId, uid, msgId, i(p[1]), p.length > 2 && "f".equals(p[2]));
                 case "gt" -> showTotals(chatId, uid, msgId, i(p[1]));
@@ -470,6 +472,7 @@ public class TeacherBot {
             return;
         }
         switch (state) {
+            case "T_SNOOZE" -> snoozeInput(chatId, uid, text);
             case "T_GRADE" -> gradeInput(chatId, uid, text);
             case "T_GCOMMENT" -> finishGrade(chatId, uid, text);
             case "T_ACT_NAME", "T_ACT_DEADLINE", "T_ACT_MAX", "T_ACT_CRIT" -> draftInput(chatId, uid, state, text);
@@ -514,6 +517,7 @@ public class TeacherBot {
     private void cancel(long chatId, long uid) {
         bot.userState.put(uid, "IDLE");
         pendingGrade.remove(uid);
+        snoozePending.remove(uid);
         dropDraft(uid);
         appeals.remove(uid);
         bot.send(chatId, T(uid, "❌ Отменено.", "❌ Bekor qilindi.", "❌ Бекор қилинди.", "❌ Cancelled."), null);
@@ -641,14 +645,15 @@ public class TeacherBot {
         final Set<Integer> absent = new LinkedHashSet<>();
         /** false — перекличку ещё не трогали: показываем пустые отметки, а не «все были». */
         boolean touched;
-        AttDraft(int courseId, int lessonId, TAttendance a) {
+        AttDraft(int courseId, int lessonId, TAttendance a, boolean marked) {
             this.courseId = courseId;
             this.lessonId = lessonId;
             this.header = a.header();
             this.topic = a.topic();
             this.students = a.students();
             for (AttStudent s : a.students()) if (Boolean.FALSE.equals(s.present()) && s.id() != null) absent.add(s.id());
-            this.touched = !absent.isEmpty();
+            // Пара уже отмечена в календарном плане (пусть и без НБ) — это не «пустая» перекличка.
+            this.touched = !absent.isEmpty() || marked;
         }
     }
 
@@ -667,7 +672,14 @@ public class TeacherBot {
         async(chatId, uid, () -> {
             TAttendance a = ts.attendance(uid, courseId, lessonId);
             if (a.editable() && a.students().size() <= ATT_BUTTONS_MAX && a.students().stream().allMatch(s -> s.id() != null)) {
-                AttDraft d = new AttDraft(courseId, lessonId, a);
+                boolean marked = false;
+                if (a.students().stream().noneMatch(s -> Boolean.FALSE.equals(s.present()))) {
+                    try {
+                        for (TLesson l : ts.calendar(uid, courseId).lessons())
+                            if (Integer.valueOf(lessonId).equals(l.lessonId())) marked = l.marked();
+                    } catch (Exception ignored) { }
+                }
+                AttDraft d = new AttDraft(courseId, lessonId, a, marked);
                 attDrafts.put(uid, d);
                 renderDraft(chatId, uid, msgId, d);
                 return;
@@ -717,31 +729,44 @@ public class TeacherBot {
         List<InlineKeyboardButton> line = new ArrayList<>();
         for (int k = 0; k < d.students.size(); k++) {
             AttStudent s = d.students.get(k);
-            line.add(btn((d.absent.contains(s.id()) ? "🔴 " : d.touched ? "✅ " : "⬜ ") + s.number(), "t:ab:" + k));
+            line.add(btn((d.absent.contains(s.id()) ? "🔴 " : d.touched ? "✅ " : "⬜ ") + s.number(), "t:ab:" + d.courseId + ":" + d.lessonId + ":" + k));
             if (line.size() == 5) { rows.add(line); line = new ArrayList<>(); }
         }
         if (!line.isEmpty()) rows.add(line);
-        rows.add(List.of(btn(T(uid, "💾 Сохранить", "💾 Saqlash", "💾 Сақлаш", "💾 Save"), "t:abs")));
+        rows.add(List.of(btn(T(uid, "💾 Сохранить", "💾 Saqlash", "💾 Сақлаш", "💾 Save"), "t:abs:" + d.courseId + ":" + d.lessonId)));
         rows.add(List.of(lmsButton(uid, d.courseId, d.lessonId)));
         rows.add(List.of(btn(T(uid, "🔙 Календарный план", "🔙 Kalendar reja", "🔙 Календар режа", "🔙 Class plan"), "t:cal:" + d.courseId)));
         show(chatId, msgId, sb.toString(), kb(rows));
     }
 
-    private void toggleAbsent(long chatId, long uid, int msgId, int index) {
+    /**
+     * Черновик именно этой пары. Если его нет (бот перезапускался) или открыта другая пара — кнопка
+     * старого сообщения ничего не меняет вслепую, а загружает перекличку заново.
+     */
+    private AttDraft draftFor(long chatId, long uid, int msgId, int courseId, int lessonId) {
         AttDraft d = attDrafts.get(uid);
-        if (d == null || index < 0 || index >= d.students.size()) {
-            // Бот перезапускался или черновик устарел — открываем перекличку заново.
-            attDrafts.remove(uid);
-            return;
-        }
+        if (d != null && d.courseId == courseId && d.lessonId == lessonId) return d;
+        showAttendance(chatId, uid, msgId, courseId, lessonId);
+        return null;
+    }
+
+    private void backToDraft(long chatId, long uid, int msgId, int courseId, int lessonId) {
+        AttDraft d = draftFor(chatId, uid, msgId, courseId, lessonId);
+        if (d != null) renderDraft(chatId, uid, msgId, d);
+    }
+
+    private void toggleAbsent(long chatId, long uid, int msgId, int courseId, int lessonId, int index) {
+        AttDraft d = draftFor(chatId, uid, msgId, courseId, lessonId);
+        if (d == null) return;
+        if (index < 0 || index >= d.students.size()) return;
         Integer id = d.students.get(index).id();
         d.touched = true;
         if (!d.absent.remove(id)) d.absent.add(id);
         renderDraft(chatId, uid, msgId, d);
     }
 
-    private void confirmSaveAttendance(long chatId, long uid, int msgId) {
-        AttDraft d = attDrafts.get(uid);
+    private void confirmSaveAttendance(long chatId, long uid, int msgId, int courseId, int lessonId) {
+        AttDraft d = draftFor(chatId, uid, msgId, courseId, lessonId);
         if (d == null) return;
         StringBuilder names = new StringBuilder();
         for (AttStudent s : d.students) if (d.absent.contains(s.id())) names.append("🔴 ").append(s.number()).append(". ").append(esc(s.name())).append("\n");
@@ -749,12 +774,12 @@ public class TeacherBot {
                 + "</b>\n\n" + esc(d.header) + "\n\n✅ " + (d.students.size() - d.absent.size()) + " · 🔴 " + d.absent.size()
                 + (names.length() > 0 ? "\n\n<blockquote>" + names.toString().trim() + "</blockquote>" : "");
         show(chatId, msgId, text, kb(List.of(
-                List.of(btn(T(uid, "✅ Да, сохранить", "✅ Ha, saqlash", "✅ Ҳа, сақлаш", "✅ Yes, save"), "t:abs!")),
-                List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv")))));
+                List.of(btn(T(uid, "✅ Да, сохранить", "✅ Ha, saqlash", "✅ Ҳа, сақлаш", "✅ Yes, save"), "t:abs!:" + d.courseId + ":" + d.lessonId)),
+                List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv:" + d.courseId + ":" + d.lessonId)))));
     }
 
-    private void saveAttendance(long chatId, long uid, int msgId) {
-        AttDraft d = attDrafts.get(uid);
+    private void saveAttendance(long chatId, long uid, int msgId, int courseId, int lessonId) {
+        AttDraft d = draftFor(chatId, uid, msgId, courseId, lessonId);
         if (d == null) return;
         async(chatId, uid, () -> {
             FormResult res = ts.saveAttendance(uid, d.courseId, d.lessonId, d.absent);
@@ -773,7 +798,7 @@ public class TeacherBot {
             };
             show(chatId, msgId, "⚠️ <b>" + T(uid, "Перекличка не сохранена", "Davomat saqlanmadi", "Давомат сақланмади", "Roll call not saved")
                     + "</b>\n\n<blockquote>" + esc(why) + "</blockquote>", kb(List.of(
-                    List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv")),
+                    List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv:" + d.courseId + ":" + d.lessonId)),
                     List.of(lmsButton(uid, d.courseId, d.lessonId)))));
         });
     }
@@ -2073,16 +2098,15 @@ public class TeacherBot {
 
     // ─────────────────────────────────────────────
     //  НАПОМИНАНИЯ ПРЕПОДАВАТЕЛЮ
-    //  • приём работ закрыт, а сданные работы ждут оценки;
-    //  • до конца срока оценивания (из ведомости LMS) меньше суток;
-    //  • перекличка пары не отмечена: с начала пары и каждые 45 минут, после конца — каждые 2 часа
+    //  • сданные работы ждут оценки: раз в 3 часа с закрытия приёма до конца срока оценивания;
+        //  • перекличка пары не отмечена: с начала пары и каждые 45 минут, после конца — каждые 2 часа
     //    (до суток, пока в календарном плане нет отметки).
     //  Пары за 10 минут и сводка дня приходят общим механизмом бота — расписание
     //  преподавателя строит SemesterSchedule.
     // ─────────────────────────────────────────────
 
     private final Map<Long, Long> lastScan = new ConcurrentHashMap<>();
-    private static final long SCAN_MS = 30L * 60 * 1000;
+    private static final long SCAN_MS = 15L * 60 * 1000;
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
 
     /** Раз в минуту из планировщика бота. */
@@ -2100,30 +2124,133 @@ public class TeacherBot {
         }
     }
 
+    /** Напоминание об оценках: раз в 3 часа, пока идёт срок оценивания и есть непроверенные работы. */
+    private static final long GRADE_REMIND_MS = 3L * 60 * 60_000;
+    /** Срок оценивания по умолчанию — 3 дня после закрытия приёма, если LMS не назвала свой. */
+    private static final long GRADE_WINDOW_MS = 3L * DAY_MS;
+    private static final int GRADE_LIST_MAX = 8;
+    private static final int GRADE_BUTTONS_MAX = 6;
+
+    /** Когда в следующий раз напомнить об оценках; «отложить» двигает это время. */
+    private final Map<Long, Long> gradeNextAt = new ConcurrentHashMap<>();
+
+    /**
+     * Окно напоминания по сроку: с момента, когда приём работ закрылся, и до конца срока
+     * оценивания (например, приём закрыт 26-11 23:59, оценивать можно до 29-11 23:59).
+     */
+    static boolean inGradeWindow(long now, long studentTs, long teacherTs) {
+        long end = teacherTs > 0 ? teacherTs : studentTs + GRADE_WINDOW_MS;
+        return now >= studentTs && now <= end;
+    }
+
+    private final Set<Long> gradeScanning = ConcurrentHashMap.newKeySet();
+
     private void scanGrading(long chatId, long uid) {
+        // Прошлый обход ещё идёт (LMS медленная) — второй не начинаем, иначе придёт два одинаковых напоминания.
+        if (!gradeScanning.add(uid)) return;
         try {
             long now = System.currentTimeMillis();
+            // Пока не пора (или отложено) — в LMS даже не ходим.
+            if (now < gradeNextAt.getOrDefault(uid, 0L)) return;
+            List<GradingItem> due = new ArrayList<>();
             for (GradingItem g : gradingItems(uid)) {
-                if (g.pending() <= 0 || g.col() < 0 || g.studentTs() > now) continue;
-                String key = g.d().courseId() + "|" + g.column().activityId();
-                InlineKeyboardMarkup open = kb(List.of(List.of(btn(T(uid, "📋 Проверить", "📋 Tekshirish", "📋 Текшириш", "📋 Grade now"),
-                        "t:ga:" + g.d().courseId() + ":" + g.col()))));
-                String what = "<b>" + esc(g.d().activity()) + "</b> · " + esc(g.d().stream()) + "\n" + esc(g.d().subject());
-                boolean due = g.teacherTs() > now && g.teacherTs() - now <= DAY_MS;
-                if (due && bot.markOnce(uid, "tdue|" + key)) {
-                    bot.send(chatId, "⏰ <b>" + T(uid, "До конца срока оценивания меньше суток", "Baholash muddati tugashiga bir kundan kam qoldi",
-                            "Баҳолаш муддати тугашига бир кундан кам қолди", "Less than a day left to grade") + "</b>\n\n<blockquote>" + what
-                            + "\n👨‍🏫 " + esc(g.column().teacherDeadline()) + "\n⏳ " + g.pending() + "</blockquote>", open);
-                } else if (now - g.studentTs() < 2 * DAY_MS && bot.markOnce(uid, "tclose|" + key)) {
-                    bot.send(chatId, "📥 <b>" + T(uid, "Приём работ закрыт — есть что проверить", "Ishlar qabuli yopildi — tekshiradigan narsa bor",
-                            "Ишлар қабули ёпилди — текширадиган нарса бор", "Submissions are closed — there is work to grade") + "</b>\n\n<blockquote>" + what
-                            + "\n⏳ " + g.pending() + (g.column().teacherDeadline() != null ? "\n👨‍🏫 " + esc(g.column().teacherDeadline()) : "")
-                            + "</blockquote>", open);
-                }
+                if (g.pending() <= 0 || g.col() < 0) continue;
+                if (inGradeWindow(now, g.studentTs(), g.teacherTs())) due.add(g);
             }
+            if (due.isEmpty()) return;
+            gradeNextAt.put(uid, now + GRADE_REMIND_MS);
+
+            int total = due.stream().mapToInt(GradingItem::pending).sum();
+            StringBuilder sb = new StringBuilder("📝 <b>").append(T(uid, "Выставьте оценки", "Baholarni qo'ying", "Баҳоларни қўйинг", "Please grade the submissions"))
+                    .append("</b> · ⏳ ").append(total).append("\n");
+            for (int k = 0; k < due.size() && k < GRADE_LIST_MAX; k++) {
+                GradingItem g = due.get(k);
+                sb.append("\n<blockquote><b>").append(esc(g.d().activity())).append("</b> · ").append(esc(g.d().stream()))
+                        .append("\n").append(esc(cut(g.d().subject(), 50))).append("\n⏳ ").append(g.pending());
+                if (g.column() != null && g.column().teacherDeadline() != null)
+                    sb.append(" · 👨‍🏫 ").append(T(uid, "до ", "gacha ", "гача ", "until ")).append(esc(g.column().teacherDeadline()));
+                sb.append("</blockquote>");
+            }
+            if (due.size() > GRADE_LIST_MAX) sb.append("\n…");
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            for (int k = 0; k < due.size() && k < GRADE_BUTTONS_MAX; k++) {
+                GradingItem g = due.get(k);
+                rows.add(List.of(btn("📋 " + cut(g.d().activity(), 22) + " · " + cut(g.d().stream(), 14), "t:ga:" + g.d().courseId() + ":" + g.col())));
+            }
+            rows.add(List.of(btn(T(uid, "⏰ Отложить", "⏰ Kechiktirish", "⏰ Кечиктириш", "⏰ Snooze"), "t:sz:g:0")));
+            bot.send(chatId, sb.toString(), kb(rows));
         } catch (Exception e) {
             System.err.println("[TeacherBot] grading scan " + uid + ": " + e.getMessage());
+        } finally {
+            gradeScanning.remove(uid);
         }
+    }
+
+    // ─────────────────────────────────────────────
+    //  ОТЛОЖИТЬ НАПОМИНАНИЕ: выбрать минуты или часы, затем ввести число
+    // ─────────────────────────────────────────────
+
+    private record SnoozeRef(String kind, String ref, String unit) {}
+
+    private final Map<Long, SnoozeRef> snoozePending = new ConcurrentHashMap<>();
+    /** Отложенные напоминания о переклички: «преподаватель|предмет|начало пары» → до какого времени. */
+    private final Map<String, Long> attSnooze = new ConcurrentHashMap<>();
+    private static final int SNOOZE_MAX_MIN = 720;
+    private static final int SNOOZE_MAX_HOURS = 72;
+
+    /** kind: g — оценки, a — перекличка (ref «предмет:начало пары»). */
+    private void snoozeMenu(long chatId, long uid, String kind, String ref) {
+        bot.send(chatId, "⏰ <b>" + T(uid, "На сколько отложить напоминание?", "Eslatmani qancha kechiktiramiz?",
+                "Эслатмани қанча кечиктирамиз?", "Snooze the reminder for how long?") + "</b>\n\n"
+                + T(uid, "Выберите единицу, затем введите число.", "Birlikni tanlang, so'ng raqam kiriting.",
+                "Бирликни танланг, сўнг рақам киритинг.", "Pick a unit, then type a number."),
+                kb(List.of(List.of(
+                        btn(T(uid, "🕐 Минуты", "🕐 Daqiqa", "🕐 Дақиқа", "🕐 Minutes"), "t:szu:m:" + kind + ":" + ref),
+                        btn(T(uid, "🕑 Часы", "🕑 Soat", "🕑 Соат", "🕑 Hours"), "t:szu:h:" + kind + ":" + ref)))));
+    }
+
+    private void snoozeUnit(long chatId, long uid, String unit, String kind, String ref) {
+        snoozePending.put(uid, new SnoozeRef(kind, ref, unit));
+        bot.userState.put(uid, "T_SNOOZE");
+        boolean min = "m".equals(unit);
+        bot.send(chatId, "⏰ " + (min
+                ? T(uid, "Введите число минут (1–" + SNOOZE_MAX_MIN + "):", "Daqiqalar sonini kiriting (1–" + SNOOZE_MAX_MIN + "):",
+                        "Дақиқалар сонини киритинг (1–" + SNOOZE_MAX_MIN + "):", "Enter the number of minutes (1–" + SNOOZE_MAX_MIN + "):")
+                : T(uid, "Введите число часов (1–" + SNOOZE_MAX_HOURS + "):", "Soatlar sonini kiriting (1–" + SNOOZE_MAX_HOURS + "):",
+                        "Соатлар сонини киритинг (1–" + SNOOZE_MAX_HOURS + "):", "Enter the number of hours (1–" + SNOOZE_MAX_HOURS + "):"))
+                + "\n<i>/cancel — " + T(uid, "отмена", "bekor qilish", "бекор қилиш", "cancel") + "</i>", null);
+    }
+
+    private void snoozeInput(long chatId, long uid, String text) {
+        SnoozeRef s = snoozePending.get(uid);
+        if (s == null) {
+            bot.userState.put(uid, "IDLE");
+            return;
+        }
+        int n;
+        try {
+            n = Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            n = -1;
+        }
+        boolean min = "m".equals(s.unit());
+        if (n < 1 || n > (min ? SNOOZE_MAX_MIN : SNOOZE_MAX_HOURS)) {
+            bot.send(chatId, T(uid, "Нужно целое число от 1 до " + (min ? SNOOZE_MAX_MIN : SNOOZE_MAX_HOURS) + ". Попробуйте ещё раз или /cancel.",
+                    "1 dan " + (min ? SNOOZE_MAX_MIN : SNOOZE_MAX_HOURS) + " gacha butun son kerak. Qayta urinib ko'ring yoki /cancel.",
+                    "1 дан " + (min ? SNOOZE_MAX_MIN : SNOOZE_MAX_HOURS) + " гача бутун сон керак. Қайта уриниб кўринг ёки /cancel.",
+                    "Enter a whole number from 1 to " + (min ? SNOOZE_MAX_MIN : SNOOZE_MAX_HOURS) + ". Try again or /cancel."), null);
+            return;
+        }
+        long until = System.currentTimeMillis() + n * (min ? 60_000L : 3_600_000L);
+        if ("g".equals(s.kind())) gradeNextAt.put(uid, until);
+        else attSnooze.put(uid + "|" + s.ref().replace(':', '|'), until);
+        snoozePending.remove(uid);
+        bot.userState.put(uid, "IDLE");
+        String at = java.time.LocalTime.ofInstant(java.time.Instant.ofEpochMilli(until), AppConfig.LMS_ZONE).format(DateTimeFormatter.ofPattern("HH:mm"));
+        bot.send(chatId, "⏰ " + T(uid, "Напомню через " + n + (min ? " мин" : " ч") + " (в " + at + ")",
+                "Eslataman: " + n + (min ? " daqiqadan" : " soatdan") + " so'ng (" + at + ")",
+                "Эслатаман: " + n + (min ? " дақиқадан" : " соатдан") + " сўнг (" + at + ")",
+                "I'll remind you in " + n + (min ? " min" : " h") + " (at " + at + ")"), null);
     }
 
     /** Номер последнего напоминания по каждой паре: «преподаватель|предмет|начало». */
@@ -2168,7 +2295,15 @@ public class TeacherBot {
                 int pos = 0;
                 for (SemesterSchedule.Lesson o : dayLessons) if (o.courseId().equals(l.courseId()) && o.ts() < l.ts()) pos++;
                 String key = uid + "|" + l.courseId() + "|" + l.ts();
-                if (idx < 0 || idx <= attendanceSent.getOrDefault(key, -1) || !attendanceInFlight.add(key)) continue;
+                // «Отложить»: до указанного времени молчим, а когда оно пришло — напоминаем сразу, не дожидаясь следующей отметки.
+                Long snoozedUntil = attSnooze.get(key);
+                boolean wake = false;
+                if (snoozedUntil != null) {
+                    if (now < snoozedUntil) continue;
+                    attSnooze.remove(key);
+                    wake = true;
+                }
+                if (idx < 0 || (!wake && idx <= attendanceSent.getOrDefault(key, -1)) || !attendanceInFlight.add(key)) continue;
                 final int position = pos;
                 final boolean ended = now - l.ts() >= lessonMs;
                 bot.executor.submit(() -> {
@@ -2193,7 +2328,8 @@ public class TeacherBot {
                                 kb(List.of(
                                         List.of(btn(T(uid, "📊 Перекличка", "📊 Davomat", "📊 Давомат", "📊 Roll call"),
                                                 "t:rl:" + l.courseId() + ":" + day.format(DateTimeFormatter.BASIC_ISO_DATE))),
-                                        List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + l.courseId())))));
+                                        List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + l.courseId())),
+                                        List.of(btn(T(uid, "⏰ Отложить", "⏰ Kechiktirish", "⏰ Кечиктириш", "⏰ Snooze"), "t:sz:a:" + l.courseId() + ":" + l.ts())))));
                     } catch (Exception e) {
                         System.err.println("[TeacherBot] attendance check " + uid + ": " + e.getMessage());
                     } finally {

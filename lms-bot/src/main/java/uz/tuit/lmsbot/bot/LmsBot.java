@@ -197,6 +197,11 @@ public class LmsBot extends TelegramLongPollingBot {
             return;
         }
 
+        if ("WAIT_DL_INTERVAL".equals(state)) {
+            deadlineIntervalInput(chatId, userId, text);
+            return;
+        }
+
         if ("WAIT_OLD_PASSWORD".equals(state)) {
             tmpOldPass.put(userId, text);
             userState.put(userId, "WAIT_NEW_PASSWORD");
@@ -550,7 +555,15 @@ public class LmsBot extends TelegramLongPollingBot {
                     lmsService.isLoggedIn(userId) ? mainMenuKeyboard(userId) : loginKeyboard(userId));
             showSettings(chatId, userId);
         } else if (data.startsWith("dl_remind_")) {
-            showDeadlineIntervalPicker(chatId, userId, messageId, data.substring("dl_remind_".length()));
+            showDeadlineUnitPicker(chatId, userId, data.substring("dl_remind_".length()));
+        } else if (data.startsWith("dl_unit_")) {
+            String rest = data.substring("dl_unit_".length());
+            if (rest.length() > 2) askDeadlineInterval(chatId, userId, rest.substring(0, 1), rest.substring(2));
+        } else if (data.startsWith("dl_go_")) {
+            goToDeadline(chatId, userId, messageId, data.substring("dl_go_".length()));
+        } else if (data.startsWith("nbgo_")) {
+            String[] nb = data.substring("nbgo_".length()).split("_");
+            if (nb.length == 2) showAttendance(chatId, userId, messageId, Integer.parseInt(nb[0]), Integer.parseInt(nb[1]));
         } else if (data.startsWith("dl_set_")) {
             String rest = data.substring("dl_set_".length());
             int lastUnd = rest.lastIndexOf('_');
@@ -2758,9 +2771,33 @@ public class LmsBot extends TelegramLongPollingBot {
                                 + (l.teacher().isBlank() ? "" : "👨‍🏫 Teacher: <b>" + esc(l.teacher()) + "</b>\n")
                                 + "🕐 Time: <b>" + esc(l.time()) + "</b>\n"
                                 + (l.room().isBlank() ? "" : "🚪 Room: <b>" + esc(l.room()) + "</b>\n")
-                                + "</blockquote>"), teacherRollCallKeyboard(userId, List.of(l)));
+                                + "</blockquote>"), reminderKeyboard(userId, l));
             }
         }
+    }
+
+    /** Строка «Расписание» — студенту цель напоминания о паре и сводки дня. */
+    private List<InlineKeyboardButton> scheduleRow(long userId) {
+        int sem = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
+        if (sem <= 0) return null;
+        return List.of(inlineBtn(tr(userId, "📅 Расписание", "📅 Dars jadvali", "📅 Дарс жадвали", "📅 Timetable"), "schedule_" + sem));
+    }
+
+    /** Напоминание о паре: преподавателю — на перекличку этой пары, студенту — в расписание и к заданиям предмета. */
+    private InlineKeyboardMarkup reminderKeyboard(long userId, uz.tuit.lmsbot.service.SemesterSchedule.Lesson l) {
+        if (lmsService.isTeacher(userId)) return teacherRollCallKeyboard(userId, List.of(l));
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (l.courseId() != null)
+            rows.add(List.of(inlineBtn(tr(userId, "📝 Задания предмета", "📝 Fan topshiriqlari", "📝 Фан топшириқлари", "📝 Subject tasks"), "ac_back_" + l.courseId())));
+        List<InlineKeyboardButton> sched = scheduleRow(userId);
+        if (sched != null) rows.add(sched);
+        return rows.isEmpty() ? null : markup(rows);
+    }
+
+    private InlineKeyboardMarkup digestKeyboard(long userId, List<uz.tuit.lmsbot.service.SemesterSchedule.Lesson> lessons) {
+        if (lmsService.isTeacher(userId)) return teacherRollCallKeyboard(userId, lessons);
+        List<InlineKeyboardButton> sched = scheduleRow(userId);
+        return sched == null ? null : markup(List.of(sched));
     }
 
     /** Преподавателю — кнопка «Перекличка» на каждую пару с потоком в LMS; студентам клавиатура не нужна. */
@@ -2800,7 +2837,7 @@ public class LmsBot extends TelegramLongPollingBot {
             if (l.last()) b.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс", "Last class"));
             sb.append("<blockquote>").append(b).append("</blockquote>\n");
         }
-        send(chatId, sb.toString(), teacherRollCallKeyboard(userId, lessons));
+        send(chatId, sb.toString(), digestKeyboard(userId, lessons));
     }
 
     private void tickNbReminders() {
@@ -2835,7 +2872,9 @@ public class LmsBot extends TelegramLongPollingBot {
                                 + "📌 НБ: <b>" + nb + "</b> (аввал " + old + " эди)</blockquote>",
                         "🔴 <b>New absence</b>\n\n<blockquote>"
                                 + "📖 Subject: <b>" + esc(c.getSubject()) + "</b>\n"
-                                + "📌 Absences now: <b>" + nb + "</b> (was" + old + ")</blockquote>"), null);
+                                + "📌 Absences now: <b>" + nb + "</b> (was" + old + ")</blockquote>"),
+                        markup(List.of(List.of(inlineBtn(tr(userId, "📊 Посещаемость предмета", "📊 Fan davomati", "📊 Фан давомати", "📊 Subject attendance"),
+                                "nbgo_" + c.getId() + "_" + semesterId)))));
             }
         }
     }
@@ -2994,17 +3033,12 @@ public class LmsBot extends TelegramLongPollingBot {
                             minutesToLabelEn(intervalMin)))
                             + "</b></blockquote>";
 
-                    InlineKeyboardMarkup kb = markup(List.of(
-                            List.of(
-                                    inlineBtn(tr(userId, "⏰ Через 30 мин", "⏰ 30 min keyin", "⏰ 30 мин кейин", "⏰ In 30 min"),
-                                            "dl_set_" + key + "_30"),
-                                    inlineBtn(tr(userId, "⏰ Через 1 час", "⏰ 1 soat keyin", "⏰ 1 соат кейин", "⏰ In 1 hour"),
-                                            "dl_set_" + key + "_60")),
-                            List.of(inlineBtn(
-                                    tr(userId, "⏱ Изменить интервал", "⏱ Oraliqni o'zgartirish", "⏱ Оралиқни ўзгартириш", "⏱ Change interval"),
-                                    "dl_remind_" + key))
-                    ));
-                    send(chatId, text, kb);
+                    List<List<InlineKeyboardButton>> kbRows = new ArrayList<>();
+                    kbRows.add(List.of(inlineBtn(tr(userId, "📝 Открыть задание", "📝 Topshiriqni ochish", "📝 Топшириқни очиш", "📝 Open the task"),
+                            "dl_go_" + key)));
+                    kbRows.add(List.of(inlineBtn(tr(userId, "⏰ Напомнить через…", "⏰ Eslatish…", "⏰ Эслатиш…", "⏰ Remind me in…"),
+                            "dl_remind_" + key)));
+                    send(chatId, text, markup(kbRows));
                 }
             }
         }
@@ -3026,6 +3060,101 @@ public class LmsBot extends TelegramLongPollingBot {
 
     private void setDeadlineInterval(long userId, String key, int minutes) {
         deadlineIntervalsMin.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(key, minutes);
+        // Отсчёт — от нажатия, а не от прошлого напоминания: «через 30 минут» значит 30 минут отсюда.
+        lastDeadlineNotifyTs.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(key, System.currentTimeMillis());
+    }
+
+    /** Ждём число минут или часов для напоминания о дедлайне: [ключ дедлайна, единица m/h]. */
+    private final Map<Long, String[]> dlIntervalPending = new ConcurrentHashMap<>();
+    private static final int DL_MAX_MIN = 720;
+    private static final int DL_MAX_HOURS = 48;
+
+    private void showDeadlineUnitPicker(long chatId, long userId, String key) {
+        send(chatId, tr(userId,
+                        "⏱ <b>Напомнить через</b>\n\nВыберите единицу, затем введите число.",
+                        "⏱ <b>Qancha vaqtdan so'ng eslatamiz</b>\n\nBirlikni tanlang, so'ng raqam kiriting.",
+                        "⏱ <b>Қанча вақтдан сўнг эслатамиз</b>\n\nБирликни танланг, сўнг рақам киритинг.",
+                        "⏱ <b>Remind me in</b>\n\nPick a unit, then type a number."),
+                markup(List.of(List.of(
+                        inlineBtn(tr(userId, "🕐 Минуты", "🕐 Daqiqa", "🕐 Дақиқа", "🕐 Minutes"), "dl_unit_m_" + key),
+                        inlineBtn(tr(userId, "🕑 Часы", "🕑 Soat", "🕑 Соат", "🕑 Hours"), "dl_unit_h_" + key)))));
+    }
+
+    private void askDeadlineInterval(long chatId, long userId, String unit, String key) {
+        dlIntervalPending.put(userId, new String[]{key, unit});
+        userState.put(userId, "WAIT_DL_INTERVAL");
+        boolean min = "m".equals(unit);
+        int max = min ? DL_MAX_MIN : DL_MAX_HOURS;
+        send(chatId, "⏱ " + tr(userId,
+                (min ? "Введите число минут" : "Введите число часов") + " (1–" + max + "):",
+                (min ? "Daqiqalar sonini kiriting" : "Soatlar sonini kiriting") + " (1–" + max + "):",
+                (min ? "Дақиқалар сонини киритинг" : "Соатлар сонини киритинг") + " (1–" + max + "):",
+                (min ? "Enter the number of minutes" : "Enter the number of hours") + " (1–" + max + "):")
+                + "\n<i>/cancel</i>", null);
+    }
+
+    private void deadlineIntervalInput(long chatId, long userId, String text) {
+        String[] pending = dlIntervalPending.get(userId);
+        if (pending == null) {
+            userState.put(userId, "IDLE");
+            return;
+        }
+        boolean min = "m".equals(pending[1]);
+        int max = min ? DL_MAX_MIN : DL_MAX_HOURS;
+        int n;
+        try {
+            n = Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            n = -1;
+        }
+        if (n < 1 || n > max) {
+            send(chatId, tr(userId,
+                    "Нужно целое число от 1 до " + max + ". Попробуйте ещё раз или /cancel.",
+                    "1 dan " + max + " gacha butun son kerak. Qayta urinib ko'ring yoki /cancel.",
+                    "1 дан " + max + " гача бутун сон керак. Қайта уриниб кўринг ёки /cancel.",
+                    "Enter a whole number from 1 to " + max + ". Try again or /cancel."), null);
+            return;
+        }
+        setDeadlineInterval(userId, pending[0], min ? n : n * 60);
+        dlIntervalPending.remove(userId);
+        userState.put(userId, "IDLE");
+        send(chatId, "⏰ " + tr(userId,
+                "Напомню через " + n + (min ? " мин" : " ч"),
+                "Eslataman: " + n + (min ? " daqiqadan" : " soatdan") + " so'ng",
+                "Эслатаман: " + n + (min ? " дақиқадан" : " соатдан") + " сўнг",
+                "I'll remind you in " + n + (min ? " min" : " h")), null);
+    }
+
+    /**
+     * Сразу к заданию, о дедлайне которого напомнили. Задание ищем по ключу дедлайна в свежем ответе LMS,
+     * а не по номеру в старом списке: порядок и кэш могли поменяться.
+     */
+    private void goToDeadline(long chatId, long userId, int messageId, String key) {
+        int dash = key.indexOf('-');
+        if (dash <= 0) return;
+        int courseId;
+        try {
+            courseId = Integer.parseInt(key.substring(0, dash));
+        } catch (NumberFormatException e) {
+            return;
+        }
+        executor.submit(() -> {
+            CourseSummary cs = lmsService.getActivities(userId, courseId);
+            if (cs == null || cs.getActivities() == null) {
+                showActivities(chatId, userId, courseId);
+                return;
+            }
+            List<Activity> acts = cs.getActivities();
+            userActivities.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(courseId, acts);
+            for (int i = 0; i < acts.size(); i++) {
+                Activity a = acts.get(i);
+                if (key.equals(deadlineKey(courseId, parseActivityDeadlineTs(a.getDeadline()), a.getTask()))) {
+                    editActivityDetails(chatId, userId, messageId, courseId, i);
+                    return;
+                }
+            }
+            showActivities(chatId, userId, courseId);
+        });
     }
 
     // ─────────────────────────────────────────────

@@ -46,7 +46,7 @@ export function pickLesson(lessons: TLesson[], iso?: string | null): TLesson | n
  * Отметки занятия. Пока отметку можно менять (в LMS есть форма), тап по студенту ставит или снимает НБ,
  * а «Сохранить» отправляет всю перекличку; иначе — только просмотр и ссылка на сайт.
  */
-export function AttendanceView({ courseId, lessonId }: { courseId: number; lessonId: number }) {
+export function AttendanceView({ courseId, lessonId, marked }: { courseId: number; lessonId: number; marked?: boolean }) {
   const tt = useTT();
   const toast = useToast();
   const q = useQuery(`tatt:${courseId}:${lessonId}`, (f) => api.t.attendance(courseId, lessonId, f));
@@ -55,14 +55,17 @@ export function AttendanceView({ courseId, lessonId }: { courseId: number; lesso
   const [edited, setEdited] = useState<Set<number> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  useEffect(() => setEdited(null), [a]);
+  useEffect(() => {
+    setEdited(null);
+    setSaved(false);
+  }, [lessonId]);
 
   const editable = !!a?.editable && a.students.every((s) => s.id != null);
   const serverAbsent = useMemo(() => new Set((a?.students ?? []).filter((s) => s.present === false && s.id != null).map((s) => s.id!)), [a]);
   const absentIds = edited ?? serverAbsent;
   const isAbsent = (s: NonNullable<typeof a>['students'][number]) => (editable ? absentIds.has(s.id!) : s.present === false);
   // Пока перекличку не трогали и НБ ещё нет, никто не отмечен: пустое состояние, а не «все были».
-  const touched = edited != null || serverAbsent.size > 0 || saved;
+  const touched = edited != null || serverAbsent.size > 0 || saved || !!marked;
   const isPresent = (s: NonNullable<typeof a>['students'][number]) => (editable ? touched && !absentIds.has(s.id!) : s.present === true);
 
   if (q.loading) return <ListSkeleton rows={5} />;
@@ -93,6 +96,7 @@ export function AttendanceView({ courseId, lessonId }: { courseId: number; lesso
     }
     haptic('success');
     setSaved(true);
+    setEdited(null);
     toast(tt('att_saved'));
     invalidate(`tcal:${courseId}`);
     q.refresh();
@@ -186,7 +190,7 @@ export function RollCallSheet({ courseId, title, date, open, onClose }: {
       ) : q.error ? (
         <ErrorState error={q.error} onRetry={q.refresh} />
       ) : lesson?.lessonId && courseId ? (
-        <AttendanceView courseId={courseId} lessonId={lesson.lessonId} />
+        <AttendanceView courseId={courseId} lessonId={lesson.lessonId} marked={lesson.marked} />
       ) : q.data ? (
         <div className="card"><Empty icon={ClipboardCheck} title={tt('roll_call_none')} sub={tt('roll_call_none_sub')} /></div>
       ) : null}

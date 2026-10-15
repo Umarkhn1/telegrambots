@@ -586,7 +586,7 @@ function AttendanceSheet({ course, lesson, open, onClose }: { course: TCourse; l
 
   return (
     <Sheet open={open} onClose={onClose} title={lesson ? `${lesson.number}. ${lesson.topic}` : ''} subtitle={q.data?.header ?? lesson?.date}>
-      {open && lesson?.lessonId ? <AttendanceView courseId={course.id} lessonId={lesson.lessonId} /> : null}
+      {open && lesson?.lessonId ? <AttendanceView courseId={course.id} lessonId={lesson.lessonId} marked={lesson.marked} /> : null}
     </Sheet>
   );
 }
