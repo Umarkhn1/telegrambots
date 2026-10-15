@@ -128,6 +128,8 @@ export const api = {
     courses: (sem: number, fresh?: boolean) => get<TCourse[]>(`/api/t/courses?semester=${sem}`, fresh),
     calendar: (course: number, fresh?: boolean) => get<TCalendar>(`/api/t/courses/${course}/calendar`, fresh),
     attendance: (course: number, lesson: number, fresh?: boolean) => get<TAttendance>(`/api/t/courses/${course}/attendance/${lesson}`, fresh),
+    saveAttendance: (course: number, lesson: number, absent: number[]) =>
+      post<FormResult>(`/api/t/courses/${course}/attendance/${lesson}`, { absent }),
     sheet: (course: number, fresh?: boolean) => get<GradeSheet>(`/api/t/courses/${course}/sheet`, fresh),
     activities: (course: number, fresh?: boolean) => get<TActivities>(`/api/t/courses/${course}/activities`, fresh),
     deleteActivity: (course: number, id: number) => post<FormResult>(`/api/t/courses/${course}/activities/${id}/delete`),

@@ -397,6 +397,10 @@ public class TeacherBot {
                 case "co" -> showCourse(chatId, uid, msgId, i(p[1]));
                 case "cal" -> showCalendar(chatId, uid, msgId, i(p[1]));
                 case "att" -> showAttendance(chatId, uid, msgId, i(p[1]), i(p[2]));
+                case "ab" -> toggleAbsent(chatId, uid, msgId, i(p[1]));
+                case "abs" -> confirmSaveAttendance(chatId, uid, msgId);
+                case "abs!" -> saveAttendance(chatId, uid, msgId);
+                case "abv" -> { AttDraft d = attDrafts.get(uid); if (d != null) renderDraft(chatId, uid, msgId, d); }
                 case "rl" -> rollCall(chatId, uid, msgId, i(p[1]), p.length > 2 ? p[2] : null);
                 case "gs" -> showSheet(chatId, uid, msgId, i(p[1]), p.length > 2 && "f".equals(p[2]));
                 case "gt" -> showTotals(chatId, uid, msgId, i(p[1]));
@@ -629,9 +633,43 @@ public class TeacherBot {
         });
     }
 
+    /** Черновик переклички в боте: пока не нажато «Сохранить», в LMS ничего не уходит. */
+    private static final class AttDraft {
+        final int courseId, lessonId;
+        final String header, topic;
+        final List<AttStudent> students;
+        final Set<Integer> absent = new LinkedHashSet<>();
+        AttDraft(int courseId, int lessonId, TAttendance a) {
+            this.courseId = courseId;
+            this.lessonId = lessonId;
+            this.header = a.header();
+            this.topic = a.topic();
+            this.students = a.students();
+            for (AttStudent s : a.students()) if (Boolean.FALSE.equals(s.present()) && s.id() != null) absent.add(s.id());
+        }
+    }
+
+    private final Map<Long, AttDraft> attDrafts = new ConcurrentHashMap<>();
+    /** Больше кнопок Telegram не принимает (100 на сообщение) — для огромных потоков отмечаем на сайте. */
+    private static final int ATT_BUTTONS_MAX = 90;
+
+    private InlineKeyboardButton lmsButton(long uid, int courseId, int lessonId) {
+        InlineKeyboardButton lmsBtn = new InlineKeyboardButton();
+        lmsBtn.setText(T(uid, "🌐 Открыть в LMS", "🌐 LMS da ochish", "🌐 LMS да очиш", "🌐 Open in LMS"));
+        lmsBtn.setUrl(ts.absoluteUrl("/teacher/attendance/show/" + courseId + "/" + lessonId));
+        return lmsBtn;
+    }
+
     private void showAttendance(long chatId, long uid, int msgId, int courseId, int lessonId) {
         async(chatId, uid, () -> {
             TAttendance a = ts.attendance(uid, courseId, lessonId);
+            if (a.editable() && a.students().size() <= ATT_BUTTONS_MAX && a.students().stream().allMatch(s -> s.id() != null)) {
+                AttDraft d = new AttDraft(courseId, lessonId, a);
+                attDrafts.put(uid, d);
+                renderDraft(chatId, uid, msgId, d);
+                return;
+            }
+            attDrafts.remove(uid);
             long present = a.students().stream().filter(s -> Boolean.TRUE.equals(s.present())).count();
             long absent = a.students().stream().filter(s -> Boolean.FALSE.equals(s.present())).count();
             StringBuilder sb = new StringBuilder("📊 <b>").append(esc(a.header())).append("</b>\n<i>").append(esc(a.topic())).append("</i>\n\n");
@@ -646,13 +684,92 @@ public class TeacherBot {
             if (abs.length() > 0) sb.append("<blockquote>").append(abs.toString().trim()).append("</blockquote>\n");
             if (none.length() > 0) sb.append("<blockquote>").append(none.toString().trim()).append("</blockquote>\n");
             if (pres.length() > 0) sb.append("<blockquote expandable>").append(pres.toString().trim()).append("</blockquote>");
-            if (present + absent == 0) sb.append("\n\n<i>").append(T(uid, "Перекличка ещё не отмечена.", "Davomat hali belgilanmagan.",
-                    "Давомат ҳали белгиланмаган.", "Roll call is not marked yet.")).append("</i>");
-            InlineKeyboardButton lmsBtn = new InlineKeyboardButton();
-            lmsBtn.setText(T(uid, "✍️ Отметить в LMS", "✍️ LMS da belgilash", "✍️ LMS да белгилаш", "✍️ Mark in LMS"));
-            lmsBtn.setUrl(ts.absoluteUrl("/teacher/attendance/show/" + courseId + "/" + lessonId));
-            show(chatId, msgId, sb.toString(), kb(List.of(List.of(lmsBtn), List.of(
-                    btn(T(uid, "🔙 Календарный план", "🔙 Kalendar reja", "🔙 Календар режа", "🔙 Class plan"), "t:cal:" + courseId)))));
+            sb.append("\n\n<i>").append(a.editable()
+                    ? T(uid, "Студентов слишком много для кнопок — отметьте на сайте LMS.", "Talabalar tugmalar uchun juda ko'p — LMS saytida belgilang.",
+                            "Талабалар тугмалар учун жуда кўп — LMS сайтида белгиланг.", "Too many students for buttons — mark it on the LMS site.")
+                    : T(uid, "Срок отметки в LMS прошёл — изменить нельзя.", "LMS da belgilash muddati o'tgan — o'zgartirib bo'lmaydi.",
+                            "LMS да белгилаш муддати ўтган — ўзгартириб бўлмайди.", "The marking window in LMS has closed — it cannot be changed.")).append("</i>");
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            if (a.editable()) rows.add(List.of(lmsButton(uid, courseId, lessonId)));
+            rows.add(List.of(btn(T(uid, "🔙 Календарный план", "🔙 Kalendar reja", "🔙 Календар режа", "🔙 Class plan"), "t:cal:" + courseId)));
+            show(chatId, msgId, sb.toString(), kb(rows));
+        });
+    }
+
+    /** Редактируемая перекличка: по умолчанию все были, тап по номеру — НБ. */
+    private void renderDraft(long chatId, long uid, Integer msgId, AttDraft d) {
+        long abs = d.students.stream().filter(s -> d.absent.contains(s.id())).count();
+        StringBuilder sb = new StringBuilder("📊 <b>").append(esc(d.header)).append("</b>\n<i>").append(esc(d.topic)).append("</i>\n\n");
+        sb.append("✅ ").append(d.students.size() - abs).append(" · 🔴 ").append(abs).append(" · 👥 ").append(d.students.size()).append("\n\n");
+        StringBuilder list = new StringBuilder();
+        for (AttStudent s : d.students)
+            list.append(d.absent.contains(s.id()) ? "🔴 " : "✅ ").append(s.number()).append(". ").append(esc(s.name())).append("\n");
+        sb.append("<blockquote>").append(list.toString().trim()).append("</blockquote>\n\n<i>")
+                .append(T(uid, "Нажмите номер студента, чтобы поставить или снять НБ, затем «Сохранить».",
+                        "NB qo'yish yoki olib tashlash uchun talaba raqamini bosing, so'ng «Saqlash».",
+                        "НБ қўйиш ёки олиб ташлаш учун талаба рақамини босинг, сўнг «Сақлаш».",
+                        "Tap a student's number to set or clear NB, then press Save.")).append("</i>");
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        List<InlineKeyboardButton> line = new ArrayList<>();
+        for (int k = 0; k < d.students.size(); k++) {
+            AttStudent s = d.students.get(k);
+            line.add(btn((d.absent.contains(s.id()) ? "🔴 " : "✅ ") + s.number(), "t:ab:" + k));
+            if (line.size() == 5) { rows.add(line); line = new ArrayList<>(); }
+        }
+        if (!line.isEmpty()) rows.add(line);
+        rows.add(List.of(btn(T(uid, "💾 Сохранить", "💾 Saqlash", "💾 Сақлаш", "💾 Save"), "t:abs")));
+        rows.add(List.of(lmsButton(uid, d.courseId, d.lessonId)));
+        rows.add(List.of(btn(T(uid, "🔙 Календарный план", "🔙 Kalendar reja", "🔙 Календар режа", "🔙 Class plan"), "t:cal:" + d.courseId)));
+        show(chatId, msgId, sb.toString(), kb(rows));
+    }
+
+    private void toggleAbsent(long chatId, long uid, int msgId, int index) {
+        AttDraft d = attDrafts.get(uid);
+        if (d == null || index < 0 || index >= d.students.size()) {
+            // Бот перезапускался или черновик устарел — открываем перекличку заново.
+            attDrafts.remove(uid);
+            return;
+        }
+        Integer id = d.students.get(index).id();
+        if (!d.absent.remove(id)) d.absent.add(id);
+        renderDraft(chatId, uid, msgId, d);
+    }
+
+    private void confirmSaveAttendance(long chatId, long uid, int msgId) {
+        AttDraft d = attDrafts.get(uid);
+        if (d == null) return;
+        StringBuilder names = new StringBuilder();
+        for (AttStudent s : d.students) if (d.absent.contains(s.id())) names.append("🔴 ").append(s.number()).append(". ").append(esc(s.name())).append("\n");
+        String text = "💾 <b>" + T(uid, "Сохранить перекличку в LMS?", "Davomatni LMS ga saqlaysizmi?", "Давоматни LMS га сақлайсизми?", "Save the roll call to LMS?")
+                + "</b>\n\n" + esc(d.header) + "\n\n✅ " + (d.students.size() - d.absent.size()) + " · 🔴 " + d.absent.size()
+                + (names.length() > 0 ? "\n\n<blockquote>" + names.toString().trim() + "</blockquote>" : "");
+        show(chatId, msgId, text, kb(List.of(
+                List.of(btn(T(uid, "✅ Да, сохранить", "✅ Ha, saqlash", "✅ Ҳа, сақлаш", "✅ Yes, save"), "t:abs!")),
+                List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv")))));
+    }
+
+    private void saveAttendance(long chatId, long uid, int msgId) {
+        AttDraft d = attDrafts.get(uid);
+        if (d == null) return;
+        async(chatId, uid, () -> {
+            FormResult res = ts.saveAttendance(uid, d.courseId, d.lessonId, d.absent);
+            if (res.ok()) {
+                attDrafts.remove(uid);
+                bot.send(chatId, "✅ " + T(uid, "Перекличка сохранена", "Davomat saqlandi", "Давомат сақланди", "Roll call saved")
+                        + " · 🔴 " + d.absent.size(), null);
+                showAttendance(chatId, uid, msgId, d.courseId, d.lessonId);
+                return;
+            }
+            String why = switch (res.errors().isEmpty() ? "" : res.errors().get(0)) {
+                case "closed" -> T(uid, "Срок отметки в LMS прошёл.", "LMS da belgilash muddati o'tgan.", "LMS да белгилаш муддати ўтган.", "The marking window in LMS has closed.");
+                case "not_saved" -> T(uid, "LMS не записала отметки — проверьте на сайте.", "LMS belgilarni yozmadi — saytda tekshiring.",
+                        "LMS белгиларни ёзмади — сайтда текширинг.", "LMS did not record the marks — check on the site.");
+                default -> errors(res);
+            };
+            show(chatId, msgId, "⚠️ <b>" + T(uid, "Перекличка не сохранена", "Davomat saqlanmadi", "Давомат сақланмади", "Roll call not saved")
+                    + "</b>\n\n<blockquote>" + esc(why) + "</blockquote>", kb(List.of(
+                    List.of(btn(T(uid, "✏️ Назад к отметкам", "✏️ Belgilarga qaytish", "✏️ Белгиларга қайтиш", "✏️ Back to marks"), "t:abv")),
+                    List.of(lmsButton(uid, d.courseId, d.lessonId)))));
         });
     }
 

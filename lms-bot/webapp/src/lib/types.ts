@@ -233,7 +233,9 @@ export interface TCalendar {
 export interface TAttendance {
   topic: string;
   header: string;
-  students: { number: number; name: string; faculty: string; direction: string; group: string; present: boolean | null }[];
+  /** Есть форма отметки: тап по студенту ставит НБ, «Сохранить» отправляет в LMS. */
+  editable: boolean;
+  students: { number: number; id: number | null; name: string; faculty: string; direction: string; group: string; present: boolean | null }[];
 }
 
 export interface GColumn {

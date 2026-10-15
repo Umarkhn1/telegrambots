@@ -49,6 +49,15 @@ class TeacherApi {
         }));
         s.get("/api/t/courses/(\\d+)/attendance/(\\d+)", r -> call(r, "att:" + r.pathInt(1) + ":" + r.pathInt(2),
                 () -> ts.attendance(r.uid(), r.pathInt(1), r.pathInt(2))));
+        s.post("/api/t/courses/(\\d+)/attendance/(\\d+)", r -> {
+            teacher(r);
+            List<Integer> absent = new ArrayList<>();
+            JsonNode body = r.json();
+            if (body != null && body.path("absent").isArray()) for (JsonNode n : body.get("absent")) absent.add(n.asInt());
+            FormResult res = ts.saveAttendance(r.uid(), r.pathInt(1), r.pathInt(2), absent);
+            drop(r.uid(), "att:" + r.pathInt(1) + ":" + r.pathInt(2), "cal:" + r.pathInt(1));
+            return result(res);
+        });
         s.get("/api/t/courses/(\\d+)/sheet", r -> call(r, "sheet:" + r.pathInt(1), () -> ts.gradeSheet(r.uid(), r.pathInt(1))));
         s.get("/api/t/courses/(\\d+)/activities", r -> call(r, "act:" + r.pathInt(1), () -> ts.activities(r.uid(), r.pathInt(1))));
         s.post("/api/t/courses/(\\d+)/activities", this::createActivity);

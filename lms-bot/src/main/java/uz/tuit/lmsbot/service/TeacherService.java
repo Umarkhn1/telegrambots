@@ -55,9 +55,11 @@ public class TeacherService {
     public record TCalendar(String stream, String note, List<TLesson> lessons) {}
 
     /** present: true — «+», false — НБ, null — не отмечено. */
-    public record AttStudent(int number, String name, String faculty, String direction, String group, Boolean present) {}
+    /** id — значение чекбокса формы (есть только пока отметку можно менять); present=false — НБ. */
+    public record AttStudent(int number, Integer id, String name, String faculty, String direction, String group, Boolean present) {}
 
-    public record TAttendance(String topic, String header, List<AttStudent> students) {}
+    /** editable — на странице есть форма отметки (чекбокс «НБ» у каждого студента и «Сохранить»). */
+    public record TAttendance(String topic, String header, boolean editable, List<AttStudent> students) {}
 
     public record GColumn(Integer activityId, String name, String studentDeadline, String teacherDeadline, String max) {}
 
@@ -431,6 +433,7 @@ public class TeacherService {
         Element table = doc.selectFirst("form table.table, table.table");
         String header = "";
         List<AttStudent> out = new ArrayList<>();
+        boolean editable = false;
         if (table != null) {
             Elements head = table.select("thead td, thead th");
             if (head.size() > 1) header = head.get(1).text().trim();
@@ -438,22 +441,78 @@ public class TeacherService {
                 Elements td = tr.select("> td");
                 if (td.size() < 2) continue;
                 Element mark = td.get(td.size() - 1);
-                String m = mark.text().trim();
+                Integer id = null;
                 Boolean present;
-                if (mark.selectFirst(".text-success") != null || m.equals("+")) present = true;
-                else if (mark.selectFirst(".text-danger") != null || m.equalsIgnoreCase("нб") || m.equalsIgnoreCase("nb")) present = false;
-                else {
-                    Element box = mark.selectFirst("input[type=checkbox]");
-                    present = box != null ? box.hasAttr("checked") : null;
+                // Форма: отмеченный чекбокс «НБ» — отсутствует, пустой — присутствует. Подпись «НБ»
+                // стоит рядом с чекбоксом, поэтому его проверяем раньше текста.
+                Element box = mark.selectFirst("input[type=checkbox]");
+                if (box != null) {
+                    editable = true;
+                    present = !box.hasAttr("checked");
+                    try { id = Integer.parseInt(box.attr("value").trim()); } catch (NumberFormatException ignored) { }
+                } else {
+                    String m = mark.text().trim();
+                    if (mark.selectFirst(".text-success") != null || m.equals("+")) present = true;
+                    else if (mark.selectFirst(".text-danger") != null || m.equalsIgnoreCase("нб") || m.equalsIgnoreCase("nb")) present = false;
+                    else present = null;
                 }
                 Integer n = firstInt(td.get(0).text());
-                out.add(new AttStudent(n != null ? n : out.size() + 1, td.get(1).text().trim(),
+                out.add(new AttStudent(n != null ? n : out.size() + 1, id, td.get(1).text().trim(),
                         td.size() > 2 ? td.get(2).text().trim() : "",
                         td.size() > 3 ? td.get(3).text().trim() : "",
                         td.size() > 4 ? td.get(4).text().trim() : "", present));
             }
+            if (editable && doc.selectFirst("form button[type=submit]") == null) editable = false;
         }
-        return new TAttendance(h != null ? h.text().trim() : "", header, out);
+        return new TAttendance(h != null ? h.text().trim() : "", header, editable, out);
+    }
+
+    /**
+     * Сохраняет перекличку: absentIds — студенты с «НБ», остальные считаются присутствующими
+     * (так устроена форма LMS). Страница перечитывается дважды: до отправки — чтобы убедиться,
+     * что отметка ещё открыта, и после — чтобы проверить, что LMS записала именно это.
+     */
+    public FormResult saveAttendance(long uid, int courseId, int lessonId, Collection<Integer> absentIds) throws Exception {
+        String path = "/teacher/attendance/show/" + courseId + "/" + lessonId;
+        return lms.asTeacher(uid, () -> {
+            TAttendance cur = parseAttendance(getHtml(uid, path));
+            if (!cur.editable()) return FormResult.fail("closed");
+            Set<Integer> known = new HashSet<>();
+            for (AttStudent st : cur.students()) if (st.id() != null) known.add(st.id());
+            Set<Integer> absent = new LinkedHashSet<>(absentIds);
+            if (!known.containsAll(absent)) return FormResult.fail("unknown_student");
+
+            FormBody.Builder b = new FormBody.Builder();
+            for (Integer id : absent) b.add("students[]", String.valueOf(id));
+            FormBody body = b.build();
+            int code = postAttendance(uid, path, body, false);
+            if (code == 419) code = postAttendance(uid, path, body, true);
+            if (code >= 400) return FormResult.fail(code == 419 ? "session_expired" : "HTTP " + code);
+
+            Set<Integer> want = new HashSet<>();
+            for (AttStudent st : cur.students()) if (st.id() != null && absent.contains(st.id())) want.add(st.number());
+            Set<Integer> saved = new HashSet<>();
+            for (AttStudent st : parseAttendance(getHtml(uid, path)).students()) if (Boolean.FALSE.equals(st.present())) saved.add(st.number());
+            if (!saved.equals(want)) return FormResult.fail("not_saved");
+            return new FormResult(true, List.of(), null);
+        });
+    }
+
+    /** Обычная отправка формы, как из браузера: страница отвечает редиректом, а не JSON. */
+    private int postAttendance(long uid, String path, FormBody body, boolean freshToken) throws Exception {
+        String token = csrfToken(uid, freshToken);
+        FormBody.Builder b = new FormBody.Builder().add("_token", token);
+        for (int i = 0; i < body.size(); i++) b.add(body.name(i), body.value(i));
+        Request req = new Request.Builder()
+                .url(base() + path)
+                .post(b.build())
+                .header("User-Agent", LmsService.userAgent())
+                .header("Referer", base() + path)
+                .header("X-CSRF-TOKEN", token)
+                .build();
+        try (Response resp = lms.getClient(uid).newCall(req).execute()) {
+            return resp.code();
+        }
     }
 
     // ─────────────────────────────────────────────
