@@ -22,7 +22,8 @@ import { dayMonth, useI18n, WEEKDAYS } from '../../lib/i18n';
 import { useQuery } from '../../lib/query';
 import { useTT } from '../../lib/ti18n';
 import { haptic } from '../../lib/tg';
-import type { GradingItem, TCourse } from '../../lib/types';
+import type { GradingItem, Lesson, TCourse } from '../../lib/types';
+import { RollCallSheet } from './RollCall';
 
 function greetingKey(h: number) {
   if (h < 5) return 'greet_night' as const;
@@ -55,6 +56,7 @@ export function TeacherHome() {
   const { t, lang } = useI18n();
   const tt = useTT();
   const sem = semesterId ?? 0;
+  const [roll, setRoll] = useState<Lesson | null>(null);
 
   const schedule = useQuery(sem ? `sched:${sem}` : null, (f) => api.schedule(sem, f));
   const courses = useQuery(sem ? `tcourses:${sem}` : null, (f) => api.t.courses(sem, f));
@@ -120,7 +122,7 @@ export function TeacherHome() {
         ) : day.list.length ? (
           <div className="list">
             {day.list.map((l, i) => (
-              <LessonRow key={l.ts + l.subject + l.stream} l={l} index={i} />
+              <LessonRow key={l.ts + l.subject + l.stream} l={l} index={i} onClick={l.courseId ? () => { haptic('light'); setRoll(l); } : undefined} />
             ))}
           </div>
         ) : (
@@ -161,6 +163,7 @@ export function TeacherHome() {
           {me.tutor && <NavRow icon={UsersRound} tone="violet" title={tt('tutor')} sub={tt('my_groups')} onClick={() => push({ name: 'tutor' })} />}
         </div>
       </Section>
+      <RollCallSheet courseId={roll?.courseId ?? null} title={roll?.subject} date={roll?.date} open={!!roll} onClose={() => setRoll(null)} />
     </Screen>
   );
 }

@@ -4,8 +4,8 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
-  CircleCheck,
   CircleDashed,
+  ClipboardCheck,
   Clock3,
   FileX2,
   Hourglass,
@@ -29,6 +29,7 @@ import { invalidate, useQuery } from '../../lib/query';
 import { useTT } from '../../lib/ti18n';
 import { confirmDialog, haptic } from '../../lib/tg';
 import type { GCell, GradeForm, GradeSheet, GRow, TActivities, TCourse, TLesson } from '../../lib/types';
+import { AttendanceView, RollCallSheet } from './RollCall';
 
 type Tab = 'sheet' | 'plan' | 'activities';
 
@@ -36,6 +37,7 @@ export function TeacherCourse({ course, column, onBack }: { course: TCourse; col
   const { t } = useI18n();
   const tt = useTT();
   const [tab, setTab] = useState<Tab>('sheet');
+  const [roll, setRoll] = useState(false);
   const sheet = useQuery(`tsheet:${course.id}`, (f) => api.t.sheet(course.id, f));
 
   return (
@@ -53,6 +55,10 @@ export function TeacherCourse({ course, column, onBack }: { course: TCourse; col
           <UsersRound size={13} /> {tt('students_n', { n: course.students })}
         </span>
       </div>
+
+      <button className="btn tinted" style={{ marginTop: 16 }} onClick={() => { haptic('light'); setRoll(true); }}>
+        <ClipboardCheck size={18} /> {tt('roll_call')}
+      </button>
 
       <Segmented<Tab>
         value={tab}
@@ -79,6 +85,7 @@ export function TeacherCourse({ course, column, onBack }: { course: TCourse; col
           {tab === 'activities' && <ActivitiesTab course={course} />}
         </motion.div>
       </AnimatePresence>
+      <RollCallSheet courseId={course.id} title={course.subject} open={roll} onClose={() => setRoll(false)} />
     </Screen>
   );
 }
@@ -575,46 +582,11 @@ function PlanTab({ course }: { course: TCourse }) {
 }
 
 function AttendanceSheet({ course, lesson, open, onClose }: { course: TCourse; lesson: TLesson | null; open: boolean; onClose: () => void }) {
-  const tt = useTT();
   const q = useQuery(open && lesson?.lessonId ? `tatt:${course.id}:${lesson.lessonId}` : null, (f) => api.t.attendance(course.id, lesson!.lessonId!, f));
-  const a = q.data;
-  const absent = a?.students.filter((s) => s.present === false) ?? [];
-  const present = a?.students.filter((s) => s.present === true) ?? [];
-  const none = a?.students.filter((s) => s.present == null) ?? [];
 
   return (
-    <Sheet open={open} onClose={onClose} title={lesson ? `${lesson.number}. ${lesson.topic}` : ''} subtitle={a?.header ?? lesson?.date}>
-      {q.loading ? (
-        <ListSkeleton rows={5} />
-      ) : q.error ? (
-        <ErrorState error={q.error} onRetry={q.refresh} />
-      ) : a ? (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <div className="card" style={{ padding: 14 }}>
-              <div className="stat-label" style={{ marginTop: 0 }}>{tt('present')}</div>
-              <div className="stat-value tabular" style={{ color: 'var(--success)', fontSize: 24 }}>{present.length}</div>
-            </div>
-            <div className="card" style={{ padding: 14 }}>
-              <div className="stat-label" style={{ marginTop: 0 }}>{tt('absent')}</div>
-              <div className="stat-value tabular" style={{ color: absent.length ? 'var(--danger)' : undefined, fontSize: 24 }}>{absent.length}</div>
-            </div>
-          </div>
-          <div className="list">
-            {[...absent, ...none, ...present].map((s) => (
-              <div className="row with-icon" key={s.number}>
-                <span className={'tile ' + (s.present === false ? 'danger' : s.present ? 'success' : 'neutral')}>
-                  {s.present === false ? <X size={18} /> : s.present ? <CircleCheck size={18} /> : <CircleDashed size={18} />}
-                </span>
-                <div className="row-main">
-                  <div className="row-title" style={{ fontSize: 14.5 }}>{s.number}. {s.name}</div>
-                  <div className="row-sub">{s.group}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : null}
+    <Sheet open={open} onClose={onClose} title={lesson ? `${lesson.number}. ${lesson.topic}` : ''} subtitle={q.data?.header ?? lesson?.date}>
+      {open && lesson?.lessonId ? <AttendanceView courseId={course.id} lessonId={lesson.lessonId} /> : null}
     </Sheet>
   );
 }

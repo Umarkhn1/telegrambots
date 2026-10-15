@@ -397,6 +397,7 @@ public class TeacherBot {
                 case "co" -> showCourse(chatId, uid, msgId, i(p[1]));
                 case "cal" -> showCalendar(chatId, uid, msgId, i(p[1]));
                 case "att" -> showAttendance(chatId, uid, msgId, i(p[1]), i(p[2]));
+                case "rl" -> rollCall(chatId, uid, msgId, i(p[1]), p.length > 2 ? p[2] : null);
                 case "gs" -> showSheet(chatId, uid, msgId, i(p[1]), p.length > 2 && "f".equals(p[2]));
                 case "gt" -> showTotals(chatId, uid, msgId, i(p[1]));
                 case "ga" -> showColumn(chatId, uid, msgId, i(p[1]), i(p[2]), p.length > 3 ? i(p[3]) : 0);
@@ -576,7 +577,8 @@ public class TeacherBot {
             show(chatId, msgId, sb.toString(), kb(List.of(
                     List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + courseId),
                             btn(T(uid, "📋 Ведомость", "📋 Qaydnoma", "📋 Қайднома", "📋 Grade sheet"), "t:gs:" + courseId)),
-                    List.of(btn(T(uid, "🧩 Активности", "🧩 Aktivliklar", "🧩 Активликлар", "🧩 Activities"), "t:ac:" + courseId)),
+                    List.of(btn(T(uid, "🧩 Активности", "🧩 Aktivliklar", "🧩 Активликлар", "🧩 Activities"), "t:ac:" + courseId),
+                            btn(T(uid, "📊 Перекличка", "📊 Davomat", "📊 Давомат", "📊 Roll call"), "t:rl:" + courseId)),
                     List.of(btn(T(uid, "🔙 Мои предметы", "🔙 Mening fanlarim", "🔙 Менинг фанларим", "🔙 My subjects"), "t:cl")))));
         });
     }
@@ -644,8 +646,51 @@ public class TeacherBot {
             if (abs.length() > 0) sb.append("<blockquote>").append(abs.toString().trim()).append("</blockquote>\n");
             if (none.length() > 0) sb.append("<blockquote>").append(none.toString().trim()).append("</blockquote>\n");
             if (pres.length() > 0) sb.append("<blockquote expandable>").append(pres.toString().trim()).append("</blockquote>");
-            show(chatId, msgId, sb.toString(), kb(List.of(List.of(
+            if (present + absent == 0) sb.append("\n\n<i>").append(T(uid, "Перекличка ещё не отмечена.", "Davomat hali belgilanmagan.",
+                    "Давомат ҳали белгиланмаган.", "Roll call is not marked yet.")).append("</i>");
+            InlineKeyboardButton lmsBtn = new InlineKeyboardButton();
+            lmsBtn.setText(T(uid, "✍️ Отметить в LMS", "✍️ LMS da belgilash", "✍️ LMS да белгилаш", "✍️ Mark in LMS"));
+            lmsBtn.setUrl(ts.absoluteUrl("/teacher/attendance/show/" + courseId + "/" + lessonId));
+            show(chatId, msgId, sb.toString(), kb(List.of(List.of(lmsBtn), List.of(
                     btn(T(uid, "🔙 Календарный план", "🔙 Kalendar reja", "🔙 Календар режа", "🔙 Class plan"), "t:cal:" + courseId)))));
+        });
+    }
+
+    /**
+     * Перекличка пары: из расписания — по дате пары, из «Мои предметы» — без даты. Без даты
+     * берём сегодняшнюю пару, иначе последнюю неотмеченную, иначе ближайшую.
+     */
+    private void rollCall(long chatId, long uid, int msgId, int courseId, String ymd) {
+        async(chatId, uid, () -> {
+            TCalendar cal = ts.calendar(uid, courseId);
+            ts.rememberStream(uid, courseId, cal.stream());
+            LocalDate today = LocalDate.now(AppConfig.LMS_ZONE);
+            LocalDate want = null;
+            try { if (ymd != null) want = LocalDate.parse(ymd, DateTimeFormatter.BASIC_ISO_DATE); } catch (Exception ignored) { }
+            TLesson pick = null;
+            if (want != null) {
+                for (TLesson l : cal.lessons()) if (want.equals(SemesterScheduleDates.parse(l.date()))) { pick = l; break; }
+            } else {
+                for (TLesson l : cal.lessons()) if (today.equals(SemesterScheduleDates.parse(l.date()))) { pick = l; break; }
+                if (pick == null) for (TLesson l : cal.lessons()) {
+                    LocalDate d = SemesterScheduleDates.parse(l.date());
+                    if (d != null && d.isBefore(today) && !l.marked()) pick = l;
+                }
+                if (pick == null) for (TLesson l : cal.lessons()) {
+                    LocalDate d = SemesterScheduleDates.parse(l.date());
+                    if (d != null && d.isAfter(today)) { pick = l; break; }
+                }
+            }
+            if (pick == null || pick.lessonId() == null) {
+                show(chatId, msgId, "📊 <b>" + esc(cal.stream()) + "</b>\n\n" + T(uid,
+                        "Перекличка для этой пары пока недоступна — занятия нет в календарном плане или LMS ещё не открыла отметку.",
+                        "Bu dars uchun davomat hali mavjud emas — dars kalendar rejada yo'q yoki LMS belgilashni hali ochmagan.",
+                        "Бу дарс учун давомат ҳали мавжуд эмас — дарс календар режада йўқ ёки LMS белгилашни ҳали очмаган.",
+                        "Roll call is not available for this class yet — it is not in the class plan or LMS has not opened marking."),
+                        kb(List.of(List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + courseId)))));
+                return;
+            }
+            showAttendance(chatId, uid, msgId, courseId, pick.lessonId());
         });
     }
 
@@ -1908,7 +1953,8 @@ public class TeacherBot {
     //  НАПОМИНАНИЯ ПРЕПОДАВАТЕЛЮ
     //  • приём работ закрыт, а сданные работы ждут оценки;
     //  • до конца срока оценивания (из ведомости LMS) меньше суток;
-    //  • пара закончилась, а посещаемость в календарном плане не отмечена.
+    //  • перекличка пары не отмечена: с начала пары и каждые 45 минут, после конца — каждые 2 часа
+    //    (до суток, пока в календарном плане нет отметки).
     //  Пары за 10 минут и сводка дня приходят общим механизмом бота — расписание
     //  преподавателя строит SemesterSchedule.
     // ─────────────────────────────────────────────
@@ -1958,8 +2004,28 @@ public class TeacherBot {
         }
     }
 
-    private final Set<String> attendanceChecked = ConcurrentHashMap.newKeySet();
+    /** Номер последнего напоминания по каждой паре: «преподаватель|предмет|начало». */
+    private final Map<String, Integer> attendanceSent = new ConcurrentHashMap<>();
     private final Set<String> attendanceInFlight = ConcurrentHashMap.newKeySet();
+
+    private static final long ATT_DURING_MS = 45L * 60_000;
+    private static final long ATT_AFTER_MS = 2L * 60 * 60_000;
+    /** Срок отметки в LMS — сутки после пары, дольше не напоминаем. */
+    private static final long ATT_LIMIT_MS = 24L * 60 * 60_000;
+    private static final int DEFAULT_LESSON_MIN = 80;
+    private static final int DONE = Integer.MAX_VALUE;
+
+    /**
+     * Номер напоминания на момент {@code sinceStart} после начала пары: пока идёт пара — с начала
+     * и каждые 45 минут (на паре в 80 минут это 0 и 1), после конца — каждые 2 часа.
+     * −1 — пара ещё не началась или срок отметки вышел.
+     */
+    static int reminderIndex(long sinceStart, long lessonMs) {
+        if (sinceStart < 0 || sinceStart > lessonMs + ATT_LIMIT_MS) return -1;
+        int during = (int) ((lessonMs + ATT_DURING_MS - 1) / ATT_DURING_MS);
+        if (sinceStart < lessonMs) return (int) (sinceStart / ATT_DURING_MS);
+        return during - 1 + (int) ((sinceStart - lessonMs) / ATT_AFTER_MS);
+    }
 
     private void checkAttendanceMarks(long chatId, long uid, long now) {
         int sem = bot.getDefaultSemesterId(uid);
@@ -1967,35 +2033,52 @@ public class TeacherBot {
         SemesterSchedule.Result sched = bot.semesterSchedule.get(uid, sem, false);
         if (sched == null) return;
         LocalDate today = LocalDate.now(AppConfig.LMS_ZONE);
-        for (SemesterSchedule.Lesson l : sched.on(today)) {
-            if (l.courseId() == null) continue;
-            int minutes;
-            try { minutes = ts.scheduleMeta(uid).lessonMinutes(); } catch (Exception e) { return; }
-            if (minutes <= 0) return;
-            long end = l.ts() + minutes * 60_000L;
-            if (now < end + 10 * 60_000L || now > end + 6 * 60 * 60_000L) continue;
-            // Ключ — сама пара: у потока бывает две пары в день. Отмечаем «проверено»
-            // только после ответа LMS, чтобы сбой сайта не отменял напоминание.
-            String key = "tatt|" + l.courseId() + "|" + l.ts();
-            if (attendanceChecked.contains(uid + "|" + key) || !attendanceInFlight.add(uid + "|" + key)) continue;
-            bot.executor.submit(() -> {
-                try {
-                    TCalendar cal = ts.calendar(uid, l.courseId());
-                    attendanceChecked.add(uid + "|" + key);
-                    for (TLesson x : cal.lessons()) {
-                        if (!today.equals(SemesterScheduleDates.parse(x.date())) || x.marked()) continue;
-                        bot.send(chatId, "📊 <b>" + T(uid, "Посещаемость не отмечена", "Davomat belgilanmagan", "Давомат белгиланмаган", "Attendance is not marked")
-                                        + "</b>\n\n<blockquote><b>" + esc(l.subject()) + "</b> · " + esc(cal.stream()) + "\n⏰ " + esc(l.time())
+        int minutes = DEFAULT_LESSON_MIN;
+        try { int m = ts.scheduleMeta(uid).lessonMinutes(); if (m > 0) minutes = m; } catch (Exception ignored) { }
+        long lessonMs = minutes * 60_000L;
+        // Вчерашняя пара ещё может ждать отметки (срок — сутки).
+        for (LocalDate day : List.of(today.minusDays(1), today)) {
+            List<SemesterSchedule.Lesson> dayLessons = new ArrayList<>();
+            for (SemesterSchedule.Lesson l : sched.on(day)) if (l.courseId() != null) dayLessons.add(l);
+            for (SemesterSchedule.Lesson l : dayLessons) {
+                int idx = reminderIndex(now - l.ts(), lessonMs);
+                // Позиция пары среди пар этого потока за день: строки плана с одной датой идут по порядку.
+                int pos = 0;
+                for (SemesterSchedule.Lesson o : dayLessons) if (o.courseId().equals(l.courseId()) && o.ts() < l.ts()) pos++;
+                String key = uid + "|" + l.courseId() + "|" + l.ts();
+                if (idx < 0 || idx <= attendanceSent.getOrDefault(key, -1) || !attendanceInFlight.add(key)) continue;
+                final int position = pos;
+                final boolean ended = now - l.ts() >= lessonMs;
+                bot.executor.submit(() -> {
+                    try {
+                        TCalendar cal = ts.calendar(uid, l.courseId());
+                        List<TLesson> rows = new ArrayList<>();
+                        for (TLesson x : cal.lessons()) if (day.equals(SemesterScheduleDates.parse(x.date()))) rows.add(x);
+                        // Нет в плане или уже отмечено — больше не беспокоим; сбой LMS сюда не доходит и повторится.
+                        if (rows.isEmpty() || rows.get(Math.min(position, rows.size() - 1)).marked()) {
+                            attendanceSent.put(key, DONE);
+                            return;
+                        }
+                        TLesson x = rows.get(Math.min(position, rows.size() - 1));
+                        attendanceSent.put(key, idx);
+                        String title = ended
+                                ? T(uid, "Пара закончилась — перекличка не отмечена", "Dars tugadi — davomat belgilanmagan",
+                                        "Дарс тугади — давомат белгиланмаган", "Class is over — roll call is not marked")
+                                : T(uid, "Пара идёт — отметьте перекличку", "Dars davom etmoqda — davomatni belgilang",
+                                        "Дарс давом этмоқда — давоматни белгиланг", "Class in progress — mark the roll call");
+                        bot.send(chatId, "📊 <b>" + title + "</b>\n\n<blockquote><b>" + esc(l.subject()) + "</b> · " + esc(cal.stream()) + "\n⏰ " + esc(l.time())
                                         + "\n📝 " + esc(cut(x.topic(), 80)) + "</blockquote>" + (cal.note() != null ? "\n<i>" + esc(cal.note()) + "</i>" : ""),
-                                kb(List.of(List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + l.courseId())))));
-                        return;
+                                kb(List.of(
+                                        List.of(btn(T(uid, "📊 Перекличка", "📊 Davomat", "📊 Давомат", "📊 Roll call"),
+                                                "t:rl:" + l.courseId() + ":" + day.format(DateTimeFormatter.BASIC_ISO_DATE))),
+                                        List.of(btn(T(uid, "📆 Календарный план", "📆 Kalendar reja", "📆 Календар режа", "📆 Class plan"), "t:cal:" + l.courseId())))));
+                    } catch (Exception e) {
+                        System.err.println("[TeacherBot] attendance check " + uid + ": " + e.getMessage());
+                    } finally {
+                        attendanceInFlight.remove(key);
                     }
-                } catch (Exception e) {
-                    System.err.println("[TeacherBot] attendance check " + uid + ": " + e.getMessage());
-                } finally {
-                    attendanceInFlight.remove(uid + "|" + key);
-                }
-            });
+                });
+            }
         }
     }
 

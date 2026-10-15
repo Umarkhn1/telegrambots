@@ -11,11 +11,14 @@ import { dayMonth, useI18n, WEEKDAYS, WEEKDAYS_SHORT } from '../lib/i18n';
 import { useQuery } from '../lib/query';
 import { haptic } from '../lib/tg';
 import type { Lesson } from '../lib/types';
+import { RollCallSheet } from './teacher/RollCall';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function Schedule() {
-  const { semesterId } = useApp();
+  const { semesterId, me } = useApp();
+  const teacher = me.role === 'teacher';
+  const [roll, setRoll] = useState<Lesson | null>(null);
   const { t, lang } = useI18n();
   const [semOpen, setSemOpen] = useState(false);
   const sem = semesterId ?? 0;
@@ -198,7 +201,7 @@ export function Schedule() {
                 {lessons.length ? (
                   <div className="list">
                     {lessons.map((l, i) => (
-                      <LessonRow key={l.ts + l.subject} l={l} index={i} />
+                      <LessonRow key={l.ts + l.subject} l={l} index={i} onClick={teacher && l.courseId ? () => { haptic('light'); setRoll(l); } : undefined} />
                     ))}
                   </div>
                 ) : (
@@ -214,6 +217,7 @@ export function Schedule() {
         </>
       )}
       <SemesterSheet open={semOpen} onClose={() => setSemOpen(false)} />
+      {teacher && <RollCallSheet courseId={roll?.courseId ?? null} title={roll?.subject} date={roll?.date} open={!!roll} onClose={() => setRoll(null)} />}
     </Screen>
   );
 }

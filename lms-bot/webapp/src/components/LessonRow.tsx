@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { Flag, MapPin, NotebookText, UserRound } from 'lucide-react';
+import { ClipboardCheck, Flag, MapPin, NotebookText, UserRound } from 'lucide-react';
 import { useI18n, type Key } from '../lib/i18n';
+import { useTT } from '../lib/ti18n';
 import type { Lesson } from '../lib/types';
 import { listItem, StreamChip } from './ui';
 
@@ -13,8 +14,10 @@ const KIND: Record<Lesson['kind'], { label: Key; tone: string }> = {
   lab: { label: 'laboratory', tone: 'warning' },
 };
 
-export function LessonRow({ l, index, now = Date.now() }: { l: Lesson; index: number; now?: number }) {
+/** onClick — преподавателю: тап по паре открывает перекличку. */
+export function LessonRow({ l, index, now = Date.now(), onClick }: { l: Lesson; index: number; now?: number; onClick?: () => void }) {
   const { t } = useI18n();
+  const tt = useTT();
   const kind = KIND[l.kind] ?? KIND.lecture;
   const live = now >= l.ts && now < l.ts + PAIR_MS;
   const done = now >= l.ts + PAIR_MS;
@@ -23,7 +26,8 @@ export function LessonRow({ l, index, now = Date.now() }: { l: Lesson; index: nu
 
   return (
     <motion.div
-      className={'lesson' + (live ? ' now' : done ? ' done' : '')}
+      className={'lesson' + (live ? ' now' : done ? ' done' : '') + (onClick ? ' pressable' : '')}
+      {...(onClick ? { role: 'button', tabIndex: 0, onClick, onKeyDown: (e: React.KeyboardEvent) => e.key === 'Enter' && onClick() } : {})}
       variants={listItem}
       initial="hidden"
       animate="show"
@@ -40,6 +44,11 @@ export function LessonRow({ l, index, now = Date.now() }: { l: Lesson; index: nu
           <span className={'badge ' + kind.tone} style={{ height: 22 }}>{t(kind.label)}</span>
           {l.stream && <StreamChip stream={l.stream} />}
           {live && <span className="badge success" style={{ height: 22 }}>{t('now')}</span>}
+          {onClick && (
+            <span className="badge accent" style={{ height: 22 }}>
+              <ClipboardCheck size={12} /> {tt('roll_call')}
+            </span>
+          )}
           {l.room && (
             <span>
               <MapPin size={13} />

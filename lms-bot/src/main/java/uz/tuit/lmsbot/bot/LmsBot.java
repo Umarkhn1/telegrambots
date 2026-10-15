@@ -1836,6 +1836,23 @@ public class LmsBot extends TelegramLongPollingBot {
                                                       uz.tuit.lmsbot.service.SemesterSchedule.Result sched, int week) {
         int total = sched.weekCount();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        if (lmsService.isTeacher(userId)) {
+            // Преподавателю — по кнопке на пару: тап ведёт на перекличку этой пары.
+            String[] days = dayNames(userId);
+            java.time.LocalDate from = sched.weekStart(week);
+            List<InlineKeyboardButton> line = new ArrayList<>();
+            for (java.time.LocalDate d = from; !d.isAfter(from.plusDays(6)); d = d.plusDays(1)) {
+                for (uz.tuit.lmsbot.service.SemesterSchedule.Lesson l : sched.on(d)) {
+                    if (l.courseId() == null) continue;
+                    String start = l.time() == null ? "" : l.time().substring(0, Math.min(5, l.time().length()));
+                    line.add(inlineBtn("📊 " + days[d.getDayOfWeek().getValue()].substring(0, 2) + " " + start
+                            + (l.stream() != null ? " · " + l.stream() : ""),
+                            "t:rl:" + l.courseId() + ":" + d.format(DateTimeFormatter.BASIC_ISO_DATE)));
+                    if (line.size() == 2) { rows.add(line); line = new ArrayList<>(); }
+                }
+            }
+            if (!line.isEmpty()) rows.add(line);
+        }
         List<InlineKeyboardButton> nav = new ArrayList<>();
         nav.add(inlineBtn("◀️", week > 0 ? "sw_" + semesterId + "_" + (week - 1) : "noop"));
         nav.add(inlineBtn((week + 1) + " / " + total, "noop"));
