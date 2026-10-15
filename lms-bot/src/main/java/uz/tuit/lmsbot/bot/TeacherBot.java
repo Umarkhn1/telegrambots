@@ -639,6 +639,8 @@ public class TeacherBot {
         final String header, topic;
         final List<AttStudent> students;
         final Set<Integer> absent = new LinkedHashSet<>();
+        /** false — перекличку ещё не трогали: показываем пустые отметки, а не «все были». */
+        boolean touched;
         AttDraft(int courseId, int lessonId, TAttendance a) {
             this.courseId = courseId;
             this.lessonId = lessonId;
@@ -646,6 +648,7 @@ public class TeacherBot {
             this.topic = a.topic();
             this.students = a.students();
             for (AttStudent s : a.students()) if (Boolean.FALSE.equals(s.present()) && s.id() != null) absent.add(s.id());
+            this.touched = !absent.isEmpty();
         }
     }
 
@@ -700,20 +703,21 @@ public class TeacherBot {
     private void renderDraft(long chatId, long uid, Integer msgId, AttDraft d) {
         long abs = d.students.stream().filter(s -> d.absent.contains(s.id())).count();
         StringBuilder sb = new StringBuilder("📊 <b>").append(esc(d.header)).append("</b>\n<i>").append(esc(d.topic)).append("</i>\n\n");
-        sb.append("✅ ").append(d.students.size() - abs).append(" · 🔴 ").append(abs).append(" · 👥 ").append(d.students.size()).append("\n\n");
+        if (d.touched) sb.append("✅ ").append(d.students.size() - abs).append(" · 🔴 ").append(abs).append(" · ");
+        sb.append("👥 ").append(d.students.size()).append("\n\n");
         StringBuilder list = new StringBuilder();
         for (AttStudent s : d.students)
-            list.append(d.absent.contains(s.id()) ? "🔴 " : "✅ ").append(s.number()).append(". ").append(esc(s.name())).append("\n");
+            list.append(d.absent.contains(s.id()) ? "🔴 " : d.touched ? "✅ " : "⬜ ").append(s.number()).append(". ").append(esc(s.name())).append("\n");
         sb.append("<blockquote>").append(list.toString().trim()).append("</blockquote>\n\n<i>")
-                .append(T(uid, "Нажмите номер студента, чтобы поставить или снять НБ, затем «Сохранить».",
-                        "NB qo'yish yoki olib tashlash uchun talaba raqamini bosing, so'ng «Saqlash».",
-                        "НБ қўйиш ёки олиб ташлаш учун талаба рақамини босинг, сўнг «Сақлаш».",
-                        "Tap a student's number to set or clear NB, then press Save.")).append("</i>");
+                .append(T(uid, "Нажмите номера отсутствующих — им встанет НБ, остальные будут отмечены присутствующими. Затем «Сохранить».",
+                        "Kelmaganlarning raqamini bosing — ularga NB qo'yiladi, qolganlar qatnashgan deb belgilanadi. So'ng «Saqlash».",
+                        "Келмаганларнинг рақамини босинг — уларга НБ қўйилади, қолганлар қатнашган деб белгиланади. Сўнг «Сақлаш».",
+                        "Tap the absent students' numbers to mark them NB — everyone else will be marked present. Then press Save.")).append("</i>");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         List<InlineKeyboardButton> line = new ArrayList<>();
         for (int k = 0; k < d.students.size(); k++) {
             AttStudent s = d.students.get(k);
-            line.add(btn((d.absent.contains(s.id()) ? "🔴 " : "✅ ") + s.number(), "t:ab:" + k));
+            line.add(btn((d.absent.contains(s.id()) ? "🔴 " : d.touched ? "✅ " : "⬜ ") + s.number(), "t:ab:" + k));
             if (line.size() == 5) { rows.add(line); line = new ArrayList<>(); }
         }
         if (!line.isEmpty()) rows.add(line);
@@ -731,6 +735,7 @@ public class TeacherBot {
             return;
         }
         Integer id = d.students.get(index).id();
+        d.touched = true;
         if (!d.absent.remove(id)) d.absent.add(id);
         renderDraft(chatId, uid, msgId, d);
     }

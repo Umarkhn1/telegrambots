@@ -54,13 +54,16 @@ export function AttendanceView({ courseId, lessonId }: { courseId: number; lesso
   // Правки хранятся отдельно от данных сервера: null — ничего не менялось.
   const [edited, setEdited] = useState<Set<number> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   useEffect(() => setEdited(null), [a]);
 
   const editable = !!a?.editable && a.students.every((s) => s.id != null);
   const serverAbsent = useMemo(() => new Set((a?.students ?? []).filter((s) => s.present === false && s.id != null).map((s) => s.id!)), [a]);
   const absentIds = edited ?? serverAbsent;
   const isAbsent = (s: NonNullable<typeof a>['students'][number]) => (editable ? absentIds.has(s.id!) : s.present === false);
-  const isPresent = (s: NonNullable<typeof a>['students'][number]) => (editable ? !absentIds.has(s.id!) : s.present === true);
+  // Пока перекличку не трогали и НБ ещё нет, никто не отмечен: пустое состояние, а не «все были».
+  const touched = edited != null || serverAbsent.size > 0 || saved;
+  const isPresent = (s: NonNullable<typeof a>['students'][number]) => (editable ? touched && !absentIds.has(s.id!) : s.present === true);
 
   if (q.loading) return <ListSkeleton rows={5} />;
   if (q.error) return <ErrorState error={q.error} onRetry={q.refresh} />;
@@ -89,6 +92,7 @@ export function AttendanceView({ courseId, lessonId }: { courseId: number; lesso
       return toast(why === 'closed' ? tt('att_closed') : why === 'not_saved' ? tt('att_not_saved') : res?.errors?.join(', ') || tt('lms_rejected'), 'error');
     }
     haptic('success');
+    setSaved(true);
     toast(tt('att_saved'));
     invalidate(`tcal:${courseId}`);
     q.refresh();
@@ -99,11 +103,11 @@ export function AttendanceView({ courseId, lessonId }: { courseId: number; lesso
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
         <div className="card" style={{ padding: 14 }}>
           <div className="stat-label" style={{ marginTop: 0 }}>{tt('present')}</div>
-          <div className="stat-value tabular" style={{ color: 'var(--success)', fontSize: 24 }}>{present.length}</div>
+          <div className="stat-value tabular" style={{ color: 'var(--success)', fontSize: 24 }}>{editable && !touched ? '—' : present.length}</div>
         </div>
         <div className="card" style={{ padding: 14 }}>
           <div className="stat-label" style={{ marginTop: 0 }}>{tt('absent')}</div>
-          <div className="stat-value tabular" style={{ color: absent.length ? 'var(--danger)' : undefined, fontSize: 24 }}>{absent.length}</div>
+          <div className="stat-value tabular" style={{ color: absent.length ? 'var(--danger)' : undefined, fontSize: 24 }}>{editable && !touched ? '—' : absent.length}</div>
         </div>
       </div>
       {editable ? (

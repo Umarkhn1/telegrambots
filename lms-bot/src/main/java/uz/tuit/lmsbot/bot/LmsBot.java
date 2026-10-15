@@ -2758,9 +2758,23 @@ public class LmsBot extends TelegramLongPollingBot {
                                 + (l.teacher().isBlank() ? "" : "👨‍🏫 Teacher: <b>" + esc(l.teacher()) + "</b>\n")
                                 + "🕐 Time: <b>" + esc(l.time()) + "</b>\n"
                                 + (l.room().isBlank() ? "" : "🚪 Room: <b>" + esc(l.room()) + "</b>\n")
-                                + "</blockquote>"), null);
+                                + "</blockquote>"), teacherRollCallKeyboard(userId, List.of(l)));
             }
         }
+    }
+
+    /** Преподавателю — кнопка «Перекличка» на каждую пару с потоком в LMS; студентам клавиатура не нужна. */
+    private InlineKeyboardMarkup teacherRollCallKeyboard(long userId, List<uz.tuit.lmsbot.service.SemesterSchedule.Lesson> lessons) {
+        if (!lmsService.isTeacher(userId)) return null;
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+        for (uz.tuit.lmsbot.service.SemesterSchedule.Lesson l : lessons) {
+            if (l.courseId() == null) continue;
+            String start = l.time() == null ? "" : l.time().substring(0, Math.min(5, l.time().length()));
+            rows.add(List.of(inlineBtn("📊 " + tr(userId, "Перекличка", "Davomat", "Давомат", "Roll call") + " · " + start
+                    + (l.stream() != null ? " · " + l.stream() : ""),
+                    "t:rl:" + l.courseId() + ":" + l.date().format(DateTimeFormatter.BASIC_ISO_DATE))));
+        }
+        return rows.isEmpty() ? null : markup(rows);
     }
 
     /** Сводка на день: все сегодняшние пары с аудиторией и преподавателем. */
@@ -2786,7 +2800,7 @@ public class LmsBot extends TelegramLongPollingBot {
             if (l.last()) b.append("\n🏁 ").append(tr(userId, "Последнее занятие", "Oxirgi dars", "Охирги дарс", "Last class"));
             sb.append("<blockquote>").append(b).append("</blockquote>\n");
         }
-        send(chatId, sb.toString(), null);
+        send(chatId, sb.toString(), teacherRollCallKeyboard(userId, lessons));
     }
 
     private void tickNbReminders() {
