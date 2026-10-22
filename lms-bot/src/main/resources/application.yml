@@ -1,0 +1,12 @@
+bot:
+  # Токен задаётся переменной окружения BOT_TOKEN (локально — run-local.sh,
+  # на хостинге — переменная сервиса). В репозиторий он не попадает.
+  token: ""
+  username: lmstgbot
+
+lms:
+  base-url: https://lms.tuit.uz
+  login-url: https://lms.tuit.uz/auth/login
+
+# Список семестров НЕ задаётся здесь: он вычитывается из выпадающего
+# списка на страницах lms.tuit.uz (LmsService.parseSemesters).
