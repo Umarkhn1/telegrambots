@@ -60,7 +60,7 @@ export function Courses() {
               <div className="row-main">
                 <div className="row-title">{c.subject}</div>
                 {c.teachers.length > 0 && (
-                  <div className="row-sub ellipsis">{c.teachers.map((x) => x.name).join(', ')}</div>
+                  <div className="row-sub wrap">{c.teachers.map((x) => x.name).join(', ')}</div>
                 )}
                 <div className="meta" style={{ marginTop: 8, gap: 6 }}>
                   {uniqueStreams(c.teachers).map((st) => (
@@ -71,7 +71,7 @@ export function Courses() {
                       {t('nb')}: {c.attendance}
                     </span>
                   ) : (
-                    <span className="badge success" style={{ height: 22 }}>{t('no_absences')}</span>
+                    <span className="badge success" style={{ height: 22 }}>{t('nb')}: 0</span>
                   )}
                   {c.failed && (
                     <span className="badge warning" style={{ height: 22 }}>

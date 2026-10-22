@@ -95,7 +95,7 @@ export function Appeals({ onBack }: { onBack: () => void }) {
                       <span className="tabular">{a.date}</span>
                       {a.pair && <span>{page?.labels.pair}: {a.pair}</span>}
                     </div>
-                    {a.theme && <div className="row-title clamp-2" style={{ marginTop: 6, fontSize: 15 }}>{a.theme}</div>}
+                    {a.theme && <div className="row-title wrap" style={{ marginTop: 6, fontSize: 15 }}>{a.theme}</div>}
                     {a.students && <div className="row-sub" style={{ marginTop: 4 }}><UserRound size={12} /> {a.students}</div>}
                     <span className={'badge ' + (APPEAL_TONE[a.status] ?? 'neutral')} style={{ marginTop: 8 }}>{a.statusText}</span>
                   </div>
@@ -229,7 +229,7 @@ function AppealForm({ page, open, onClose, onDone }: { page: AppealPage; open: b
       </div>
       {step === 'stream' && <Picker items={page.streams} render={(o) => <div className="row-title">{o.text}</div>} onPick={pickStream} empty="—" />}
       {step === 'lesson' && (lessons ? (
-        <Picker items={lessons} render={(l) => <div className="row-title clamp-2" style={{ fontSize: 14.5 }}>{l.text}</div>} onPick={pickLesson} empty="—" />
+        <Picker items={lessons} render={(l) => <div className="row-title wrap" style={{ fontSize: 14.5 }}>{l.text}</div>} onPick={pickLesson} empty="—" />
       ) : <ListSkeleton rows={4} />)}
       {step === 'student' && (students ? (
         <Picker
@@ -290,7 +290,7 @@ export function Materials({ onBack }: { onBack: () => void }) {
                   <span className="badge accent" style={{ height: 22 }}>{s.language}</span>
                   <span>{s.code}</span>
                 </div>
-                {s.department && <div className="row-sub ellipsis">{s.department}</div>}
+                {s.department && <div className="row-sub wrap">{s.department}</div>}
               </div>
               <ChevronRight size={18} className="chev" />
             </motion.button>
@@ -351,7 +351,7 @@ export function Material({ subject, onBack }: { subject: TSubject; onBack: () =>
               onClick={() => setOpen(tp)}>
               <span className={'tile tabular ' + (tp.resources.length ? 'success' : 'neutral')} style={{ fontWeight: 700, fontSize: 14 }}>{tp.number}</span>
               <div className="row-main">
-                <div className="row-title clamp-2">{tp.name}</div>
+                <div className="row-title wrap">{tp.name}</div>
                 {tp.resources.length > 0 && <div className="row-sub">{tp.resources.map((r) => r.name || name(r.type)).join(' · ')}</div>}
               </div>
               <ChevronRight size={18} className="chev" style={{ alignSelf: 'center' }} />

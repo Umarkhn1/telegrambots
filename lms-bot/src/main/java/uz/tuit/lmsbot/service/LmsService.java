@@ -1900,19 +1900,57 @@ public class LmsService {
      */
     public DownloadedFile downloadFile(long userId, String url, String suggestedName) throws Exception {
         String fullUrl = resolveUrl(url);
+        Exception last = null;
+        boolean relogged = false;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                DownloadedFile f = fetchFile(userId, fullUrl, suggestedName);
+                if (f != null) return f;
+                // Вместо файла пришла страница входа — сессия протухла: поднимаем её и пробуем ещё раз.
+                if (relogged) throw new IllegalStateException("Download failed: login page");
+                relogged = true;
+                restoreSession(userId);
+            } catch (java.io.IOException | RetryableDownload e) {
+                // LMS тормозит или оборвала соединение — ждём и повторяем, файл большой, одна неудача не повод сдаваться.
+                last = e;
+                try { Thread.sleep(1500L * (attempt + 1)); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        throw last != null ? last : new IllegalStateException("Download failed");
+    }
+
+    /** Ошибка LMS, после которой стоит повторить (5xx, 408/429). */
+    private static final class RetryableDownload extends Exception {
+        RetryableDownload(String m) { super(m); }
+    }
+
+    /** null — вместо файла отдали HTML-страницу (обычно вход в LMS). */
+    private DownloadedFile fetchFile(long userId, String fullUrl, String suggestedName) throws Exception {
         Request req = new Request.Builder()
                 .url(fullUrl)
                 .header("User-Agent", userAgent())
                 .header("Referer", config.getLms().getBaseUrl() + "/student/calendar")
                 .build();
+        // Файлы бывают большими, а LMS отвечает медленно — таймаут чтения здесь длиннее обычного.
+        OkHttpClient client = getClient(userId).newBuilder()
+                .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                .callTimeout(240, java.util.concurrent.TimeUnit.SECONDS)
+                .build();
 
-        try (Response resp = getClient(userId).newCall(req).execute()) {
+        try (Response resp = client.newCall(req).execute()) {
+            int code = resp.code();
+            if (code >= 500 || code == 408 || code == 429) throw new RetryableDownload("Download failed: HTTP " + code);
             if (!resp.isSuccessful() || resp.body() == null) {
-                throw new IllegalStateException("Download failed: HTTP " + resp.code());
+                throw new IllegalStateException("Download failed: HTTP " + code);
             }
 
             String contentType = resp.header("Content-Type", "application/octet-stream");
-            String filename = filenameFromDisposition(resp.header("Content-Disposition"));
+            String disposition = resp.header("Content-Disposition");
+            if (contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith("text/html") && disposition == null) {
+                String n = suggestedName == null ? "" : suggestedName.toLowerCase(java.util.Locale.ROOT);
+                if (!n.endsWith(".html") && !n.endsWith(".htm")) return null;
+            }
+            String filename = filenameFromDisposition(disposition);
             if (filename == null || filename.isBlank()) filename = filenameFromUrl(fullUrl);
             if ((filename == null || filename.isBlank()) && suggestedName != null && !suggestedName.isBlank())
                 filename = suggestedName;
@@ -1926,6 +1964,9 @@ public class LmsService {
 
             try (InputStream in = resp.body().byteStream()) {
                 Files.copy(in, tmp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException e) {
+                tmp.delete();
+                throw e;
             }
             return new DownloadedFile(tmp, filename, contentType);
         }

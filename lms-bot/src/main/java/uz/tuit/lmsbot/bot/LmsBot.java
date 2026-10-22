@@ -2685,6 +2685,11 @@ public class LmsBot extends TelegramLongPollingBot {
             }
         }, 15, 60, TimeUnit.SECONDS);
         scheduler.scheduleWithFixedDelay(this::tickStateBackup, 3, 3, TimeUnit.MINUTES);
+        // Деплой на Render: новая версия поднимается, пока старая ещё работает, и читает копию, которой уже
+        // несколько минут. Финальную копию старая версия заливает только при остановке — подбираем её ещё
+        // дважды до первой плановой копии. Файлы на диске при этом не затираются, только добавляются.
+        scheduler.schedule(this::lateRestore, 60, TimeUnit.SECONDS);
+        scheduler.schedule(this::lateRestore, 150, TimeUnit.SECONDS);
         scheduler.scheduleWithFixedDelay(this::tickSessionSweep, 5, SESSION_SWEEP_MIN, TimeUnit.MINUTES);
     }
 
@@ -4015,6 +4020,16 @@ public class LmsBot extends TelegramLongPollingBot {
                 new org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage(chat, sent.getMessageId());
         pin.setDisableNotification(true);
         execute(pin);
+    }
+
+    private void lateRestore() {
+        try {
+            if (!stateRestored) return;
+            students.flush();
+            restoreState();
+        } catch (Exception e) {
+            System.err.println("[LmsBot] late restore: " + e.getMessage());
+        }
     }
 
     private String backupCaption() {

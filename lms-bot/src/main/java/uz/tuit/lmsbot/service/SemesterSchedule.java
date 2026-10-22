@@ -220,30 +220,15 @@ public class SemesterSchedule {
             try { f.get(60, TimeUnit.SECONDS); } catch (Exception ignored) {}
         }
 
-        List<Lesson> lessons = new ArrayList<>();
+        // Чётность недель берём из планов потоков: в сетке пара «через неделю» помечена стороной 2 или 3,
+        // а какая из них нечётная, говорят даты занятий в календарном плане.
+        Boolean oddOnEven = calibrateParity(courses, calendars, slots);
         Set<String> planned = new HashSet<>();
+        List<Lesson> lessons = placePlanned(courses, calendars, slots, oddOnEven, planned);
         LocalDate min = null, max = null;
-        for (TeacherService.TCourse c : courses) {
-            TeacherService.TCalendar cal = calendars.get(c.id());
-            if (cal == null) continue;
-            List<Slot> own = new ArrayList<>();
-            for (Slot s : slots) if (s.stream() != null && s.stream().equalsIgnoreCase(cal.stream())) own.add(s);
-            String kind = teacherKind(c.type(), cal.stream());
-            for (TeacherService.TLesson l : cal.lessons()) {
-                LocalDate d = parseDate(l.date());
-                if (d == null) continue;
-                Slot slot = null;
-                for (Slot s : own) if (s.day() == d.getDayOfWeek()) { slot = s; break; }
-                // Перенесённое занятие может выпасть на другой день — время берём у потока.
-                if (slot == null && !own.isEmpty()) slot = own.get(0);
-                if (slot == null) continue;
-                planned.add(cal.stream().toLowerCase(Locale.ROOT));
-                long ts0 = d.atTime(slot.time()).atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
-                lessons.add(new Lesson(d, slot.time().toString().substring(0, 5), ts0, c.subject(), kind,
-                        slot.room(), "", cal.stream(), l.topic(), c.id(), false));
-                if (min == null || d.isBefore(min)) min = d;
-                if (max == null || d.isAfter(max)) max = d;
-            }
+        for (Lesson l : lessons) {
+            if (min == null || l.date().isBefore(min)) min = l.date();
+            if (max == null || l.date().isAfter(max)) max = l.date();
         }
 
         // Потоки, у которых календарный план ещё не сформирован, — по недельной сетке.
@@ -254,7 +239,7 @@ public class SemesterSchedule {
             LocalDate first = monday(min != null && min.isBefore(sampleMin) ? min : sampleMin);
             LocalDate end = max != null ? max : fallbackEnd(sampleMin);
             for (LocalDate d = first; !d.isAfter(end); d = d.plusDays(1)) {
-                int side = ChronoUnit.WEEKS.between(first, monday(d)) % 2 == 0 ? 2 : 3;
+                int side = sideOf(d, oddOnEven, first);
                 for (Slot s : rest) {
                     if (s.day() != d.getDayOfWeek() || (s.side() != 1 && s.side() != side)) continue;
                     Integer courseId = null;
@@ -287,6 +272,105 @@ public class SemesterSchedule {
         }
         LocalDate first = monday(marked.get(0).date());
         return new Result(marked, first, marked.get(marked.size() - 1).date());
+    }
+
+    // ─────────────────────────────────────────────
+    //  ЧЁТНОСТЬ НЕДЕЛЬ (расписание преподавателя)
+    // ─────────────────────────────────────────────
+
+    /** Опорный понедельник: номер недели считаем от него, а какая из двух сторон «нечётная» — по планам. */
+    private static final LocalDate PARITY_REF = LocalDate.of(2024, 1, 1);
+
+    private static boolean evenIndex(LocalDate d) {
+        return ChronoUnit.WEEKS.between(PARITY_REF, monday(d)) % 2 == 0;
+    }
+
+    /** Пары потока из недельной сетки. */
+    static List<Slot> ownSlots(List<Slot> slots, String stream) {
+        List<Slot> own = new ArrayList<>();
+        for (Slot s : slots) if (s.stream() != null && s.stream().equalsIgnoreCase(stream)) own.add(s);
+        return own;
+    }
+
+    /**
+     * Какие недели в LMS «нечётные» (сторона 2), выясняем по датам занятий в планах потоков. Если у потока
+     * в этот день недели есть только пара «по нечётным» (или только «по чётным»), то неделя, на которую
+     * план поставил занятие, — нечётная (чётная). Голосуют все потоки и занятия, перенесённые пропускаем.
+     * true — нечётные недели имеют чётный номер от опорного понедельника; null — данных нет или поровну.
+     */
+    static Boolean calibrateParity(List<TeacherService.TCourse> courses, Map<Integer, TeacherService.TCalendar> calendars,
+                                   List<Slot> slots) {
+        int oddOnEven = 0, oddOnOdd = 0;
+        for (TeacherService.TCourse c : courses) {
+            TeacherService.TCalendar cal = calendars.get(c.id());
+            if (cal == null) continue;
+            List<Slot> own = ownSlots(slots, cal.stream());
+            for (TeacherService.TLesson l : cal.lessons()) {
+                if (l.moved()) continue;
+                LocalDate d = parseDate(l.date());
+                if (d == null) continue;
+                boolean allOdd = true, allEven = true, any = false;
+                for (Slot s : own) {
+                    if (s.day() != d.getDayOfWeek()) continue;
+                    any = true;
+                    if (s.side() != 2) allOdd = false;
+                    if (s.side() != 3) allEven = false;
+                }
+                if (!any || (!allOdd && !allEven)) continue;
+                if (allOdd == evenIndex(d)) oddOnEven++; else oddOnOdd++;
+            }
+        }
+        if (oddOnEven > 0 && oddOnOdd > 0)
+            System.err.println("[SemesterSchedule] планы потоков расходятся по чётности недель: " + oddOnEven + " против " + oddOnOdd);
+        if (oddOnEven == oddOnOdd) return null;
+        return oddOnEven > oddOnOdd;
+    }
+
+    /** Сторона недели даты: 2 — нечётная, 3 — чётная. Без данных плана — как раньше: первая неделя нечётная. */
+    static int sideOf(LocalDate d, Boolean oddOnEven, LocalDate firstWeek) {
+        if (oddOnEven != null) return evenIndex(d) == oddOnEven ? 2 : 3;
+        return ChronoUnit.WEEKS.between(monday(firstWeek), monday(d)) % 2 == 0 ? 2 : 3;
+    }
+
+    /**
+     * Занятия потоков с планом ставим на даты плана. Время и аудиторию берём из пары сетки того же дня
+     * недели и чётности; если в день несколько пар потока, каждому занятию плана — своя по порядку времени.
+     */
+    static List<Lesson> placePlanned(List<TeacherService.TCourse> courses, Map<Integer, TeacherService.TCalendar> calendars,
+                                     List<Slot> slots, Boolean oddOnEven, Set<String> planned) {
+        List<Lesson> out = new ArrayList<>();
+        for (TeacherService.TCourse c : courses) {
+            TeacherService.TCalendar cal = calendars.get(c.id());
+            if (cal == null) continue;
+            List<Slot> own = ownSlots(slots, cal.stream());
+            if (own.isEmpty()) continue;
+            String kind = teacherKind(c.type(), cal.stream());
+            Map<LocalDate, List<TeacherService.TLesson>> byDate = new LinkedHashMap<>();
+            for (TeacherService.TLesson l : cal.lessons()) {
+                LocalDate d = parseDate(l.date());
+                if (d != null) byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(l);
+            }
+            for (Map.Entry<LocalDate, List<TeacherService.TLesson>> e : byDate.entrySet()) {
+                LocalDate d = e.getKey();
+                List<Slot> cand = new ArrayList<>();
+                for (Slot s : own)
+                    if (s.day() == d.getDayOfWeek() && (s.side() == 1 || oddOnEven == null || s.side() == sideOf(d, oddOnEven, d))) cand.add(s);
+                // План важнее сетки: занятие на «чужой» неделе всё равно показываем, время берём у пары этого дня.
+                if (cand.isEmpty()) for (Slot s : own) if (s.day() == d.getDayOfWeek()) cand.add(s);
+                // Перенесённое занятие может выпасть на другой день — время берём у потока.
+                if (cand.isEmpty()) cand.add(own.get(0));
+                cand.sort(Comparator.comparing(Slot::time));
+                int k = 0;
+                for (TeacherService.TLesson l : e.getValue()) {
+                    Slot slot = cand.get(Math.min(k++, cand.size() - 1));
+                    long ts0 = d.atTime(slot.time()).atZone(AppConfig.LMS_ZONE).toInstant().toEpochMilli();
+                    out.add(new Lesson(d, slot.time().toString().substring(0, 5), ts0, c.subject(), kind,
+                            slot.room(), "", cal.stream(), l.topic(), c.id(), false));
+                    planned.add(cal.stream().toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        return out;
     }
 
     /** Вид занятия по типу потока из «Мои предметы» («Лекция», «Практика», «Лаборатория»…). */

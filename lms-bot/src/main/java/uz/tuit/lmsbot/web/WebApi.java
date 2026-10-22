@@ -916,6 +916,8 @@ public class WebApi {
         throw new ApiError(400, "bad_url");
     }
 
+    private static final long TELEGRAM_FILE_LIMIT = 49L * 1024 * 1024;
+
     private Object fileSend(Req r) throws Exception {
         requireLogin(r);
         String url = lmsUrl(r.str("url"));
@@ -923,14 +925,19 @@ public class WebApi {
         try {
             LmsService.DownloadedFile dl = lms.downloadFile(r.uid(), url, r.str("name"));
             tmp = dl.file();
+            // Бот может отправлять в Telegram файлы до 50 МБ — большие не пытаемся слать зря.
+            if (tmp.length() > TELEGRAM_FILE_LIMIT) throw new ApiError(413, "file_too_large");
             bot.appSendDocument(r.uid(), tmp, dl.filename());
             return null;
         } catch (ApiError e) {
             throw e;
         } catch (Exception e) {
             String msg = String.valueOf(e.getMessage());
+            System.err.println("[WebApi] files/send " + url + ": " + e);
             // Пользователь не запускал бота или заблокировал его — писать ему нельзя.
             if (msg.contains("chat not found") || msg.contains("blocked") || msg.contains("403")) throw new ApiError(409, "chat_unavailable");
+            if (msg.contains("HTTP 404")) throw new ApiError(404, "file_not_found");
+            if (msg.contains("Request Entity Too Large") || msg.contains("413")) throw new ApiError(413, "file_too_large");
             throw new ApiError(502, "download_failed");
         } finally {
             if (tmp != null) tmp.delete();
@@ -958,6 +965,10 @@ public class WebApi {
             LmsService.DownloadedFile dl = lms.downloadFile(t.uid(), t.url(), t.name());
             tmp = dl.file();
             return new WebServer.Raw(Files.readAllBytes(tmp.toPath()), dl.contentType(), dl.filename());
+        } catch (Exception e) {
+            System.err.println("[WebApi] files/get " + t.url() + ": " + e);
+            if (String.valueOf(e.getMessage()).contains("HTTP 404")) throw new ApiError(404, "file_not_found");
+            throw e;
         } finally {
             if (tmp != null) tmp.delete();
         }

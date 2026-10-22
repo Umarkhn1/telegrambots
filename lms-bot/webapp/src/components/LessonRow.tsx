@@ -65,7 +65,7 @@ export function LessonRow({ l, index, now = Date.now(), onClick }: { l: Lesson; 
         {l.topic && (
           <div className="row-sub" style={{ marginTop: 6, display: 'flex', gap: 6 }}>
             <NotebookText size={13} style={{ marginTop: 2 }} />
-            <span className="clamp-2">{l.topic}</span>
+            <span className="wrap">{l.topic}</span>
           </div>
         )}
         {l.last && (

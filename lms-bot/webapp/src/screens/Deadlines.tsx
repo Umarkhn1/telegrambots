@@ -14,17 +14,24 @@ const DAY = 24 * 3600e3;
 export function Deadlines({ onBack }: { onBack: () => void }) {
   const { semesterId } = useApp();
   const { t } = useI18n();
-  const [mode, setMode] = useState<'pending' | 'all'>('pending');
+  const [mode, setMode] = useState<'open' | 'done' | 'all'>('open');
   const [open, setOpen] = useState<DeadlineItem | null>(null);
   const sem = semesterId ?? 0;
   const q = useQuery(sem ? `dl:${sem}` : null, (f) => api.deadlines(sem, f));
 
   const now = Date.now();
-  const items = (q.data ?? []).filter((d) => mode === 'all' || d.status === 'open');
+  const submitted = (d: DeadlineItem) => d.status === 'uploaded' || d.status === 'graded';
+  const all = q.data ?? [];
+  const items = mode === 'all' ? all : all.filter((d) => (mode === 'done') === submitted(d));
+  // Несданные — по срочности (просроченные отдельно), сданные — своей группой.
+  const notDone = items.filter((d) => !submitted(d));
+  const left = (d: DeadlineItem) => (d.deadlineTs == null ? Infinity : d.deadlineTs - now);
   const groups: { key: Key; list: DeadlineItem[] }[] = [
-    { key: 'group_24h', list: items.filter((d) => (d.deadlineTs ?? 0) - now < DAY) },
-    { key: 'group_3d', list: items.filter((d) => (d.deadlineTs ?? 0) - now >= DAY && (d.deadlineTs ?? 0) - now < 3 * DAY) },
-    { key: 'group_later', list: items.filter((d) => (d.deadlineTs ?? 0) - now >= 3 * DAY) },
+    { key: 'group_overdue', list: notDone.filter((d) => left(d) < 0) },
+    { key: 'group_24h', list: notDone.filter((d) => left(d) >= 0 && left(d) < DAY) },
+    { key: 'group_3d', list: notDone.filter((d) => left(d) >= DAY && left(d) < 3 * DAY) },
+    { key: 'group_later', list: notDone.filter((d) => left(d) >= 3 * DAY) },
+    { key: 'group_done', list: items.filter(submitted) },
   ];
 
   let n = 0;
@@ -41,7 +48,8 @@ export function Deadlines({ onBack }: { onBack: () => void }) {
         onChange={setMode}
         style={{ marginTop: 16 }}
         options={[
-          { value: 'pending', label: t('only_pending') },
+          { value: 'open', label: t('only_pending') },
+          { value: 'done', label: t('only_done') },
           { value: 'all', label: t('all_items') },
         ]}
       />

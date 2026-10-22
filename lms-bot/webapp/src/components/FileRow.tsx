@@ -45,8 +45,16 @@ export function FileRow({ name, url, type, label }: { name: string; url: string;
   const Icon = ICONS[kind] ?? FileIcon;
   const external = kind === 'url';
 
-  const fail = (e: unknown) =>
-    toast(e instanceof ApiError && e.code === 'chat_unavailable' ? t('chat_unavailable') : t('download_failed'), 'error');
+  const fail = (e: unknown) => {
+    const code = e instanceof ApiError ? e.code : '';
+    toast(
+      code === 'chat_unavailable' ? t('chat_unavailable')
+        : code === 'file_too_large' ? t('file_too_large')
+        : code === 'file_not_found' ? t('file_not_found')
+        : t('download_failed'),
+      'error',
+    );
+  };
 
   const send = async () => {
     setBusy('send');
@@ -79,7 +87,7 @@ export function FileRow({ name, url, type, label }: { name: string; url: string;
       </span>
       <div className="row-main">
         {label && <div className="row-sub" style={{ marginTop: 0, marginBottom: 2 }}>{label}</div>}
-        <div className="row-title clamp-2" style={{ fontSize: 14.5 }}>{name}</div>
+        <div className="row-title wrap" style={{ fontSize: 14.5 }}>{name}</div>
       </div>
       {external ? (
         <button className="btn small tinted" style={{ width: 'auto' }} onClick={() => openLink(url)}>

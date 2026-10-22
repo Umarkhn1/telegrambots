@@ -182,7 +182,7 @@ function Attendance({ course }: { course: Course }) {
                 <span className={'badge ' + (r.lecture ? 'accent' : 'violet')} style={{ height: 22 }}>{r.type}</span>
                 <span className={'badge ' + (r.excused ? 'warning' : 'danger')} style={{ height: 22 }}>{r.excused ? t('excused') : t('unexcused')}</span>
               </div>
-              {r.topic && <div className="row-sub clamp-2" style={{ marginTop: 6 }}>{r.topic}</div>}
+              {r.topic && <div className="row-sub wrap" style={{ marginTop: 6 }}>{r.topic}</div>}
             </div>
           </motion.div>
         ))}
@@ -232,7 +232,7 @@ function Topics({ course }: { course: Course }) {
             >
               <span className="tile neutral tabular" style={{ fontWeight: 700, fontSize: 14 }}>{e.number}</span>
               <div className="row-main">
-                <div className="row-title clamp-2">{e.topic}</div>
+                <div className="row-title wrap">{e.topic}</div>
                 <div className="meta" style={{ marginTop: 5 }}>
                   {e.date && <span className="tabular">{e.date}</span>}
                   {e.files.length > 0 && (

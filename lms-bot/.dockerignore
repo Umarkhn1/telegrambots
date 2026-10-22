@@ -1,8 +1,0 @@
-.git
-.gradle
-build
-dumps
-assets
-*.log
-webapp/node_modules
-src/main/resources/webapp

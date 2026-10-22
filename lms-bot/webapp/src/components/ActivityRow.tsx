@@ -12,6 +12,10 @@ export function ActivityRow({ a, course, index, onClick }: { a: Activity; course
   const st = STATUS[a.status];
   const now = Date.now();
   const u = a.status === 'open' ? urgency(a.deadlineTs, now) : 'neutral';
+  const submitted = a.status === 'uploaded' || a.status === 'graded';
+  // Несданные различаются срочностью: меньше суток — красный, до трёх дней — жёлтый, дальше — синий.
+  const tone = a.status === 'open' && u !== 'neutral' ? u : st.tone;
+  const chip = submitted ? 'success' : a.status === 'missed' ? 'danger' : a.status === 'open' ? 'warning' : 'neutral';
 
   return (
     <motion.button
@@ -23,13 +27,16 @@ export function ActivityRow({ a, course, index, onClick }: { a: Activity; course
       animate="show"
       custom={index}
     >
-      <span className={'tile ' + st.tone} style={{ marginTop: 1 }}>
+      <span className={'tile ' + tone} style={{ marginTop: 1 }}>
         <st.icon size={19} />
       </span>
       <div className="row-main">
-        {course && <div className="row-sub ellipsis" style={{ marginTop: 0, marginBottom: 2, fontWeight: 550 }}>{course}</div>}
-        <div className="row-title clamp-2">{a.task}</div>
+        {course && <div className="row-sub wrap" style={{ marginTop: 0, marginBottom: 2, fontWeight: 550 }}>{course}</div>}
+        <div className="row-title wrap">{a.task}</div>
         <div className="meta" style={{ marginTop: 7 }}>
+          <span className={'badge ' + chip} style={{ height: 22 }}>
+            {submitted ? t('submitted_yes') : a.status === 'unknown' ? t(st.label) : t('submitted_no')}
+          </span>
           {a.deadlineTs && (
             <span className="tabular">
               <Clock3 size={13} />

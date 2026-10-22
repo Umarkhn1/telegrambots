@@ -208,7 +208,7 @@ function SheetTab({ course, q, initial }: { course: TCourse; q: ReturnType<typeo
                 {r.number}
               </span>
               <div className="row-main">
-                <div className="row-title clamp-2" style={{ fontSize: 15 }}>{r.name}</div>
+                <div className="row-title wrap" style={{ fontSize: 15 }}>{r.name}</div>
                 {r.group && <div className="row-sub">{r.group}</div>}
               </div>
               {c ? (
@@ -556,7 +556,7 @@ function PlanTab({ course }: { course: TCourse }) {
           >
             <span className={'tile ' + tone}><Icon size={18} /></span>
             <div className="row-main">
-              <div className="row-title clamp-2">{l.number}. {l.topic}</div>
+              <div className="row-title wrap">{l.number}. {l.topic}</div>
               <div className="meta" style={{ marginTop: 5 }}>
                 <span className="tabular">{l.date}</span>
                 <span className={'badge ' + tone} style={{ height: 22 }}>

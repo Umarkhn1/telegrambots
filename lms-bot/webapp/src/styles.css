@@ -288,11 +288,9 @@ svg {
   text-align: right;
 }
 
-.clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+/* Содержательный текст (названия, темы, имена) переносится целиком, без «…». */
+.wrap {
+  overflow-wrap: anywhere;
 }
 
 .ellipsis {
@@ -355,6 +353,9 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ─────────────────────────────────────────────
