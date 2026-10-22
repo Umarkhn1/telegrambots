@@ -911,9 +911,25 @@ public class WebApi {
                 : base + (url.startsWith("/") ? "" : "/") + url;
         try {
             String host = URI.create(full.replace(" ", "%20")).getHost();
-            if (host != null && host.equalsIgnoreCase(URI.create(base).getHost())) return full;
+            if (trustedHost(host, URI.create(base).getHost())) return full;
         } catch (Exception ignored) {}
+        System.err.println("[WebApi] bad_url: " + url);
         throw new ApiError(400, "bad_url");
+    }
+
+    /**
+     * Хост LMS или другой поддомен того же домена университета: файлы тем лежат на dl.tuit.uz, а не на lms.tuit.uz.
+     * Чужие домены по-прежнему не пускаем — иначе сервер можно было бы заставить ходить на произвольные адреса.
+     */
+    static boolean trustedHost(String host, String baseHost) {
+        if (host == null || baseHost == null) return false;
+        host = host.toLowerCase(java.util.Locale.ROOT);
+        baseHost = baseHost.toLowerCase(java.util.Locale.ROOT);
+        if (host.equals(baseHost)) return true;
+        String[] labels = baseHost.split("\\.");
+        if (labels.length < 3) return false;
+        String root = labels[labels.length - 2] + "." + labels[labels.length - 1];
+        return host.equals(root) || host.endsWith("." + root);
     }
 
     private static final long TELEGRAM_FILE_LIMIT = 49L * 1024 * 1024;

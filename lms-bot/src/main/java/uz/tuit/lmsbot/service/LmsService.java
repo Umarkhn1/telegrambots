@@ -1951,9 +1951,12 @@ public class LmsService {
                 if (!n.endsWith(".html") && !n.endsWith(".htm")) return null;
             }
             String filename = filenameFromDisposition(disposition);
+            if (filename == null || filename.isBlank()) {
+                // В ссылке на хранилище — случайное имя из букв; пользователю нужно название из LMS с расширением из ссылки.
+                String fromUrl = filenameFromUrl(fullUrl);
+                filename = nameWithExtension(suggestedName, fromUrl);
+            }
             if (filename == null || filename.isBlank()) filename = filenameFromUrl(fullUrl);
-            if ((filename == null || filename.isBlank()) && suggestedName != null && !suggestedName.isBlank())
-                filename = suggestedName;
             if (filename == null || filename.isBlank()) filename = "file";
             filename = sanitizeFilename(filename);
 
@@ -1978,6 +1981,18 @@ public class LmsService {
         String base = config.getLms().getBaseUrl();
         if (url.startsWith("/")) return base + url;
         return base + "/" + url;
+    }
+
+    /** «1-ТЕМА_ПРЕЗЕНТАЦИЯ» + «xYz.pptx» → «1-ТЕМА_ПРЕЗЕНТАЦИЯ.pptx»; без названия — имя из ссылки. */
+    static String nameWithExtension(String suggested, String fromUrl) {
+        if (suggested == null || suggested.isBlank()) return fromUrl;
+        String name = suggested.trim();
+        int dot = name.lastIndexOf('.');
+        boolean hasExt = dot > 0 && name.length() - dot - 1 >= 1 && name.length() - dot - 1 <= 5;
+        if (hasExt || fromUrl == null) return name;
+        int d = fromUrl.lastIndexOf('.');
+        if (d < 0 || fromUrl.length() - d - 1 > 5) return name;
+        return name + fromUrl.substring(d);
     }
 
     private String filenameFromUrl(String fullUrl) {
