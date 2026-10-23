@@ -2132,6 +2132,17 @@ public class LmsService {
      */
     public ContractInfo getContract(long userId) {
         String base = config.getLms().getBaseUrl();
+        // Основной источник: «Информация» (/student/info) — там карточка контракта с суммами за текущий год.
+        try {
+            String html = getHtml(userId, base + "/student/info", base + "/student/info");
+            ContractInfo info = parseInfoContract(html);
+            if (info != null) {
+                System.out.println("[LmsService] contract page=/student/info" + (info.notice() != null ? " notice" : " amounts"));
+                return info;
+            }
+        } catch (Exception e) {
+            dbg("CONTRACT info u=%d err=%s", userId, e.getMessage());
+        }
         LinkedHashSet<String> paths = new LinkedHashSet<>();
         // Страница, где контракт нашёлся в прошлый раз, — первой: не перебираем адреса каждый раз.
         String known = contractPath.get(userId);
@@ -2189,6 +2200,42 @@ public class LmsService {
             dbg("CONTRACT menu u=%d err=%s", userId, e.getMessage());
         }
         return out;
+    }
+
+    /**
+     * Карточка «Информация о контракте» на /student/info: год в .si-contract-badge, суммы в
+     * .si-stat.total/.paid/.debt (.si-stat-amount), а пока контракт не выставлен — блок .si-empty-contract.
+     * Прошлые учебные годы (details.si-acc-item) не берём: нужен текущий. null — карточки нет (другая вёрстка).
+     */
+    static ContractInfo parseInfoContract(String html) {
+        if (html == null || html.isBlank()) return null;
+        Document doc = Jsoup.parse(html);
+        Element header = doc.selectFirst(".si-contract-header");
+        if (header == null) return null;
+        Element card = header.closest(".si-card");
+        if (card == null) card = header.parent();
+        Element empty = card.selectFirst(".si-empty-contract");
+        if (empty != null) {
+            String text = empty.text().trim();
+            return new ContractInfo(null, null, null, text.isEmpty() ? header.text().trim() : text, "/student/info");
+        }
+        Long total = infoAmount(card, ".si-stat.total .si-stat-amount");
+        Long paid = infoAmount(card, ".si-stat.paid .si-stat-amount");
+        Long debt = infoAmount(card, ".si-stat.debt .si-stat-amount");
+        if (total == null && paid == null && debt == null) return null;
+        if (debt == null && total != null && paid != null) debt = Math.max(0, total - paid);
+        if (paid == null && total != null && debt != null) paid = Math.max(0, total - debt);
+        if (total == null && paid != null && debt != null) total = paid + debt;
+        return new ContractInfo(total, paid, debt, null, "/student/info");
+    }
+
+    private static Long infoAmount(Element card, String selector) {
+        Element el = card.selectFirst(selector);
+        if (el == null) return null;
+        String digits = el.text().replaceAll("[^\\d]", "");
+        // «8 150 000 сум» → 8150000; «0 сум» — тоже число (долга нет), а не отсутствие данных.
+        if (digits.isEmpty() || digits.length() > 15) return null;
+        return Long.parseLong(digits);
     }
 
     static ContractInfo parseContract(String html, String source) {
