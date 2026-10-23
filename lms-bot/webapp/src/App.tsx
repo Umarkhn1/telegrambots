@@ -15,7 +15,7 @@ import { Courses } from './screens/Courses';
 import { Deadlines } from './screens/Deadlines';
 import { Grades } from './screens/Grades';
 import { Home } from './screens/Home';
-import { Login } from './screens/Login';
+import { LoginInBot } from './screens/LoginInBot';
 import { Profile } from './screens/Profile';
 import { Schedule } from './screens/Schedule';
 import { TeacherCourse } from './screens/teacher/TeacherCourse';
@@ -190,14 +190,7 @@ export function App() {
       </div>
     );
   } else if (!me.loggedIn) {
-    body = (
-      <Login
-        onDone={async () => {
-          invalidate('');
-          await loadMe();
-        }}
-      />
-    );
+    body = <LoginInBot botUsername={me.botUsername} />;
   } else {
     const tabs = tabsFor(me);
     const teacher = me.role === 'teacher';

@@ -28,6 +28,9 @@ const ru = {
   no_semester: 'Не удалось получить список семестров из LMS',
 
   login_title: 'Вход в LMS',
+  login_in_bot_title: 'Войдите в боте',
+  login_in_bot_sub: 'В приложении войти нельзя: пароль и код вводятся только в чате с ботом. Откройте бота и войдите — приложение подхватит вход.',
+  login_in_bot_note: 'Пароль вы вводите только в Telegram-чате с ботом',
   login_sub: 'Используйте аккаунт lms.tuit.uz или OneID',
   method_lms: 'Логин LMS',
   method_oneid: 'OneID',
@@ -290,6 +293,9 @@ const uz_lat: Record<Key, string> = {
   no_semester: "LMS dan semestrlar ro'yxatini olib bo'lmadi",
 
   login_title: 'LMS ga kirish',
+  login_in_bot_title: 'Botda kiring',
+  login_in_bot_sub: "Ilovada kirib bo'lmaydi: parol va kod faqat bot bilan chatda kiritiladi. Botni oching va kiring — ilova kirishni o'zi taniydi.",
+  login_in_bot_note: 'Parolni faqat Telegramdagi bot chatida kiritasiz',
   login_sub: 'lms.tuit.uz yoki OneID hisobingizdan foydalaning',
   method_lms: 'LMS login',
   method_oneid: 'OneID',
@@ -550,6 +556,9 @@ const uz_cyr: Record<Key, string> = {
   no_semester: 'LMS дан семестрлар рўйхатини олиб бўлмади',
 
   login_title: 'LMS га кириш',
+  login_in_bot_title: 'Ботда киринг',
+  login_in_bot_sub: 'Иловада кириб бўлмайди: парол ва код фақат бот билан чатда киритилади. Ботни очинг ва киринг — илова киришни ўзи танийди.',
+  login_in_bot_note: 'Паролни фақат Телеграмдаги бот чатида киритасиз',
   login_sub: 'lms.tuit.uz ёки OneID ҳисобингиздан фойдаланинг',
   method_lms: 'LMS логин',
   method_oneid: 'OneID',
@@ -810,6 +819,9 @@ const en: Record<Key, string> = {
   no_semester: 'Could not get the semester list from LMS',
 
   login_title: 'Sign in to LMS',
+  login_in_bot_title: 'Sign in in the bot',
+  login_in_bot_sub: 'You cannot sign in inside the app: the password and codes are entered only in the chat with the bot. Open the bot and sign in — the app will pick it up.',
+  login_in_bot_note: 'You enter your password only in the Telegram chat with the bot',
   login_sub: 'Use your lms.tuit.uz or OneID account',
   method_lms: 'LMS login',
   method_oneid: 'OneID',

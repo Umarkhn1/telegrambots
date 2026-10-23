@@ -3170,6 +3170,14 @@ public class LmsBot extends TelegramLongPollingBot {
         String t = text != null ? text.trim() : "";
         if (t.isEmpty()) return false;
 
+        // Ссылка из мини-приложения (t.me/бот?start=login): не вошедшему сразу показываем вход, вошедшему — приветствие.
+        if ("/start login".equals(t)) {
+            userState.put(userId, "IDLE");
+            if (!hasLang(userId)) sendLanguageChoice(chatId);
+            else if (lmsService.isLoggedIn(userId)) sendWelcome(chatId, userId, firstName);
+            else askForLogin(chatId, userId);
+            return true;
+        }
         if ("/start".equals(t)) {
             userState.put(userId, "IDLE");
             if (!hasLang(userId)) sendLanguageChoice(chatId);
