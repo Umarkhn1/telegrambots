@@ -2118,7 +2118,7 @@ public class TeacherBot {
             if (chatId == null) continue;
             if (now - lastScan.getOrDefault(uid, 0L) >= SCAN_MS) {
                 lastScan.put(uid, now);
-                bot.executor.submit(() -> scanGrading(chatId, uid));
+                bot.runBackground("tgrade|" + uid, () -> scanGrading(chatId, uid));
             }
             checkAttendanceMarks(chatId, uid, now);
         }
@@ -2253,6 +2253,19 @@ public class TeacherBot {
                 "I'll remind you in " + n + (min ? " min" : " h") + " (at " + at + ")"), null);
     }
 
+    /** Раз в час из LmsBot: забываем пары старше двух суток и истёкшие «отложить». */
+    void prune(long now) {
+        attendanceSent.keySet().removeIf(k -> {
+            int bar = k.lastIndexOf('|');
+            try {
+                return now - Long.parseLong(k.substring(bar + 1)) > 2 * DAY_MS;
+            } catch (NumberFormatException e) {
+                return true;
+            }
+        });
+        attSnooze.values().removeIf(until -> until < now);
+    }
+
     /** Номер последнего напоминания по каждой паре: «преподаватель|предмет|начало». */
     private final Map<String, Integer> attendanceSent = new ConcurrentHashMap<>();
     private final Set<String> attendanceInFlight = ConcurrentHashMap.newKeySet();
@@ -2279,7 +2292,7 @@ public class TeacherBot {
     private void checkAttendanceMarks(long chatId, long uid, long now) {
         int sem = bot.getDefaultSemesterId(uid);
         if (sem <= 0) return;
-        SemesterSchedule.Result sched = bot.semesterSchedule.get(uid, sem, false);
+        SemesterSchedule.Result sched = bot.cachedSchedule(uid, sem);
         if (sched == null) return;
         LocalDate today = LocalDate.now(AppConfig.LMS_ZONE);
         int minutes = DEFAULT_LESSON_MIN;
@@ -2306,7 +2319,7 @@ public class TeacherBot {
                 if (idx < 0 || (!wake && idx <= attendanceSent.getOrDefault(key, -1)) || !attendanceInFlight.add(key)) continue;
                 final int position = pos;
                 final boolean ended = now - l.ts() >= lessonMs;
-                bot.executor.submit(() -> {
+                bot.background.submit(() -> {
                     try {
                         TCalendar cal = ts.calendar(uid, l.courseId());
                         List<TLesson> rows = new ArrayList<>();

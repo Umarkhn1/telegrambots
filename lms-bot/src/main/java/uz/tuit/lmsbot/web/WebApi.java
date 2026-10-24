@@ -33,6 +33,7 @@ public class WebApi {
 
     /** Сколько держать ответы LMS: переключение вкладок не должно каждый раз ходить на сайт. */
     private static final long CACHE_MS = 3L * 60 * 1000;
+    private static final int CACHE_LIMIT = 5000;
     /** Как часто перепроверять, что LMS-сессия ещё жива. */
     private static final long PROBE_MS = 10L * 60 * 1000;
 
@@ -301,6 +302,7 @@ public class WebApi {
     }
 
     private void requireLogin(Req r) {
+        bot.touchActive(r.uid());
         if (!lms.isLoggedIn(r.uid()) && !lms.restoreSession(r.uid())) throw new ApiError(403, "not_logged_in");
     }
 
@@ -884,6 +886,10 @@ public class WebApi {
         stats.put("active24h", all.stream().filter(s -> now - s.lastSeen < day).count());
         stats.put("active7d", all.stream().filter(s -> now - s.lastSeen < 7 * day).count());
         stats.put("avgGpa", gpaN > 0 ? Math.round(gpaSum / gpaN * 100) / 100.0 : null);
+        // Вошли прямо сейчас (из списка) и итог последней проверки сохранённых сессий.
+        stats.put("loggedIn", all.stream().filter(s -> lms.isLoggedIn(s.telegramId)).count());
+        stats.put("sessionsAlive", bot.sessionsAlive());
+        stats.put("sessionsOnDisk", bot.sessionsOnDisk());
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("items", items);
@@ -1031,7 +1037,11 @@ public class WebApi {
         Object v = loader.get();
         // Пустой ответ чаще всего значит сбой LMS, а не отсутствие данных — не кэшируем.
         boolean empty = v == null || (v instanceof Collection<?> col && col.isEmpty());
-        if (!empty) cache.put(k, new Cached(now, v));
+        if (!empty) {
+            // Не даём кэшу расти без конца: протухшие записи выбрасываем, когда их набирается много.
+            if (cache.size() > CACHE_LIMIT) cache.values().removeIf(x -> now - x.ts() > CACHE_MS);
+            cache.put(k, new Cached(now, v));
+        }
         return v;
     }
 

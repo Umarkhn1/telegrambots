@@ -103,13 +103,28 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     final ExecutorService executor = Executors.newFixedThreadPool(20);
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    /**
+     * Фоновые обходы (дедлайны, НБ, оценки, поддержание сессий) — в отдельном небольшом пуле:
+     * не больше BACKGROUND_THREADS одновременных походов в LMS и не за счёт ответов пользователям.
+     */
+    private static final int BACKGROUND_THREADS = 4;
+    final ExecutorService background = Executors.newFixedThreadPool(BACKGROUND_THREADS, r -> {
+        Thread t = new Thread(r, "lms-background");
+        t.setDaemon(true);
+        return t;
+    });
+    private final Set<String> backgroundInFlight = ConcurrentHashMap.newKeySet();
+    /** Когда пользователь последний раз писал боту или открывал мини-приложение. */
+    private final Map<Long, Long> lastSeen = new ConcurrentHashMap<>();
+    private final long startedAt = System.currentTimeMillis();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final Map<Long, PendingUpload> pendingUpload = new ConcurrentHashMap<>();
 
     private final Map<Long, UserSettings> userSettings = new ConcurrentHashMap<>();
     private final UserSettingsStore settingsStore = new UserSettingsStore();
 
-    private final Map<Long, Set<String>> sentReminders = new ConcurrentHashMap<>();
+    /** Отправленные разовые напоминания: ключ → когда отправлено (старые чистит pruneMemory). */
+    private final Map<Long, Map<String, Long>> sentReminders = new ConcurrentHashMap<>();
     private final Map<Long, Map<Integer, Integer>> lastNbByCourse = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Integer>> deadlineIntervalsMin = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Long>> lastDeadlineNotifyTs = new ConcurrentHashMap<>();
@@ -147,6 +162,7 @@ public class LmsBot extends TelegramLongPollingBot {
     @Override
     public void onUpdateReceived(Update update) {
         if (update.hasCallbackQuery()) {
+            touchActive(update.getCallbackQuery().getFrom().getId());
             handleCallback(update);
             return;
         }
@@ -154,6 +170,7 @@ public class LmsBot extends TelegramLongPollingBot {
         Message msg  = update.getMessage();
         long chatId  = msg.getChatId();
         long userId  = msg.getFrom().getId();
+        touchActive(userId);
         lastChatId.put(userId, chatId);
         noteUser(msg.getFrom());
 
@@ -2685,6 +2702,7 @@ public class LmsBot extends TelegramLongPollingBot {
             }
         }, 15, 60, TimeUnit.SECONDS);
         scheduler.scheduleWithFixedDelay(this::tickStateBackup, 3, 3, TimeUnit.MINUTES);
+        scheduler.scheduleWithFixedDelay(this::pruneMemory, 60, 60, TimeUnit.MINUTES);
         // Деплой на Render: новая версия поднимается, пока старая ещё работает, и читает копию, которой уже
         // несколько минут. Финальную копию старая версия заливает только при остановке — подбираем её ещё
         // дважды до первой плановой копии. Файлы на диске при этом не затираются, только добавляются.
@@ -2708,11 +2726,79 @@ public class LmsBot extends TelegramLongPollingBot {
      */
     private void tickSessionSweep() {
         if (!stateRestored) return;
-        for (Long uid : stateBackup.sessionUsers()) {
-            if (loggingIn(uid)) continue;
-            executor.submit(() -> {
-                if (lmsService.restoreSession(uid)) lastChatId.putIfAbsent(uid, uid);
+        List<Long> users = new ArrayList<>();
+        // Кто прямо сейчас вводит логин и пароль — не трогаем: его сессия ещё не создана.
+        for (Long uid : stateBackup.sessionUsers()) if (!loggingIn(uid)) users.add(uid);
+        checkSessions(users, "регулярная");
+    }
+
+    /** Итог последней проверки сессий — для лога и админ-панели. */
+    private volatile int sessionsOnDisk, sessionsAlive;
+    /** С какого момента и сколько проверок подряд сессию не удаётся поднять. */
+    private final Map<Long, Long> deadSince = new ConcurrentHashMap<>();
+    private final Map<Long, Integer> deadChecks = new ConcurrentHashMap<>();
+    /** Файлы сессии удаляем, только если она мертва не меньше двух суток и не меньше 6 проверок подряд. */
+    private static final long DEAD_FORGET_MS = 48L * 60 * 60 * 1000;
+    private static final int DEAD_MIN_CHECKS = 6;
+
+    public int sessionsOnDisk() { return sessionsOnDisk; }
+    public int sessionsAlive() { return sessionsAlive; }
+
+    /**
+     * Проверяет сессии в фоновом пуле и, когда проверены все, пишет в лог, сколько из них живы.
+     * «LMS не ответила» сессией не считается ни живой, ни мёртвой и ничего не удаляет.
+     */
+    private void checkSessions(List<Long> users, String label) {
+        if (users.isEmpty()) return;
+        java.util.concurrent.atomic.AtomicInteger left = new java.util.concurrent.atomic.AtomicInteger(users.size());
+        java.util.concurrent.atomic.AtomicInteger alive = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger dead = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger unknown = new java.util.concurrent.atomic.AtomicInteger();
+        Runnable finish = () -> {
+            if (left.decrementAndGet() != 0) return;
+            sessionsOnDisk = users.size();
+            sessionsAlive = alive.get();
+            System.out.println("♻️ Проверка сессий (" + label + "): живых " + alive.get() + " из " + users.size()
+                    + (dead.get() > 0 ? ", не поднять " + dead.get() : "")
+                    + (unknown.get() > 0 ? ", LMS не ответила " + unknown.get() : ""));
+        };
+        for (Long uid : users) {
+            boolean queued = runBackground("touch|" + uid, () -> {
+                try {
+                    switch (lmsService.checkSession(uid)) {
+                        case ALIVE, RESTORED -> {
+                            alive.incrementAndGet();
+                            lastChatId.putIfAbsent(uid, uid);
+                            deadSince.remove(uid);
+                            deadChecks.remove(uid);
+                        }
+                        case DEAD -> {
+                            dead.incrementAndGet();
+                            noteDeadSession(uid);
+                        }
+                        case UNKNOWN -> unknown.incrementAndGet();
+                    }
+                } finally {
+                    finish.run();
+                }
             });
+            // Прошлая проверка этого пользователя ещё идёт — его итог не знаем.
+            if (!queued) {
+                unknown.incrementAndGet();
+                finish.run();
+            }
+        }
+    }
+
+    private void noteDeadSession(long uid) {
+        long now = System.currentTimeMillis();
+        long since = deadSince.computeIfAbsent(uid, k -> now);
+        int checks = deadChecks.merge(uid, 1, Integer::sum);
+        if (now - since < DEAD_FORGET_MS || checks < DEAD_MIN_CHECKS || loggingIn(uid)) return;
+        if (lmsService.forgetDeadSession(uid)) {
+            deadSince.remove(uid);
+            deadChecks.remove(uid);
+            System.out.println("🧹 Удалены файлы неживой сессии u=" + uid + " (не поднималась " + (now - since) / 3_600_000 + " ч, проверок " + checks + ")");
         }
     }
 
@@ -2729,7 +2815,7 @@ public class LmsBot extends TelegramLongPollingBot {
             int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
             if (semesterId <= 0) continue;
 
-            uz.tuit.lmsbot.service.SemesterSchedule.Result sched = semesterSchedule.get(userId, semesterId, false);
+            uz.tuit.lmsbot.service.SemesterSchedule.Result sched = cachedSchedule(userId, semesterId);
             if (sched == null) continue;
 
             java.time.LocalDate today = java.time.LocalDate.now(AppConfig.LMS_ZONE);
@@ -2850,14 +2936,16 @@ public class LmsBot extends TelegramLongPollingBot {
             if (!lmsService.isLoggedIn(userId) || lmsService.isTeacher(userId)) continue;
             Long chatId = lastChatId.get(userId);
             if (chatId == null) continue;
-            long nowTs = System.currentTimeMillis();
-            if (nowTs - lastNbCheckTs.getOrDefault(userId, 0L) < NB_CHECK_MS) continue;
-            lastNbCheckTs.put(userId, nowTs);
+            if (!due(lastNbCheckTs, userId, NB_CHECK_MS)) continue;
+            runBackground("nb|" + userId, () -> nbCheckUser(userId, chatId));
+        }
+    }
 
+    private void nbCheckUser(long userId, long chatId) {
             int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
-            if (semesterId <= 0) continue;
+            if (semesterId <= 0) return;
             List<Course> courses = lmsService.getMyCourses(userId, semesterId);
-            if (courses == null || courses.isEmpty()) continue;
+            if (courses == null || courses.isEmpty()) return;
             Map<Integer, Integer> prev = lastNbByCourse.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
             for (Course c : courses) {
                 int nb = c.getAttendance();
@@ -2881,7 +2969,6 @@ public class LmsBot extends TelegramLongPollingBot {
                         markup(List.of(List.of(inlineBtn(tr(userId, "📊 Посещаемость предмета", "📊 Fan davomati", "📊 Фан давомати", "📊 Subject attendance"),
                                 "nbgo_" + c.getId() + "_" + semesterId)))));
             }
-        }
     }
 
     private void tickDeadlinesListReminder() {
@@ -2934,9 +3021,15 @@ public class LmsBot extends TelegramLongPollingBot {
             if (!lmsService.isLoggedIn(userId) || lmsService.isTeacher(userId)) continue;
             Long chatId = lastChatId.get(userId);
             if (chatId == null) continue;
+            // Обход всех предметов — тяжёлый: по времени решаем здесь, а сами запросы к LMS — в фоне.
+            if (!due(lastUrgentScanTs, userId, URGENT_SCAN_MS)) continue;
+            runBackground("urgent|" + userId, () -> urgentScanUser(userId, chatId));
+        }
+    }
 
+    private void urgentScanUser(long userId, long chatId) {
             int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
-            if (semesterId <= 0) continue;
+            if (semesterId <= 0) return;
 
             // Всегда обеспечиваем актуальный список курсов
             List<Course> courses = userCourses.get(userId);
@@ -2947,15 +3040,12 @@ public class LmsBot extends TelegramLongPollingBot {
                     rememberSemester(userId, semesterId);
                 }
             }
-            if (courses == null || courses.isEmpty()) continue;
+            if (courses == null || courses.isEmpty()) return;
 
             long now = System.currentTimeMillis();
             // Срочным считаем дедлайн, до которого осталось не больше 2 дней
             long urgentUntil = now + URGENT_DEADLINE_WINDOW_MS;
 
-            // Обход всех предметов — тяжёлый, чаще чем раз в 15 минут не нужен
-            if (now - lastUrgentScanTs.getOrDefault(userId, 0L) < URGENT_SCAN_MS) continue;
-            lastUrgentScanTs.put(userId, now);
 
             for (Course c : courses) {
                 CourseSummary cs = lmsService.getActivities(userId, c.getId());
@@ -3046,7 +3136,6 @@ public class LmsBot extends TelegramLongPollingBot {
                     send(chatId, text, markup(kbRows));
                 }
             }
-        }
     }
 
     private void showDeadlineIntervalPicker(long chatId, long userId, int messageId, String key) {
@@ -3645,8 +3734,122 @@ public class LmsBot extends TelegramLongPollingBot {
         }
     }
 
+    /** Один фоновый проход на ключ: пока прошлый не закончился, новый в очередь не ставим. */
+    boolean runBackground(String key, Runnable job) {
+        if (!backgroundInFlight.add(key)) return false;
+        try {
+            background.submit(() -> {
+                try {
+                    job.run();
+                } catch (Exception e) {
+                    System.err.println("[LmsBot] background " + key + ": " + e.getMessage());
+                } finally {
+                    backgroundInFlight.remove(key);
+                }
+            });
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            backgroundInFlight.remove(key);
+            return false;
+        }
+    }
+
+    public void touchActive(long userId) {
+        lastSeen.put(userId, System.currentTimeMillis());
+    }
+
+    /** Кто не заходил дольше этого — фоновые проверки в 4 раза реже, тяжёлые кэши выгружаются. */
+    private static final long INACTIVE_MS = 3L * 24 * 60 * 60 * 1000;
+    private static final long REMINDER_KEEP_MS = 7L * 24 * 60 * 60 * 1000;
+
+    private boolean inactive(long userId, long now) {
+        return now - lastSeen.getOrDefault(userId, startedAt) > INACTIVE_MS;
+    }
+
+    /**
+     * Пора ли фоновой проверке. Первая после запуска ставится в случайную точку интервала,
+     * чтобы все пользователи не пошли в LMS в одну и ту же минуту.
+     */
+    boolean due(Map<Long, Long> last, long userId, long base) {
+        long now = System.currentTimeMillis();
+        long interval = inactive(userId, now) ? base * 4 : base;
+        long prev = last.computeIfAbsent(userId, k -> now - java.util.concurrent.ThreadLocalRandom.current().nextLong(interval));
+        if (now - prev < interval) return false;
+        last.put(userId, now);
+        return true;
+    }
+
+    /** Расписание для фоновых напоминаний: из кэша; построение и обновление — в фоне, не задерживая обход. */
+    uz.tuit.lmsbot.service.SemesterSchedule.Result cachedSchedule(long userId, int semesterId) {
+        if (semesterSchedule.stale(userId, semesterId))
+            runBackground("sched|" + userId + "|" + semesterId, () -> semesterSchedule.get(userId, semesterId, false));
+        return semesterSchedule.peek(userId, semesterId);
+    }
+
+    /** Раз в час: старые отметки напоминаний и тяжёлые кэши давно не заходивших. */
+    private void pruneMemory() {
+        try {
+            long now = System.currentTimeMillis();
+            for (Map<String, Long> m : sentReminders.values()) m.values().removeIf(ts -> now - ts > REMINDER_KEEP_MS);
+            sentReminders.values().removeIf(Map::isEmpty);
+            for (Long uid : new ArrayList<>(userCalendars.keySet())) if (inactive(uid, now)) userCalendars.remove(uid);
+            for (Long uid : new ArrayList<>(userActivities.keySet())) if (inactive(uid, now)) userActivities.remove(uid);
+            for (Long uid : new ArrayList<>(pendingFiles.keySet())) if (inactive(uid, now)) pendingFiles.remove(uid);
+            teacherBot.prune(now);
+        } catch (Exception e) {
+            System.err.println("[LmsBot] prune: " + e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  ЛИМИТ TELEGRAM
+    // ─────────────────────────────────────────────
+
+    /** Telegram пускает от бота около 30 сообщений в секунду — держим не больше 25. */
+    private static final long SEND_SPACING_NS = 40_000_000L;
+    private final Object sendLock = new Object();
+    private long nextSendNs = 0;
+
+    /**
+     * Все вызовы Bot API идут через этот метод: равномерный темп вместо всплеска (утренняя сводка
+     * всем сразу), а на «429 Too Many Requests» — пауза, которую назвал Telegram, и повтор.
+     */
+    @Override
+    public <T extends java.io.Serializable, Method extends org.telegram.telegrambots.meta.api.methods.BotApiMethod<T>> T execute(Method method)
+            throws org.telegram.telegrambots.meta.exceptions.TelegramApiException {
+        for (int attempt = 0; ; attempt++) {
+            pace();
+            try {
+                return super.execute(method);
+            } catch (org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException e) {
+                if (e.getErrorCode() == null || e.getErrorCode() != 429 || attempt >= 2) throw e;
+                Integer retry = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
+                sleepQuietly(Math.min(retry != null ? retry : 1, 30) * 1000L);
+            }
+        }
+    }
+
+    private void pace() {
+        long wait;
+        synchronized (sendLock) {
+            long now = System.nanoTime();
+            long slot = Math.max(now, nextSendNs);
+            nextSendNs = slot + SEND_SPACING_NS;
+            wait = slot - now;
+        }
+        if (wait > 0) sleepQuietly(wait / 1_000_000L);
+    }
+
+    private static void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     boolean markOnce(long userId, String key) {
-        return sentReminders.computeIfAbsent(userId, k -> Collections.newSetFromMap(new ConcurrentHashMap<>())).add(key);
+        return sentReminders.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).putIfAbsent(key, System.currentTimeMillis()) == null;
     }
 
     String truncateTopic(String topic, int maxLen) {
@@ -4080,12 +4283,8 @@ public class LmsBot extends TelegramLongPollingBot {
         lastStateBackupTs = System.currentTimeMillis();
 
         List<Long> users = stateBackup.sessionUsers();
-        for (Long uid : users) {
-            executor.submit(() -> {
-                if (lmsService.restoreSession(uid)) lastChatId.putIfAbsent(uid, uid);
-            });
-        }
         if (!users.isEmpty()) System.out.println("♻️ Проверяю сохранённые сессии LMS: " + users.size());
+        checkSessions(users, "после запуска");
     }
 
     public void shutdown() {
@@ -4097,6 +4296,7 @@ public class LmsBot extends TelegramLongPollingBot {
             System.err.println("[LmsBot] final state backup: " + e.getMessage());
         }
         executor.shutdown();
+        background.shutdownNow();
         scheduler.shutdown();
         try { if (!executor.awaitTermination(10, TimeUnit.SECONDS)) executor.shutdownNow(); }
         catch (InterruptedException e) { executor.shutdownNow(); }

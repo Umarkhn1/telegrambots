@@ -199,7 +199,7 @@ export interface AdminStudentsResponse {
   page: number;
   pages: number;
   size: number;
-  stats: { total: number; active24h: number; active7d: number; avgGpa: number | null };
+  stats: { total: number; active24h: number; active7d: number; avgGpa: number | null; loggedIn?: number; sessionsAlive?: number; sessionsOnDisk?: number };
   facets: Record<AdminFilterKey, string[]>;
 }
 

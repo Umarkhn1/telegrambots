@@ -25,6 +25,7 @@ import static uz.tuit.lmsbot.web.WebServer.Req;
 class TeacherApi {
 
     private static final long CACHE_MS = 3L * 60 * 1000;
+    private static final int CACHE_LIMIT = 3000;
     private static final long UPLOAD_LIMIT = 50L * 1024 * 1024;
 
     private final LmsService lms;
@@ -308,7 +309,10 @@ class TeacherApi {
             throw new ApiError(502, "lms_unavailable");
         }
         boolean empty = v == null || (v instanceof Collection<?> col && col.isEmpty());
-        if (!empty) cache.put(k, new Cached(now, v));
+        if (!empty) {
+            if (cache.size() > CACHE_LIMIT) cache.values().removeIf(x -> now - x.ts() > CACHE_MS);
+            cache.put(k, new Cached(now, v));
+        }
         return v;
     }
 

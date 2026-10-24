@@ -84,6 +84,18 @@ public class SemesterSchedule {
         this.lms = lms;
     }
 
+    /** Только из кэша, даже устаревшее; null — ещё не строили. Для фоновых напоминаний, без походов в LMS. */
+    public Result peek(long userId, int semesterId) {
+        Cached c = cache.get(userId + "|" + semesterId);
+        return c == null ? null : c.result();
+    }
+
+    /** Пора ли перестроить: в кэше нет или старше CACHE_MS. */
+    public boolean stale(long userId, int semesterId) {
+        Cached c = cache.get(userId + "|" + semesterId);
+        return c == null || System.currentTimeMillis() - c.ts() >= CACHE_MS;
+    }
+
     public void invalidate(long userId) {
         cache.keySet().removeIf(k -> k.startsWith(userId + "|"));
     }

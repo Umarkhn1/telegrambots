@@ -153,6 +153,8 @@ export function Admin({ onBack }: { onBack: () => void }) {
           { icon: UserCheck, tone: 'success', value: data?.stats.active24h, label: t('st_24h') },
           { icon: Clock3, tone: 'violet', value: data?.stats.active7d, label: t('st_7d') },
           { icon: TrendingUp, tone: 'warning', value: data?.stats.avgGpa?.toFixed(2), label: t('st_avg_gpa') },
+          { icon: UserCheck, tone: 'success', value: data?.stats.loggedIn, label: t('st_logged_in') },
+          { icon: UsersRound, tone: 'violet', value: data?.stats.sessionsOnDisk ? `${data.stats.sessionsAlive ?? 0} / ${data.stats.sessionsOnDisk}` : undefined, label: t('st_sessions') },
         ].map((s) => (
           <div className="stat card" key={s.label}>
             <span className={'tile ' + s.tone} style={{ width: 30, height: 30, borderRadius: 9 }}>

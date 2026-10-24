@@ -1025,6 +1025,29 @@ public class LmsService {
      * (она умирает примерно через два часа простоя), молча поднимаем новую по
      * сохранённому JWT OneID — пользователь ничего не замечает.
      */
+    /** ALIVE — жива, RESTORED — поднята по токену OneID, DEAD — не поднять, UNKNOWN — LMS не ответила. */
+    public enum SessionState { ALIVE, RESTORED, DEAD, UNKNOWN }
+
+    /** Как restoreSession, но «LMS не ответила» отличается от «сессия мертва» — первое ничего не говорит о сессии. */
+    public SessionState checkSession(long userId) {
+        Boolean alive = probeSession(userId);
+        if (Boolean.TRUE.equals(alive)) return SessionState.ALIVE;
+        if (alive == null) return SessionState.UNKNOWN;
+        return reauthOneId(userId) ? SessionState.RESTORED : SessionState.DEAD;
+    }
+
+    /**
+     * Удаляет cookie и токен OneID пользователя, который сейчас не вошёл: остатки незавершённого входа
+     * или давно умершей сессии. Вошедшего не трогает. Язык и сохранённый «Автовход» остаются.
+     */
+    public boolean forgetDeadSession(long userId) {
+        if (isLoggedIn(userId)) return false;
+        clients.remove(userId);
+        oneIdTokens.clear(userId);
+        new PersistentCookieJar(sessionDir(), userId).clear();
+        return true;
+    }
+
     public boolean restoreSession(long userId) {
         Boolean alive = probeSession(userId);
         if (Boolean.TRUE.equals(alive)) return true;
