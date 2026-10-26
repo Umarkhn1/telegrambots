@@ -2741,6 +2741,13 @@ public class LmsBot extends TelegramLongPollingBot {
     private static final long DEAD_FORGET_MS = 48L * 60 * 60 * 1000;
     private static final int DEAD_MIN_CHECKS = 6;
 
+    /**
+     * Последняя полная проверка прошла без массового сбоя: живых не меньше, чем мёртвых. Если мертвы почти
+     * все сразу (LMS сбросила сессии, недоступен OneID), это сбой, а не брошенные аккаунты, — тогда ничего
+     * не удаляем. До первой проверки после запуска тоже не удаляем.
+     */
+    private volatile boolean sessionsHealthy = false;
+
     public int sessionsOnDisk() { return sessionsOnDisk; }
     public int sessionsAlive() { return sessionsAlive; }
 
@@ -2754,13 +2761,17 @@ public class LmsBot extends TelegramLongPollingBot {
         java.util.concurrent.atomic.AtomicInteger alive = new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicInteger dead = new java.util.concurrent.atomic.AtomicInteger();
         java.util.concurrent.atomic.AtomicInteger unknown = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger busy = new java.util.concurrent.atomic.AtomicInteger();
         Runnable finish = () -> {
             if (left.decrementAndGet() != 0) return;
             sessionsOnDisk = users.size();
             sessionsAlive = alive.get();
+            sessionsHealthy = alive.get() > 0 && alive.get() >= dead.get();
             System.out.println("♻️ Проверка сессий (" + label + "): живых " + alive.get() + " из " + users.size()
                     + (dead.get() > 0 ? ", не поднять " + dead.get() : "")
-                    + (unknown.get() > 0 ? ", LMS не ответила " + unknown.get() : ""));
+                    + (unknown.get() > 0 ? ", LMS не ответила " + unknown.get() : "")
+                    + (busy.get() > 0 ? ", уже проверяются " + busy.get() : "")
+                    + (sessionsHealthy ? "" : " — массовый сбой, файлы сессий не удаляются"));
         };
         for (Long uid : users) {
             boolean queued = runBackground("touch|" + uid, () -> {
@@ -2784,7 +2795,7 @@ public class LmsBot extends TelegramLongPollingBot {
             });
             // Прошлая проверка этого пользователя ещё идёт — его итог не знаем.
             if (!queued) {
-                unknown.incrementAndGet();
+                busy.incrementAndGet();
                 finish.run();
             }
         }
@@ -2794,7 +2805,7 @@ public class LmsBot extends TelegramLongPollingBot {
         long now = System.currentTimeMillis();
         long since = deadSince.computeIfAbsent(uid, k -> now);
         int checks = deadChecks.merge(uid, 1, Integer::sum);
-        if (now - since < DEAD_FORGET_MS || checks < DEAD_MIN_CHECKS || loggingIn(uid)) return;
+        if (now - since < DEAD_FORGET_MS || checks < DEAD_MIN_CHECKS || loggingIn(uid) || !sessionsHealthy) return;
         if (lmsService.forgetDeadSession(uid)) {
             deadSince.remove(uid);
             deadChecks.remove(uid);
