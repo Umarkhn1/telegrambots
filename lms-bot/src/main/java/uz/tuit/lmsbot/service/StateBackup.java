@@ -35,6 +35,12 @@ public class StateBackup {
     private final Path root;
     private final byte[] key;
     private final SecureRandom random = new SecureRandom();
+    /**
+     * Кто удалил свои данные, а копия в Telegram ещё старая: при восстановлении их файлы
+     * пропускаем, иначе стёртое вернулось бы из копии. Чистится после закачки новой копии.
+     */
+    private final java.util.Set<Long> erased = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.regex.Pattern USER_FILE = java.util.regex.Pattern.compile("[a-z]+_(\\d+)\\.json");
 
     public StateBackup(String botToken) {
         String home = System.getProperty("user.home");
@@ -55,7 +61,10 @@ public class StateBackup {
             Path d = root.resolve(dir);
             if (!Files.isDirectory(d)) continue;
             try (Stream<Path> s = Files.list(d)) {
-                s.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().forEach(out::add);
+                // creds_ — пароли старого «Автовхода»: в копию не берём, даже если файл ещё не стёрт.
+                s.filter(p -> p.getFileName().toString().endsWith(".json"))
+                        .filter(p -> !p.getFileName().toString().startsWith("creds_"))
+                        .sorted().forEach(out::add);
             }
         }
         Path students = root.resolve("students.json");
@@ -123,6 +132,34 @@ public class StateBackup {
         return out.toByteArray();
     }
 
+    /** Удаляет с диска все файлы пользователя (сессия, токен, роль, настройки). Возвращает их число. */
+    public int erase(long userId) {
+        erased.add(userId);
+        int n = 0;
+        try {
+            for (Path p : files()) {
+                if (userOf(p.getFileName().toString()) == userId && Files.deleteIfExists(p)) n++;
+            }
+        } catch (IOException ignored) {}
+        return n;
+    }
+
+    public java.util.Set<Long> erasedSnapshot() {
+        return java.util.Set.copyOf(erased);
+    }
+
+    /** Копия без этих пользователей уже закачана — отсеивать их больше незачем. */
+    public void forgetErased(java.util.Set<Long> users) {
+        erased.removeAll(users);
+    }
+
+    /** Id из имени вида cookies_123.json, иначе -1. */
+    private static long userOf(String name) {
+        java.util.regex.Matcher m = USER_FILE.matcher(name);
+        if (!m.matches()) return -1;
+        try { return Long.parseLong(m.group(1)); } catch (NumberFormatException e) { return -1; }
+    }
+
     /** Раскладывает копию по диску. Возвращает число восстановленных файлов. */
     public int unpack(byte[] data) throws Exception {
         if (data.length < MAGIC.length + 12) throw new IOException("backup too short");
@@ -140,6 +177,8 @@ public class StateBackup {
                 boolean allowed = name.equals("students.json")
                         || name.matches("(sessions|settings)/[A-Za-z0-9_.-]+\\.json");
                 if (!allowed || e.isDirectory()) continue;
+                String base = name.substring(name.lastIndexOf('/') + 1);
+                if (base.startsWith("creds_") || erased.contains(userOf(base))) continue;
                 Path target = root.resolve(name).normalize();
                 if (!target.startsWith(root)) continue;
                 Files.createDirectories(target.getParent());

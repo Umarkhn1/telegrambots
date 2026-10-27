@@ -47,18 +47,25 @@ public class LmsService {
 
     /** JWT OneID вошедших пользователей — из него поднимается новая сессия LMS. */
     private final OneIdTokenStore oneIdTokens;
-    /** Логин и пароль тех, кто согласился на автовход. */
-    private final CredentialStore credentials;
-
     public LmsService(AppConfig config) {
         this.config = config;
         String token = config.getBot().getToken();
         this.oneIdTokens = new OneIdTokenStore(sessionDir(), token);
-        this.credentials = new CredentialStore(sessionDir(), token);
+        purgeSavedPasswords();
     }
 
-    public CredentialStore credentials() {
-        return credentials;
+    /**
+     * Раньше по согласию пользователя бот хранил логин и пароль для «Автовхода» (creds_<id>.json).
+     * Функция убрана: пароли не храним вовсе, а оставшиеся с тех пор файлы стираем при запуске.
+     */
+    private void purgeSavedPasswords() {
+        int n = 0;
+        try (java.util.stream.Stream<Path> files = java.nio.file.Files.list(sessionDir())) {
+            for (Path f : (Iterable<Path>) files::iterator) {
+                if (f.getFileName().toString().startsWith("creds_") && java.nio.file.Files.deleteIfExists(f)) n++;
+            }
+        } catch (Exception ignored) {}
+        if (n > 0) System.out.println("🧹 Удалены сохранённые пароли автовхода: " + n);
     }
 
     public String baseUrl() {
@@ -1038,7 +1045,7 @@ public class LmsService {
 
     /**
      * Удаляет cookie и токен OneID пользователя, который сейчас не вошёл: остатки незавершённого входа
-     * или давно умершей сессии. Вошедшего не трогает. Язык и сохранённый «Автовход» остаются.
+     * или давно умершей сессии. Вошедшего не трогает. Язык и настройки остаются.
      */
     public boolean forgetDeadSession(long userId) {
         if (isLoggedIn(userId)) return false;
@@ -1103,8 +1110,6 @@ public class LmsService {
         clients.remove(userId);
         oneIdSessions.remove(userId);
         // Без этого сессия поднялась бы обратно по сохранённому токену.
-        // Сами учётные данные не трогаем: ими управляет меню «Мои аккаунты»,
-        // и выход из одного аккаунта не должен стирать список остальных.
         oneIdTokens.clear(userId);
         invalidateSemesters(userId);
         clearRole(userId);

@@ -221,6 +221,16 @@ public class StudentRegistry {
         return credits > 0 ? Math.round(points * 100.0 / credits) / 100.0 : null;
     }
 
+    /** Убирает пользователя из списка (по его запросу) и сразу сохраняет файл. */
+    public boolean remove(long uid) {
+        boolean had = students.remove(uid) != null;
+        if (had) {
+            saveFile();
+            dirty = true; // копия списка тоже должна обновиться
+        }
+        return had;
+    }
+
     public List<Student> all() {
         return new ArrayList<>(students.values());
     }
