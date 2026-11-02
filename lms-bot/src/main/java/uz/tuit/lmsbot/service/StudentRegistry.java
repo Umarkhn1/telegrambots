@@ -216,7 +216,7 @@ public class StudentRegistry {
         for (StudyPlanSubject s : plan) {
             if (s.getGrade() == null) continue;
             credits += s.getCredits();
-            points += (long) s.getGrade() * s.getCredits();
+            points += (long) StudyPlanSubject.gradePoints(s.getGrade()) * s.getCredits();
         }
         return credits > 0 ? Math.round(points * 100.0 / credits) / 100.0 : null;
     }

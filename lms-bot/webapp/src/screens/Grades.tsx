@@ -1,34 +1,38 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Award, CalendarClock, ChevronDown, Clock3, DoorOpen, GraduationCap, Hash } from 'lucide-react';
+import { ArrowRight, Award, CalendarClock, ChevronDown, Clock3, DoorOpen, GraduationCap, Hash } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SemesterSheet } from '../components/SemesterSheet';
 import { Empty, ErrorState, ListSkeleton, listItem, PageHead, Screen, SemesterChip, Segmented, Skeleton } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
-import { currentPlanSemester, gpa, gpaComment, num } from '../lib/format';
+import { courseOfSemester, currentCourse, currentPlanSemester, gpa, gpaComment, num } from '../lib/format';
 import { useI18n } from '../lib/i18n';
 import { useQuery } from '../lib/query';
 import { haptic } from '../lib/tg';
 import type { StudyPlanSubject } from '../lib/types';
 
-type View = 'plan' | 'exams';
+type View = 'plan' | 'calc' | 'exams';
+type Edits = Record<string, number | null>;
 
 export function Grades() {
   const { t } = useI18n();
   const [view, setView] = useState<View>('plan');
+  // Подставленные оценки живут только здесь: ни LMS, ни настоящий GPA они не трогают.
+  const [edits, setEdits] = useState<Edits>({});
   const { semesterId } = useApp();
   const sem = semesterId ?? 0;
   const plan = useQuery('plan', (f) => api.studyPlan(f));
   const finals = useQuery(sem ? `finals:${sem}` : null, (f) => api.finals(sem, f));
 
   return (
-    <Screen onRefresh={() => (view === 'plan' ? plan.refresh() : finals.refresh())}>
+    <Screen onRefresh={() => (view === 'exams' ? finals.refresh() : plan.refresh())}>
       <PageHead title={t('grades_title')} />
       <Segmented<View>
         value={view}
         onChange={setView}
         options={[
           { value: 'plan', label: t('tab_plan') },
+          { value: 'calc', label: t('tab_calc') },
           { value: 'exams', label: t('tab_exams') },
         ]}
       />
@@ -41,7 +45,7 @@ export function Grades() {
           transition={{ duration: 0.2 }}
           style={{ marginTop: 16 }}
         >
-          {view === 'plan' ? <Plan q={plan} /> : <Exams q={finals} />}
+          {view === 'plan' ? <Plan q={plan} /> : view === 'calc' ? <Calc q={plan} edits={edits} setEdits={setEdits} /> : <Exams q={finals} />}
         </motion.div>
       </AnimatePresence>
     </Screen>
@@ -157,6 +161,111 @@ function Plan({ q }: { q: ReturnType<typeof useQuery<StudyPlanSubject[]>> }) {
             </div>
           );
         })}
+      </div>
+    </>
+  );
+}
+
+/** Подставить оценку можно только вместо двойки или там, где оценки ещё нет. */
+const canEdit = (s: StudyPlanSubject) => s.grade == null || s.grade <= 2;
+
+/**
+ * Расчёт «что, если»: все предметы с 1-го по текущий курс разом. Семестр здесь не выбирается:
+ * GPA накопительный, поэтому оценку меняют только в общем списке.
+ */
+function Calc({ q, edits, setEdits }: { q: ReturnType<typeof useQuery<StudyPlanSubject[]>>; edits: Edits; setEdits: (e: Edits) => void }) {
+  const { t } = useI18n();
+  const profile = useQuery('profile', (f) => api.profile(f));
+  const subjects = q.data ?? [];
+  const course = currentCourse(profile.data?.course, subjects);
+
+  const rows = useMemo(
+    () => subjects
+      .map((s, i) => ({ ...s, id: `${s.semester}:${i}:${s.name}` }))
+      .filter((s) => courseOfSemester(s.semester) <= course),
+    [subjects, course],
+  );
+  const byCourse = useMemo(() => {
+    const m = new Map<number, typeof rows>();
+    for (const s of rows) m.set(courseOfSemester(s.semester), [...(m.get(courseOfSemester(s.semester)) ?? []), s]);
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [rows]);
+
+  if (q.loading || profile.loading) return <><Skeleton h={150} r={18} /><div style={{ marginTop: 14 }}><ListSkeleton rows={5} /></div></>;
+  if (q.error) return <ErrorState error={q.error} onRetry={q.refresh} />;
+  if (!rows.length) return <div className="card"><Empty icon={GraduationCap} title={t('no_plan')} /></div>;
+
+  const gradeOf = (s: (typeof rows)[number]) => (canEdit(s) && s.id in edits ? edits[s.id] : s.grade);
+  const now = gpa(rows, false).value;
+  const will = gpa(rows.map((s) => ({ ...s, grade: gradeOf(s) })), false);
+  const changed = rows.some((s) => gradeOf(s) !== s.grade);
+
+  return (
+    <>
+      <div className="card">
+        <div className="calc-scores">
+          <div>
+            <div className="stat-label" style={{ marginTop: 0 }}>{t('calc_now')}</div>
+            <div className="gpa-value tabular" style={{ fontSize: 30, color: 'var(--text-2)' }}>{now != null ? now.toFixed(2) : '—'}</div>
+          </div>
+          <ArrowRight size={20} className="chev" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="stat-label" style={{ marginTop: 0 }}>{t('calc_will')}</div>
+            <motion.div key={String(will.value)} className="gpa-value tabular" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+              {will.value != null ? will.value.toFixed(2) : '—'}
+            </motion.div>
+          </div>
+        </div>
+        <div className="progress" style={{ marginTop: 16 }}>
+          <motion.div animate={{ width: `${((will.value ?? 0) / 5) * 100}%` }} transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }} />
+        </div>
+        <div className="calc-meta">
+          <span className="row-sub" style={{ marginTop: 0 }}>{t('gpa_credits', { n: will.credits })}</span>
+          {changed && (
+            <button className="btn secondary small" style={{ width: 'auto', height: 34 }} onClick={() => { haptic('selection'); setEdits({}); }}>{t('reset')}</button>
+          )}
+        </div>
+        <div className="row-sub" style={{ marginTop: 6 }}>{rows.some(canEdit) ? t('calc_hint', { n: course }) : t('calc_nothing')}</div>
+      </div>
+
+      <div className="stack" style={{ marginTop: 14 }}>
+        {byCourse.map(([c, list]) => (
+          <div className="list" key={c}>
+            <div className="row" style={{ minHeight: 44 }}>
+              <div className="row-title">{t('calc_course', { n: c })}</div>
+            </div>
+            {list.map((s) => {
+              const value = gradeOf(s);
+              return (
+                <div className="row" key={s.id} style={{ minHeight: 50 }}>
+                  <div className="row-main">
+                    <div className="row-title" style={{ fontWeight: 500, fontSize: 14.5 }}>{s.name}</div>
+                    <div className="row-sub tabular">
+                      {s.credits} {t('credits_short')}
+                      {value !== s.grade && ` · ${t('calc_was', { g: s.grade ?? '—' })}`}
+                    </div>
+                  </div>
+                  {canEdit(s) ? (
+                    <select
+                      className={'grade grade-pick tabular ' + gradeClass(value)}
+                      aria-label={s.name}
+                      value={value ?? ''}
+                      onChange={(e) => {
+                        haptic('selection');
+                        setEdits({ ...edits, [s.id]: e.target.value ? Number(e.target.value) : null });
+                      }}
+                    >
+                      {s.grade == null && <option value="">—</option>}
+                      {[5, 4, 3, 2].map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  ) : (
+                    <span className={'grade tabular ' + gradeClass(s.grade)}>{s.grade}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </>
   );

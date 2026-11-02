@@ -90,6 +90,20 @@ export function currentPlanSemester(subjects: StudyPlanSubject[]): number {
   return sems[sems.length - 1] ?? 0;
 }
 
+/** В курсе два семестра. */
+export const courseOfSemester = (semester: number) => Math.ceil(semester / 2);
+
+/** Текущий курс: из профиля LMS, а если там пусто — по учебному плану. */
+export function currentCourse(profileCourse: string | undefined, subjects: StudyPlanSubject[]): number {
+  const fromProfile = Number(profileCourse?.match(/\d+/)?.[0]);
+  if (fromProfile > 0) return fromProfile;
+  const graded = subjects.filter((s) => s.grade != null).map((s) => s.semester);
+  return courseOfSemester(Math.max(currentPlanSemester(subjects), ...graded));
+}
+
+/** Двойка — незачёт: в сумму баллов идёт нулём, но её кредиты остаются в знаменателе. */
+const gradePoints = (grade: number) => (grade >= 3 ? grade : 0);
+
 export function gpa(subjects: StudyPlanSubject[], withZero: boolean) {
   const current = currentPlanSemester(subjects);
   let credits = 0;
@@ -100,7 +114,7 @@ export function gpa(subjects: StudyPlanSubject[], withZero: boolean) {
     else if (withZero && s.semester === current) g = 0;
     else continue;
     credits += s.credits;
-    points += g * s.credits;
+    points += gradePoints(g) * s.credits;
   }
   return { value: credits ? points / credits : null, credits };
 }

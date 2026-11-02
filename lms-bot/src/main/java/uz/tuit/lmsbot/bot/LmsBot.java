@@ -1911,7 +1911,7 @@ public class LmsBot extends TelegramLongPollingBot {
                     else if (isCurrent && includeCurrentWithZero) gradeForCalc = 0;
                     else continue;
                     totalCredits += s.getCredits();
-                    totalPoints  += (long) gradeForCalc * s.getCredits();
+                    totalPoints  += (long) StudyPlanSubject.gradePoints(gradeForCalc) * s.getCredits();
                 }
             }
 

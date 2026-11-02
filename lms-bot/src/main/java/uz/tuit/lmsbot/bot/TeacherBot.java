@@ -2058,7 +2058,7 @@ public class TeacherBot {
                 block.append(g != null ? bot.gradeIcon(g) : "⬜").append(" ").append(esc(cut(s.getName(), 40)))
                         .append(" · ").append(s.getCredits()).append(" ").append(bot.t(uid, "plan.credits"))
                         .append(g != null ? " · <b>" + g + "</b>" : "").append("\n");
-                if (g != null) { credits += s.getCredits(); points += (long) g * s.getCredits(); }
+                if (g != null) { credits += s.getCredits(); points += (long) StudyPlanSubject.gradePoints(g) * s.getCredits(); }
             }
             if (block.length() > 0) sb.append("<blockquote>").append(block.toString().trim()).append("</blockquote>");
             if (credits > 0) sb.append("\n📊 GPA: <b>").append(String.format(Locale.ROOT, "%.2f", points * 1.0 / credits)).append("</b>");

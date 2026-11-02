@@ -1062,6 +1062,41 @@ svg {
 .grade.g2 { background: var(--danger-soft);  color: var(--danger); }
 .grade.g0 { background: var(--surface-2);    color: var(--text-3); }
 
+/* Оценка, которую можно подставить в расчёте GPA: пунктир отличает её от настоящей. */
+select.grade-pick {
+  width: 44px;
+  padding: 0;
+  border: 1.5px dashed currentColor;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select.grade-pick option {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.calc-scores {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.calc-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  margin-top: 10px;
+}
+
 .back-head {
   display: flex;
   align-items: center;
