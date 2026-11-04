@@ -122,7 +122,7 @@ export function TeacherHome() {
         ) : day.list.length ? (
           <div className="list">
             {day.list.map((l, i) => (
-              <LessonRow key={l.ts + l.subject + l.stream} l={l} index={i} onClick={l.courseId ? () => { haptic('light'); setRoll(l); } : undefined} />
+              <LessonRow key={l.ts + l.subject + l.stream} l={l} index={i} rollCall onClick={l.courseId ? () => { haptic('light'); setRoll(l); } : undefined} />
             ))}
           </div>
         ) : (

@@ -7,12 +7,41 @@
     <meta name="color-scheme" content="light dark" />
     <title>TUIT LMS</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="preload" as="image" href="./tuit-emblem-light.png" />
-    <link rel="preload" as="image" href="./tuit-emblem.png" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      /* Тема до первого кадра — как решает App.tsx: выбор пользователя, тема Telegram, тема системы. */
+      (function () {
+        var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+        try {
+          var m = /tgWebAppThemeParams=([^&]*)/.exec(location.hash);
+          var bg = m && JSON.parse(decodeURIComponent(m[1])).bg_color;
+          if (bg && /^#[0-9a-f]{6}$/i.test(bg)) {
+            var r = parseInt(bg.slice(1, 3), 16), g = parseInt(bg.slice(3, 5), 16), b = parseInt(bg.slice(5, 7), 16);
+            dark = Math.sqrt(0.299 * r * r + 0.587 * g * g + 0.114 * b * b) < 120;
+          }
+          var pref = localStorage.getItem('theme');
+          if (pref === 'dark' || pref === 'light') dark = pref === 'dark';
+        } catch (e) {}
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
+    <!-- Эмблемы встроены в страницу (см. vite.config.ts): на загрузочном экране им нечего ждать. -->
+    <style>:root{--emblem-light:url(__EMBLEM_LIGHT__);--emblem-dark:url(__EMBLEM_DARK__)}</style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Загрузочный экран до старта React: та же разметка, что в App.tsx. -->
+      <div class="app">
+        <div class="screen" style="display:grid;place-items:center">
+          <div style="display:grid;justify-items:center;gap:14px">
+            <span class="emblem" role="img" aria-label="TUIT"></span>
+            <div class="splash-title">TUIT LMS</div>
+            <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- После разметки: пока этот внешний скрипт грузится, загрузочный экран уже виден. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -274,11 +274,5 @@ export function uniqueStreams(list: { stream: string }[]): string[] {
 
 /** Эмблема ТАТУ: в светлой теме — со светлым кольцом, в тёмной — с тёмно-синим. */
 export function Emblem({ small }: { small?: boolean }) {
-  const cls = 'emblem' + (small ? ' small' : '');
-  return (
-    <>
-      <img src="./tuit-emblem-light.png" alt="TUIT" className={cls + ' on-light'} />
-      <img src="./tuit-emblem.png" alt="" aria-hidden className={cls + ' on-dark'} />
-    </>
-  );
+  return <span className={'emblem' + (small ? ' small' : '')} role="img" aria-label="TUIT" />;
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Course, Me, Semester, TCourse, TGroup, TSubject } from './types';
+import type { Course, Lesson, Me, Semester, TCourse, TGroup, TSubject } from './types';
 
 export type Tab = 'home' | 'courses' | 'schedule' | 'grades' | 'grading' | 'profile';
 export const TABS: Tab[] = ['home', 'courses', 'schedule', 'grades', 'profile'];
@@ -10,7 +10,7 @@ export const tabsFor = (me: Me | null): Tab[] => (me?.role === 'teacher' ? TEACH
 
 /** Экраны, которые открываются поверх вкладки и закрываются «Назад». */
 export type Route =
-  | { name: 'course'; course: Course }
+  | { name: 'course'; course: Course; lesson?: Lesson }
   | { name: 'deadlines' }
   | { name: 'admin' }
   | { name: 'tcourse'; course: TCourse; column?: number }

@@ -5,6 +5,7 @@ import { ActivitySheet } from '../components/ActivitySheet';
 import { Empty, ErrorState, ListSkeleton, Screen, Section, Segmented } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
+import { num } from '../lib/format';
 import { useI18n, type Key } from '../lib/i18n';
 import { useQuery } from '../lib/query';
 import type { DeadlineItem } from '../lib/types';
@@ -21,6 +22,8 @@ export function Deadlines({ onBack }: { onBack: () => void }) {
 
   const now = Date.now();
   const submitted = (d: DeadlineItem) => d.status === 'uploaded' || d.status === 'graded';
+  const graded = (d: DeadlineItem) => submitted(d) && (num(d.earned) ?? 0) > 0;
+  const newestFirst = (a: DeadlineItem, b: DeadlineItem) => (b.deadlineTs ?? 0) - (a.deadlineTs ?? 0);
   const all = q.data ?? [];
   const items = mode === 'all' ? all : all.filter((d) => (mode === 'done') === submitted(d));
   // Несданные — по срочности (просроченные отдельно), сданные — своей группой.
@@ -31,7 +34,8 @@ export function Deadlines({ onBack }: { onBack: () => void }) {
     { key: 'group_24h', list: notDone.filter((d) => left(d) >= 0 && left(d) < DAY) },
     { key: 'group_3d', list: notDone.filter((d) => left(d) >= DAY && left(d) < 3 * DAY) },
     { key: 'group_later', list: notDone.filter((d) => left(d) >= 3 * DAY) },
-    { key: 'group_done', list: items.filter(submitted) },
+    { key: 'group_graded', list: items.filter(graded).sort(newestFirst) },
+    { key: 'group_done', list: items.filter((d) => submitted(d) && !graded(d)).sort(newestFirst) },
   ];
 
   let n = 0;

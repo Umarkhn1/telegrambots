@@ -1,24 +1,38 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarX, ChevronLeft, ChevronRight, CircleCheck, FolderOpen, ListChecks, NotebookText, Paperclip } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { CalendarX, ChevronLeft, ChevronRight, CircleCheck, FolderOpen, ListChecks, MapPin, NotebookText, Paperclip, UserRound, Users } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityRow } from '../components/ActivityRow';
 import { ActivitySheet } from '../components/ActivitySheet';
 import { FileRow } from '../components/FileRow';
+import { KIND } from '../components/LessonRow';
 import { Sheet } from '../components/Sheet';
 import { Chips, Empty, StreamChip, ErrorState, ListSkeleton, listItem, Screen, Section, Segmented, Skeleton } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
-import { num, tabLabel } from '../lib/format';
-import { useI18n } from '../lib/i18n';
+import { addDays, isoDate, num, parseISODate, planDateIso, tabKind, tabLabel } from '../lib/format';
+import { dayMonth, useI18n } from '../lib/i18n';
 import { useQuery } from '../lib/query';
-import type { Activity, CalendarEntry, Course } from '../lib/types';
+import type { Activity, CalendarEntry, CalendarTab, Course, Lesson } from '../lib/types';
 
 type Tab = 'tasks' | 'attendance' | 'topics';
 type Filter = 'all' | 'todo' | 'done' | 'missed';
 
-export function CourseDetail({ course, onBack }: { course: Course; onBack: () => void }) {
+const hasDate = (tab: CalendarTab, iso: string) => tab.entries.some((e) => planDateIso(e.date) === iso);
+
+/** Вкладка плана с нужным днём: сначала того же вида занятий, что и пара. */
+function tabFor(tabs: CalendarTab[], iso: string, kind?: Lesson['kind']) {
+  return (
+    tabs.find((x) => tabKind(x.key) === kind && hasDate(x, iso)) ??
+    tabs.find((x) => hasDate(x, iso)) ??
+    tabs.find((x) => tabKind(x.key) === kind) ??
+    tabs[0]
+  );
+}
+
+export function CourseDetail({ course, lesson, onBack }: { course: Course; lesson?: Lesson; onBack: () => void }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<Tab>('tasks');
+  // С пары студент приходит к плану: там её тема и файлы.
+  const [tab, setTab] = useState<Tab>(lesson ? 'topics' : 'tasks');
   const acts = useQuery(`act:${course.id}`, (f) => api.activities(course.id, f));
 
   const refresh = () => acts.refresh();
@@ -41,6 +55,8 @@ export function CourseDetail({ course, onBack }: { course: Course; onBack: () =>
           ))}
         </div>
       )}
+
+      {lesson && <LessonCard course={course} lesson={lesson} />}
 
       <Summary data={acts.data} loading={acts.loading} />
 
@@ -66,10 +82,61 @@ export function CourseDetail({ course, onBack }: { course: Course; onBack: () =>
         >
           {tab === 'tasks' && <Tasks course={course} q={acts} />}
           {tab === 'attendance' && <Attendance course={course} />}
-          {tab === 'topics' && <Topics course={course} />}
+          {tab === 'topics' && <Topics course={course} lesson={lesson} />}
         </motion.div>
       </AnimatePresence>
     </Screen>
+  );
+}
+
+/** Занятие, с которого пришёл студент: тема, преподаватель, группа, аудитория и файлы этой темы из плана. */
+function LessonCard({ course, lesson }: { course: Course; lesson: Lesson }) {
+  const { t, lang } = useI18n();
+  const plan = useQuery(`cal:${course.id}`, (f) => api.calendar(course.id, f));
+  const profile = useQuery('profile', (f) => api.profile(f));
+  const tabs = plan.data ?? [];
+  const entry = tabs.length ? tabFor(tabs, lesson.date, lesson.kind).entries.find((e) => planDateIso(e.date) === lesson.date) : undefined;
+  const now = new Date();
+  const day =
+    lesson.date === isoDate(now) ? t('today')
+    : lesson.date === isoDate(addDays(now, 1)) ? t('tomorrow')
+    : dayMonth(parseISODate(lesson.date), lang);
+  const kind = KIND[lesson.kind] ?? KIND.lecture;
+  const facts = [
+    { icon: NotebookText, label: t('topic'), value: lesson.topic || entry?.topic },
+    { icon: UserRound, label: t('teacher'), value: lesson.teacher },
+    { icon: Users, label: t('group'), value: lesson.stream || profile.data?.group },
+    { icon: MapPin, label: t('lesson_room'), value: lesson.room },
+  ].filter((f) => f.value);
+
+  return (
+    <div className="card lesson-card" style={{ marginTop: 18 }}>
+      <div className="meta">
+        <span className="row-title tabular">{day}, {lesson.time}</span>
+        <span className={'badge ' + kind.tone} style={{ height: 22 }}>{t(kind.label)}</span>
+      </div>
+      {facts.map((f) => (
+        <div className="lesson-fact" key={f.label}>
+          <f.icon size={16} />
+          <div className="row-main">
+            <div className="row-sub" style={{ marginTop: 0 }}>{f.label}</div>
+            <div className="row-title wrap" style={{ fontWeight: 550, fontSize: 14.5 }}>{f.value}</div>
+          </div>
+        </div>
+      ))}
+      <div className="section-title" style={{ margin: '16px 0 8px' }}>{t('materials')}</div>
+      {plan.loading ? (
+        <Skeleton h={44} r={12} />
+      ) : entry?.files.length ? (
+        <div className="list" style={{ boxShadow: 'none', background: 'var(--surface-2)' }}>
+          {entry.files.map((f, i) => (
+            <FileRow key={f.url + i} name={f.name} url={f.url} type={f.type} />
+          ))}
+        </div>
+      ) : (
+        <div className="row-sub">{t('no_files')}</div>
+      )}
+    </div>
   );
 }
 
@@ -191,21 +258,37 @@ function Attendance({ course }: { course: Course }) {
   );
 }
 
-function Topics({ course }: { course: Course }) {
-  const { t } = useI18n();
+function Topics({ course, lesson }: { course: Course; lesson?: Lesson }) {
+  const { t, lang } = useI18n();
   const q = useQuery(`cal:${course.id}`, (f) => api.calendar(course.id, f));
   const [key, setKey] = useState<string | null>(null);
   const [entry, setEntry] = useState<CalendarEntry | null>(null);
   const lastEntry = useRef<CalendarEntry | null>(null);
+  const todayEl = useRef<HTMLElement | null>(null);
   if (entry) lastEntry.current = entry;
   const shownEntry = lastEntry.current;
 
+  const tabs = q.data ?? [];
+  const today = isoDate(new Date());
+  const active = tabs.find((x) => x.key === key) ?? (tabs.length ? tabFor(tabs, lesson?.date ?? today, lesson?.kind) : undefined);
+  const dates = active?.entries.map((e) => planDateIso(e.date)) ?? [];
+  // Сегодня занятия нет — черта «Сегодня» встаёт там, где сегодняшний день был бы в плане.
+  const next = dates.findIndex((d) => d != null && d > today);
+  const lineAt = dates.includes(today) || !dates.some(Boolean) ? -1 : next >= 0 ? next : dates.length;
+  const todayLine = (
+    <div className="plan-today-line" ref={(el) => { todayEl.current = el; }}>
+      {t('today')}, {dayMonth(new Date(), lang)}
+    </div>
+  );
+
+  useEffect(() => {
+    // С пары студент пришёл к её карточке наверху экрана: план не прокручиваем.
+    if (!lesson) todayEl.current?.scrollIntoView({ block: 'center' });
+  }, [active?.key, lesson]);
+
   if (q.loading) return <ListSkeleton rows={5} />;
   if (q.error) return <ErrorState error={q.error} onRetry={q.refresh} />;
-  const tabs = q.data ?? [];
-  if (!tabs.length) return <div className="card"><Empty icon={NotebookText} title={t('no_topics')} /></div>;
-
-  const active = tabs.find((x) => x.key === key) ?? tabs[0];
+  if (!active) return <div className="card"><Empty icon={NotebookText} title={t('no_topics')} /></div>;
 
   return (
     <>
@@ -219,32 +302,40 @@ function Topics({ course }: { course: Course }) {
       )}
       <Section first>
         <div className="list">
-          {active.entries.map((e, i) => (
-            <motion.button
-              key={active.key + e.number + i}
-              className="row with-icon pressable"
-              style={{ alignItems: 'flex-start' }}
-              variants={listItem}
-              initial="hidden"
-              animate="show"
-              custom={i}
-              onClick={() => setEntry(e)}
-            >
-              <span className="tile neutral tabular" style={{ fontWeight: 700, fontSize: 14 }}>{e.number}</span>
-              <div className="row-main">
-                <div className="row-title wrap">{e.topic}</div>
-                <div className="meta" style={{ marginTop: 5 }}>
-                  {e.date && <span className="tabular">{e.date}</span>}
-                  {e.files.length > 0 && (
-                    <span>
-                      <Paperclip size={13} /> {t('files', { n: e.files.length })}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <ChevronRight size={18} className="chev" style={{ alignSelf: 'center' }} />
-            </motion.button>
-          ))}
+          {active.entries.map((e, i) => {
+            const isToday = dates[i] === today;
+            return (
+              <Fragment key={active.key + e.number + i}>
+                {i === lineAt && todayLine}
+                <motion.button
+                  className={'row with-icon pressable' + (isToday ? ' plan-today' : '')}
+                  ref={isToday ? (el: HTMLButtonElement | null) => { todayEl.current = el; } : undefined}
+                  style={{ alignItems: 'flex-start' }}
+                  variants={listItem}
+                  initial="hidden"
+                  animate="show"
+                  custom={i}
+                  onClick={() => setEntry(e)}
+                >
+                  <span className="tile neutral tabular" style={{ fontWeight: 700, fontSize: 14 }}>{e.number}</span>
+                  <div className="row-main">
+                    <div className="row-title wrap">{e.topic}</div>
+                    <div className="meta" style={{ marginTop: 5 }}>
+                      {isToday && <span className="badge accent" style={{ height: 22 }}>{t('today')}</span>}
+                      {e.date && <span className="tabular">{e.date}</span>}
+                      {e.files.length > 0 && (
+                        <span>
+                          <Paperclip size={13} /> {t('files', { n: e.files.length })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="chev" style={{ alignSelf: 'center' }} />
+                </motion.button>
+              </Fragment>
+            );
+          })}
+          {lineAt === dates.length && todayLine}
         </div>
       </Section>
 

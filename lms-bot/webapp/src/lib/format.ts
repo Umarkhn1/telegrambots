@@ -81,6 +81,23 @@ export function num(s: string | null | undefined): number | null {
   return m ? Number(m[0]) : null;
 }
 
+/** Дата из плана предмета (ГГГГ-ММ-ДД или ДД.ММ.ГГГГ) → ГГГГ-ММ-ДД, как в расписании. */
+export function planDateIso(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const p = (n: string) => n.padStart(2, '0');
+  const ymd = text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymd) return `${ymd[1]}-${p(ymd[2])}-${p(ymd[3])}`;
+  const dmy = text.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+  return dmy ? `${dmy[3]}-${p(dmy[2])}-${p(dmy[1])}` : null;
+}
+
+/** Вкладка плана → вид занятия: то же правило, что SemesterSchedule.tabKind на сервере. */
+export function tabKind(key: string): 'lecture' | 'practice' | 'lab' {
+  const k = key.toLowerCase();
+  if (k.includes('lec') || k.includes('лек') || k.includes('ruza') || k.includes('руза')) return 'lecture';
+  return k.includes('lab') ? 'lab' : 'practice';
+}
+
 /* ─── GPA ─── */
 
 /** Текущий семестр — первый, где есть предмет без оценки (как в боте). */

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Award, CalendarClock, ChevronDown, Clock3, DoorOpen, GraduationCap, Hash } from 'lucide-react';
+import { ArrowRight, Award, CalendarClock, ChevronDown, Clock3, DoorOpen, GraduationCap, Hash, Trophy } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { SemesterSheet } from '../components/SemesterSheet';
 import { Empty, ErrorState, ListSkeleton, listItem, PageHead, Screen, SemesterChip, Segmented, Skeleton } from '../components/ui';
@@ -59,6 +59,7 @@ function gradeClass(g: number | null) {
 function Plan({ q }: { q: ReturnType<typeof useQuery<StudyPlanSubject[]>> }) {
   const { t } = useI18n();
   const [withZero, setWithZero] = useState(false);
+  const rank = useQuery('gpa-rank', (f) => api.gpaRank(f));
   const subjects = q.data ?? [];
   const current = useMemo(() => currentPlanSemester(subjects), [subjects]);
   // null — пользователь ещё ничего не раскрывал: открыт текущий семестр.
@@ -100,6 +101,12 @@ function Plan({ q }: { q: ReturnType<typeof useQuery<StudyPlanSubject[]>> }) {
             <div className="row-sub">{t('gpa_credits', { n: res.credits })}</div>
           </div>
         </div>
+        {!withZero && rank.data?.rank != null && (
+          <div className="row-sub gpa-rank" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontWeight: 600 }}>
+            <Trophy size={14} style={{ flexShrink: 0 }} />
+            {t('gpa_rank', { n: rank.data.rank })}
+          </div>
+        )}
         <div className="progress" style={{ marginTop: 16 }}>
           <motion.div animate={{ width: `${((res.value ?? 0) / 5) * 100}%` }} transition={{ duration: 0.7, ease: [0.2, 0.8, 0.2, 1] }} />
         </div>
@@ -208,8 +215,8 @@ function Calc({ q, edits, setEdits }: { q: ReturnType<typeof useQuery<StudyPlanS
             <div className="stat-label" style={{ marginTop: 0 }}>{t('calc_now')}</div>
             <div className="gpa-value tabular" style={{ fontSize: 30, color: 'var(--text-2)' }}>{now != null ? now.toFixed(2) : '—'}</div>
           </div>
-          <ArrowRight size={20} className="chev" style={{ flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <ArrowRight size={20} className="chev" />
+          <div>
             <div className="stat-label" style={{ marginTop: 0 }}>{t('calc_will')}</div>
             <motion.div key={String(will.value)} className="gpa-value tabular" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
               {will.value != null ? will.value.toFixed(2) : '—'}

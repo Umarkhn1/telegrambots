@@ -890,7 +890,8 @@ svg {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center top;
+  /* Фото из LMS вертикальное: кадр чуть ниже верха, чтобы подбородок и шея не обрезались. */
+  object-position: center 35%;
 }
 
 /* Фото студента целиком — в пропорциях оригинала, без обрезки кругом. */
@@ -1082,10 +1083,49 @@ select.grade-pick option {
   background: var(--surface);
 }
 
+/* «Сейчас → Будет» симметрично относительно стрелки по центру карточки. */
 .calc-scores {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+/* Сегодняшний день в плане предмета. */
+.row.plan-today { background: var(--accent-soft); }
+.row.plan-today .tile { background: var(--accent); color: var(--on-accent); }
+
+.plan-today-line {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.plan-today-line::after {
+  content: '';
+  flex: 1;
+  height: 1.5px;
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+/* Карточка занятия: тема, преподаватель, группа, аудитория. */
+.lesson-fact {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.lesson-fact > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-3);
 }
 
 .calc-meta {
@@ -1184,14 +1224,13 @@ select.grade-pick option {
   width: 96px;
   height: 96px;
   border-radius: 50%;
+  background: var(--emblem-light) center / cover no-repeat;
   box-shadow: 0 10px 28px rgba(27, 39, 51, 0.12), 0 0 0 1px rgba(27, 39, 51, 0.06);
 }
 
 /* Светлая тема — эмблема со светлым кольцом, тёмная — с тёмно-синим. */
-.emblem.on-dark { display: none; }
-:root[data-theme='dark'] .emblem.on-light { display: none; }
-:root[data-theme='dark'] .emblem.on-dark {
-  display: block;
+:root[data-theme='dark'] .emblem {
+  background-image: var(--emblem-dark);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 

@@ -3,7 +3,7 @@ import { CalendarCheck, ChevronRight, ListChecks, TrendingUp, UserX, type Lucide
 import { useMemo, useState } from 'react';
 import { ActivityRow } from '../components/ActivityRow';
 import { ActivitySheet } from '../components/ActivitySheet';
-import { LessonRow, PAIR_MS } from '../components/LessonRow';
+import { LessonRow, PAIR_MS, useOpenLesson } from '../components/LessonRow';
 import { Empty, ListSkeleton, PageHead, Screen, Section, Skeleton } from '../components/ui';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
@@ -35,6 +35,7 @@ export function Home() {
   const { me, semesterId, setTab, push } = useApp();
   const { t, lang } = useI18n();
   const [openAct, setOpenAct] = useState<DeadlineItem | null>(null);
+  const openLesson = useOpenLesson();
   const sem = semesterId ?? 0;
 
   const schedule = useQuery(sem ? `sched:${sem}` : null, (f) => api.schedule(sem, f));
@@ -99,7 +100,7 @@ export function Home() {
         ) : day.list.length ? (
           <div className="list">
             {day.list.map((l, i) => (
-              <LessonRow key={l.ts + l.subject} l={l} index={i} />
+              <LessonRow key={l.ts + l.subject} l={l} index={i} onClick={openLesson(l)} />
             ))}
           </div>
         ) : (

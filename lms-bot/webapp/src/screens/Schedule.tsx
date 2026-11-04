@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, type PanInfo } from 'framer-motion';
 import { CalendarDays, CalendarOff, ChevronLeft, ChevronRight, LocateFixed } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { LessonRow } from '../components/LessonRow';
+import { LessonRow, useOpenLesson } from '../components/LessonRow';
 import { SemesterSheet } from '../components/SemesterSheet';
 import { Empty, ErrorState, ListSkeleton, PageHead, Screen, SemesterChip, Skeleton } from '../components/ui';
 import { api } from '../lib/api';
@@ -19,6 +19,7 @@ export function Schedule() {
   const { semesterId, me } = useApp();
   const teacher = me.role === 'teacher';
   const [roll, setRoll] = useState<Lesson | null>(null);
+  const openLesson = useOpenLesson();
   const { t, lang } = useI18n();
   const [semOpen, setSemOpen] = useState(false);
   const sem = semesterId ?? 0;
@@ -201,7 +202,13 @@ export function Schedule() {
                 {lessons.length ? (
                   <div className="list">
                     {lessons.map((l, i) => (
-                      <LessonRow key={l.ts + l.subject} l={l} index={i} onClick={teacher && l.courseId ? () => { haptic('light'); setRoll(l); } : undefined} />
+                      <LessonRow
+                        key={l.ts + l.subject}
+                        l={l}
+                        index={i}
+                        rollCall={teacher}
+                        onClick={!teacher ? openLesson(l) : l.courseId ? () => { haptic('light'); setRoll(l); } : undefined}
+                      />
                     ))}
                   </div>
                 ) : (

@@ -1,21 +1,47 @@
 import { motion } from 'framer-motion';
-import { ClipboardCheck, Flag, MapPin, NotebookText, UserRound } from 'lucide-react';
+import { ChevronRight, ClipboardCheck, Flag, MapPin, NotebookText, UserRound } from 'lucide-react';
+import { api } from '../lib/api';
+import { useApp } from '../lib/app';
 import { useI18n, type Key } from '../lib/i18n';
+import { useQuery } from '../lib/query';
+import { haptic } from '../lib/tg';
 import { useTT } from '../lib/ti18n';
-import type { Lesson } from '../lib/types';
+import type { Course, Lesson } from '../lib/types';
 import { listItem, StreamChip } from './ui';
 
 /** Пара в ТУИТ идёт 80 минут — по этому считаем «сейчас идёт». */
 export const PAIR_MS = 80 * 60 * 1000;
 
-const KIND: Record<Lesson['kind'], { label: Key; tone: string }> = {
+export const KIND: Record<Lesson['kind'], { label: Key; tone: string }> = {
   lecture: { label: 'lecture', tone: 'accent' },
   practice: { label: 'practice', tone: 'violet' },
   lab: { label: 'laboratory', tone: 'warning' },
 };
 
-/** onClick — преподавателю: тап по паре открывает перекличку. */
-export function LessonRow({ l, index, now = Date.now(), onClick }: { l: Lesson; index: number; now?: number; onClick?: () => void }) {
+/** Тап по паре у студента: открыть предмет с этим занятием. undefined — предмет пары неизвестен. */
+export function useOpenLesson() {
+  const { semesterId, push } = useApp();
+  const sem = semesterId ?? 0;
+  const courses = useQuery(sem ? `courses:${sem}` : null, (f) => api.courses(sem, f));
+  return (l: Lesson) => {
+    const id = l.courseId;
+    if (id == null) return undefined;
+    const course: Course = courses.data?.find((c) => c.id === id) ?? {
+      id,
+      subject: l.subject,
+      attendance: 0,
+      failed: false,
+      teachers: l.teacher ? [{ name: l.teacher, stream: l.stream ?? '' }] : [],
+    };
+    return () => {
+      haptic('light');
+      push({ name: 'course', course, lesson: l });
+    };
+  };
+}
+
+/** onClick — что делает тап по паре; rollCall — преподавателю: тап открывает перекличку. */
+export function LessonRow({ l, index, now = Date.now(), onClick, rollCall }: { l: Lesson; index: number; now?: number; onClick?: () => void; rollCall?: boolean }) {
   const { t } = useI18n();
   const tt = useTT();
   const kind = KIND[l.kind] ?? KIND.lecture;
@@ -44,7 +70,7 @@ export function LessonRow({ l, index, now = Date.now(), onClick }: { l: Lesson; 
           <span className={'badge ' + kind.tone} style={{ height: 22 }}>{t(kind.label)}</span>
           {l.stream && <StreamChip stream={l.stream} />}
           {live && <span className="badge success" style={{ height: 22 }}>{t('now')}</span>}
-          {onClick && (
+          {onClick && rollCall && (
             <span className="badge accent" style={{ height: 22 }}>
               <ClipboardCheck size={12} /> {tt('roll_call')}
             </span>
@@ -75,6 +101,7 @@ export function LessonRow({ l, index, now = Date.now(), onClick }: { l: Lesson; 
           </div>
         )}
       </div>
+      {onClick && !rollCall && <ChevronRight size={18} className="chev" style={{ alignSelf: 'center', flexShrink: 0 }} />}
     </motion.div>
   );
 }

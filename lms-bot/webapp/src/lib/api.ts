@@ -109,6 +109,7 @@ export const api = {
   schedule: (sem: number, fresh?: boolean) => get<ScheduleResponse>(`/api/schedule?semester=${sem}`, fresh),
   deadlines: (sem: number, fresh?: boolean) => get<DeadlineItem[]>(`/api/deadlines?semester=${sem}`, fresh),
   studyPlan: (fresh?: boolean) => get<StudyPlanSubject[]>('/api/study-plan', fresh),
+  gpaRank: (fresh?: boolean) => get<{ rank: number | null }>('/api/gpa-rank', fresh),
   finals: (sem: number, fresh?: boolean) => get<FinalExam[]>(`/api/finals?semester=${sem}`, fresh),
   profile: (fresh?: boolean) => get<StudentInfo>('/api/profile', fresh),
   photo: () => get<{ dataUrl: string | null }>('/api/profile/photo'),

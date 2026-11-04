@@ -84,14 +84,20 @@ public class LmsBot extends TelegramLongPollingBot {
     /** За сколько минут до первой пары присылать сводку на день. */
     private static final int DAY_DIGEST_BEFORE_MIN = 60;
 
-    /** Как часто проверять новые НБ. */
+    /**
+     * Как часто проверять новые НБ: это один лёгкий запрос. Планировщик тикает раз в минуту,
+     * поэтому чуть меньше минуты — иначе из-за миллисекунд проверка срывалась бы на следующий тик.
+     */
     private final Map<Long, Long> lastNbCheckTs = new ConcurrentHashMap<>();
-    private static final long NB_CHECK_MS = 15L * 60 * 1000;
+    private static final long NB_CHECK_MS = 55L * 1000;
 
     /** Срочный дедлайн — осталось не больше 2 дней. */
     private static final long URGENT_DEADLINE_WINDOW_MS = 2L * 24 * 60 * 60 * 1000;
-    /** Как часто обходить предметы в поисках срочных дедлайнов. */
-    private static final long URGENT_SCAN_MS = 15L * 60 * 1000;
+    /**
+     * Как часто обходить страницы предметов: новые оценки и срочные дедлайны. LMS не сообщает
+     * об оценках сама, а дешёвого запроса с баллами у неё нет, поэтому это по странице на предмет.
+     */
+    private static final long URGENT_SCAN_MS = 3L * 60 * 1000;
     private final Map<Long, Long> lastUrgentScanTs = new ConcurrentHashMap<>();
 
     private static class PendingUpload {
@@ -123,7 +129,7 @@ public class LmsBot extends TelegramLongPollingBot {
 
     /** Отправленные разовые напоминания: ключ → когда отправлено (старые чистит pruneMemory). */
     private final Map<Long, Map<String, Long>> sentReminders = new ConcurrentHashMap<>();
-    private final Map<Long, Map<Integer, Integer>> lastNbByCourse = new ConcurrentHashMap<>();
+    private final SeenStore seenStore = new SeenStore();
     private final Map<Long, Map<String, Integer>> deadlineIntervalsMin = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Long>> lastDeadlineNotifyTs = new ConcurrentHashMap<>();
     private final Map<Long, Long> lastDeadlinesListNotifyTs = new ConcurrentHashMap<>();
@@ -1217,7 +1223,7 @@ public class LmsBot extends TelegramLongPollingBot {
         pendingFiles.remove(userId);
         semesterSchedule.invalidate(userId);
         lastNbCheckTs.remove(userId);
-        lastNbByCourse.remove(userId);
+        seenStore.forget(userId);
         lastUrgentScanTs.remove(userId);
         sentReminders.remove(userId);
         lastDeadlineNotifyTs.remove(userId);
@@ -2885,17 +2891,24 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void nbCheckUser(long userId, long chatId) {
-            int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
+            // Всегда текущий семестр: пользователь мог листать в боте прошлый, а НБ ставят в текущем.
+            int semesterId = getDefaultSemesterId(userId);
             if (semesterId <= 0) return;
             List<Course> courses = lmsService.getMyCourses(userId, semesterId);
-            if (courses == null || courses.isEmpty()) return;
-            Map<Integer, Integer> prev = lastNbByCourse.computeIfAbsent(userId, k -> new ConcurrentHashMap<>());
+            if (courses == null || courses.isEmpty() || !lmsService.isLoggedIn(userId)) return;
+            SeenStore.Seen seen = seenStore.get(userId);
+            boolean changed = false;
             for (Course c : courses) {
                 int nb = c.getAttendance();
-                Integer old = prev.put(c.getId(), nb);
+                Integer old;
+                synchronized (seen) {
+                    old = seen.nb.put(String.valueOf(c.getId()), nb);
+                }
+                if (old == null || old != nb) changed = true;
                 if (old == null || nb <= old) continue;
                 String key = "nb|" + c.getId() + "|" + nb;
                 if (!markOnce(userId, key)) continue;
+                System.out.println("🔴 Новый НБ u=" + userId);
                 send(chatId, tr(userId,
                         "🔴 <b>Новый пропуск (НБ)</b>\n\n<blockquote>"
                                 + "📖 Предмет: <b>" + esc(c.getSubject()) + "</b>\n"
@@ -2912,6 +2925,66 @@ public class LmsBot extends TelegramLongPollingBot {
                         markup(List.of(List.of(inlineBtn(tr(userId, "📊 Посещаемость предмета", "📊 Fan davomati", "📊 Фан давомати", "📊 Subject attendance"),
                                 "nbgo_" + c.getId() + "_" + semesterId)))));
             }
+            if (changed) seenStore.save(userId);
+    }
+
+    /** Новые баллы по заданиям предмета: страница уже загружена обходом дедлайнов. */
+    private void notifyNewGrades(long userId, long chatId, Course c, CourseSummary cs) {
+        if (!lmsService.isLoggedIn(userId)) return;
+        Map<String, String> current = new LinkedHashMap<>();
+        Map<String, Activity> byKey = new HashMap<>();
+        for (Activity a : cs.getActivities()) {
+            String key = SeenStore.uniqueKey(current, a.getType() + "|" + a.getTask());
+            current.put(key, a.getEarnedScore());
+            byKey.put(key, a);
+        }
+        for (SeenStore.Change ch : seenStore.apply(userId, String.valueOf(c.getId()), current)) {
+            Activity a = byKey.get(ch.key());
+            String total = cs.getEarned() != null && cs.getMaxScore() != null ? cs.getEarned() + "/" + cs.getMaxScore() : null;
+            sendGradeNotice(userId, chatId, c.getSubject(), a.getTask(), a.getEarnedScore(), a.getMaxScore(), ch.was(), total, c.getId());
+        }
+    }
+
+    /** Баллы итоговых экзаменов: отдельный лёгкий запрос. */
+    private void notifyNewFinals(long userId, long chatId, int semesterId) {
+        if (!lmsService.isLoggedIn(userId)) return;
+        List<FinalExam> finals = lmsService.getFinals(userId, semesterId);
+        if (finals == null || finals.isEmpty()) return;
+        Map<String, String> current = new LinkedHashMap<>();
+        Map<String, FinalExam> byKey = new HashMap<>();
+        for (FinalExam e : finals) {
+            String key = SeenStore.uniqueKey(current, e.getSubject() + "|" + e.getStream());
+            current.put(key, e.getGrade());
+            byKey.put(key, e);
+        }
+        String task = tr(userId, "Итоговый экзамен", "Yakuniy imtihon", "Якуний имтиҳон", "Final exam");
+        for (SeenStore.Change ch : seenStore.apply(userId, "finals:" + semesterId, current)) {
+            FinalExam e = byKey.get(ch.key());
+            sendGradeNotice(userId, chatId, e.getSubject(), task, e.getGrade(), null, ch.was(), null, null);
+        }
+    }
+
+    private void sendGradeNotice(long userId, long chatId, String subject, String task, String score, String max,
+                                 String was, String total, Integer courseId) {
+        System.out.println("🎓 Новая оценка u=" + userId);
+        String s = esc(subject), k = esc(task), w = esc(was), sum = esc(total);
+        String v = "<b>" + esc(score) + "</b>" + (max != null ? " / " + esc(max) : "");
+        String text = tr(userId,
+                "🎓 <b>Новая оценка</b>\n\n<blockquote>📖 Предмет: <b>" + s + "</b>\n📝 Задание: <b>" + k + "</b>\n⭐ Балл: " + v
+                        + (was != null ? " (было " + w + ")" : "")
+                        + (total != null ? "\n📊 Всего по предмету: <b>" + sum + "</b>" : "") + "</blockquote>",
+                "🎓 <b>Yangi baho</b>\n\n<blockquote>📖 Fan: <b>" + s + "</b>\n📝 Topshiriq: <b>" + k + "</b>\n⭐ Ball: " + v
+                        + (was != null ? " (avval " + w + " edi)" : "")
+                        + (total != null ? "\n📊 Fan bo'yicha jami: <b>" + sum + "</b>" : "") + "</blockquote>",
+                "🎓 <b>Янги баҳо</b>\n\n<blockquote>📖 Фан: <b>" + s + "</b>\n📝 Топшириқ: <b>" + k + "</b>\n⭐ Балл: " + v
+                        + (was != null ? " (аввал " + w + " эди)" : "")
+                        + (total != null ? "\n📊 Фан бўйича жами: <b>" + sum + "</b>" : "") + "</blockquote>",
+                "🎓 <b>New grade</b>\n\n<blockquote>📖 Subject: <b>" + s + "</b>\n📝 Task: <b>" + k + "</b>\n⭐ Score: " + v
+                        + (was != null ? " (was " + w + ")" : "")
+                        + (total != null ? "\n📊 Subject total: <b>" + sum + "</b>" : "") + "</blockquote>");
+        send(chatId, text, courseId == null ? null : markup(List.of(List.of(inlineBtn(
+                tr(userId, "📋 Задания предмета", "📋 Fan topshiriqlari", "📋 Фан топшириқлари", "📋 Subject tasks"),
+                "ac_back_" + courseId)))));
     }
 
     private void tickDeadlinesListReminder() {
@@ -2971,28 +3044,28 @@ public class LmsBot extends TelegramLongPollingBot {
     }
 
     private void urgentScanUser(long userId, long chatId) {
-            int semesterId = userSemester.getOrDefault(userId, getDefaultSemesterId(userId));
+            // Всегда текущий семестр: оценки и дедлайны идут в нём, что бы пользователь ни листал в боте.
+            int semesterId = getDefaultSemesterId(userId);
             if (semesterId <= 0) return;
 
-            // Всегда обеспечиваем актуальный список курсов
-            List<Course> courses = userCourses.get(userId);
-            if (courses == null || courses.isEmpty()) {
-                courses = lmsService.getMyCourses(userId, semesterId);
-                if (courses != null && !courses.isEmpty()) {
-                    userCourses.put(userId, courses);
-                    rememberSemester(userId, semesterId);
-                }
-            }
+            List<Course> courses = lmsService.getMyCourses(userId, semesterId);
             if (courses == null || courses.isEmpty()) return;
+            // Список для кнопок бота заполняем, только если его ещё нет: пользователь может листать другой семестр.
+            if (userCourses.get(userId) == null || userCourses.get(userId).isEmpty()) {
+                userCourses.put(userId, courses);
+                rememberSemester(userId, semesterId);
+            }
 
             long now = System.currentTimeMillis();
             // Срочным считаем дедлайн, до которого осталось не больше 2 дней
             long urgentUntil = now + URGENT_DEADLINE_WINDOW_MS;
 
+            notifyNewFinals(userId, chatId, semesterId);
 
             for (Course c : courses) {
                 CourseSummary cs = lmsService.getActivities(userId, c.getId());
                 if (cs == null || cs.getActivities() == null) continue;
+                notifyNewGrades(userId, chatId, c, cs);
 
                 for (Activity a : cs.getActivities()) {
                     long dl = parseActivityDeadlineTs(a.getDeadline());

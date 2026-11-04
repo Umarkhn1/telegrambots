@@ -210,6 +210,27 @@ public class StudentRegistry {
         dirty = true;
     }
 
+    /**
+     * Место по GPA среди студентов бота: один и тот же GPA — одно место. Свой GPA берём свежим,
+     * чужие — как запомнены при их последнем обновлении.
+     */
+    public Map<String, Object> gpaRank(long uid) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        Double mine = gpa(lms.getStudyPlan(uid));
+        Student me = students.get(uid);
+        if (mine != null && me != null && !mine.equals(me.gpa)) {
+            me.gpa = mine;
+            dirty = true;
+        }
+        int rank = 1;
+        for (Student s : students.values()) {
+            if (s.telegramId == uid || s.gpa == null || "teacher".equals(s.role)) continue;
+            if (mine != null && s.gpa > mine) rank++;
+        }
+        out.put("rank", mine != null ? rank : null);
+        return out;
+    }
+
     /** GPA по оценённым предметам — так же, как считает бот. */
     static Double gpa(List<StudyPlanSubject> plan) {
         long credits = 0, points = 0;

@@ -180,13 +180,13 @@ export function App() {
   } else if (!me || !app) {
     body = (
       <div className="screen" style={{ display: 'grid', placeItems: 'center' }}>
-        <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
+        <div style={{ display: 'grid', justifyItems: 'center', gap: 14 }}>
           <motion.div animate={{ scale: [1, 1.04, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}>
             <Emblem />
           </motion.div>
           <div className="splash-title">TUIT LMS</div>
           <LoaderCircle size={20} className="spin" color="var(--text-3)" />
-        </motion.div>
+        </div>
       </div>
     );
   } else if (!me.loggedIn) {
@@ -227,7 +227,7 @@ export function App() {
               exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 380, damping: 40 }}
             >
-              {top.name === 'course' && <CourseDetail course={top.course} onBack={pop} />}
+              {top.name === 'course' && <CourseDetail course={top.course} lesson={top.lesson} onBack={pop} />}
               {top.name === 'deadlines' && <Deadlines onBack={pop} />}
               {top.name === 'admin' && me.admin && <Admin onBack={pop} />}
               {top.name === 'tcourse' && <TeacherCourse course={top.course} column={top.column} onBack={pop} />}

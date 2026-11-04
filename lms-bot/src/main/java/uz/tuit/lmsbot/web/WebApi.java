@@ -221,6 +221,7 @@ public class WebApi {
         s.get("/api/schedule", this::schedule);
         s.get("/api/deadlines", this::deadlines);
         s.get("/api/study-plan", this::studyPlan);
+        s.get("/api/gpa-rank", this::gpaRank);
         s.get("/api/finals", this::finals);
         s.get("/api/profile", this::profile);
         s.get("/api/profile/photo", this::profilePhoto);
@@ -654,7 +655,9 @@ public class WebApi {
                     List<Activity> list = cs.getActivities();
                     for (int i = 0; i < list.size(); i++) {
                         long dl = LmsDates.parseDeadline(list.get(i).getDeadline());
-                        if (dl <= 0 || dl < now) continue;
+                        // Сданное и оценённое нужно и после срока: работу часто оценивают, когда он уже прошёл.
+                        boolean done = notBlank(list.get(i).getUploadedFileUrl()) || isGraded(list.get(i).getEarnedScore());
+                        if (!done && (dl <= 0 || dl < now)) continue;
                         Map<String, Object> m = activityJson(list.get(i), i, now);
                         m.put("courseId", c.getId());
                         m.put("course", c.getSubject());
@@ -667,7 +670,8 @@ public class WebApi {
             for (Future<List<Map<String, Object>>> f : futures) {
                 try { all.addAll(f.get(60, TimeUnit.SECONDS)); } catch (Exception ignored) {}
             }
-            all.sort(Comparator.comparingLong(m -> (Long) m.get("deadlineTs")));
+            // Срока может не быть у сданной работы: такие — в конец.
+            all.sort(Comparator.comparingLong(m -> m.get("deadlineTs") instanceof Long ts ? ts : Long.MAX_VALUE));
             return all;
         });
     }
@@ -675,6 +679,12 @@ public class WebApi {
     private Object studyPlan(Req r) {
         requireLogin(r);
         return cached(r, "plan", () -> lms.getStudyPlan(r.uid()));
+    }
+
+    /** Место студента по GPA: только его место, ни числа, ни данных других студентов здесь нет. */
+    private Object gpaRank(Req r) {
+        requireLogin(r);
+        return cached(r, "gpa-rank", () -> bot.students().gpaRank(r.uid()));
     }
 
     private Object finals(Req r) {
