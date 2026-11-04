@@ -1628,6 +1628,9 @@ public class LmsService {
                 ? new String[]{ "/teacher/my-course", "/teacher/schedule", "/teacher/subject" }
                 : new String[]{ "/student/my-courses", "/student/schedule", "/student/final-exams", "/student/attendance" };
 
+        // Один вариант — у первокурсника в первом семестре. Берём его, только если ни одна
+        // страница не дала полного списка: случайный одиночный select не должен его перебить.
+        AppConfig.SemesterConfig single = null;
         for (String page : pages) {
             try {
                 String html = teacherRead(userId, () -> getHtml(userId, base + page, base + "/dashboard"));
@@ -1662,6 +1665,7 @@ public class LmsService {
                         if (o.hasAttr("selected")) selectedId = s.getId();
                     }
 
+                    if (found.size() == 1 && named && single == null) single = found.values().iterator().next();
                     if (found.size() < 2) continue;
 
                     List<AppConfig.SemesterConfig> list = new ArrayList<>(found.values());
@@ -1675,6 +1679,11 @@ public class LmsService {
             } catch (Exception e) {
                 System.err.println("[LmsService] parseSemesters(" + page + "): " + e.getMessage());
             }
+        }
+        if (single != null) {
+            detectedDefaultSemester.put(userId, single.getId());
+            dbg("SEMESTERS u=%d single=%d", userId, single.getId());
+            return List.of(single);
         }
         return null;
     }
@@ -1693,6 +1702,18 @@ public class LmsService {
     // ─────────────────────────────────────────────
     //  STUDENT INFO
     // ─────────────────────────────────────────────
+
+    /**
+     * Подпись поля в нижнем регистре и в привычной латинице. LMS умеет и новую узбекскую
+     * латиницу (lang="uzl": «Yönaliş», «Tuğilgan», «Ta’lim şakli») — сводим её к o', sh, ch, g',
+     * а все виды апострофа — к ', чтобы одни и те же проверки работали для обеих.
+     */
+    static String uzLatinLabel(String text) {
+        return text.toLowerCase().trim()
+                .replace("ş", "sh").replace("ç", "ch").replace("ñ", "ng")
+                .replace("ö", "o'").replace("ğ", "g'").replace("ü", "u")
+                .replace('’', '\'').replace('‘', '\'').replace('ʻ', '\'').replace('ʼ', '\'').replace('`', '\'');
+    }
 
     public StudentInfo getStudentInfo(long userId) {
         try {
@@ -1716,21 +1737,21 @@ public class LmsService {
                 Element valueEl = f.selectFirst(".si-field-value");
                 if (labelEl == null || valueEl == null) continue;
 
-                String label = labelEl.text().toLowerCase().trim();
+                String label = uzLatinLabel(labelEl.text());
                 String value = valueEl.text().trim();
                 if (value.isEmpty()) continue;
 
                 if (label.startsWith("дата рожд") || label.contains("tug"))     info.setBirthDate(value);
                 else if (label.equals("пол") || label.contains("jins"))          info.setGender(value);
-                else if (label.startsWith("адрес(") || label.contains("(вр)"))   { /* временный адрес пропускаем */ }
+                else if (label.startsWith("адрес(") || label.contains("(вр)") || label.contains("vaqtinch")) { /* временный адрес пропускаем */ }
                 else if (label.startsWith("адрес") || label.contains("manzil"))  info.setAddress(value);
                 else if (label.contains("направлен") || label.contains("yo'nalish")) info.setDirection(value);
                 else if (label.contains("язык") || label.contains("til"))        info.setLanguage(value);
                 else if (label.contains("степень") || label.contains("daraja"))  info.setDegree(value);
-                else if (label.contains("тип обучен") || label.contains("turi")) info.setStudyType(value);
+                else if (label.contains("тип обучен") || label.contains("turi") || label.contains("shakl")) info.setStudyType(value);
                 else if (label.equals("курс") || label.contains("kurs"))         info.setCourse(value);
                 else if (label.contains("группа") || label.contains("guruh"))    info.setGroup(value);
-                else if (label.contains("куратор") || label.contains("kurator")) info.setCurator(value);
+                else if (label.contains("куратор") || label.contains("kurator") || label.contains("murabbiy")) info.setCurator(value);
                 else if (label.contains("стипенд") || label.contains("stipend")) info.setScholarship(value);
             }
 
