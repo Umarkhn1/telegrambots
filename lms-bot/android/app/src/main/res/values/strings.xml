@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TUIT LMS</string>
+    <string name="w_today">Today\'s classes</string>
+    <string name="w_today_sub">Today\'s timetable with the current class highlighted</string>
+    <string name="w_next">Next class</string>
+    <string name="w_next_sub">Next class, room and start time</string>
+    <string name="w_deadlines">Deadlines</string>
+    <string name="w_deadlines_sub">Upcoming deadlines with a countdown (teachers: works to grade)</string>
+    <string name="w_stats">Summary</string>
+    <string name="w_stats_sub">GPA, absences, deadlines and the next class</string>
+    <string name="s_schedule">Timetable</string>
+    <string name="s_deadlines">Deadlines</string>
+    <string name="s_grades">Grades</string>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TUIT LMS</string>
+    <string name="w_today">Пары сегодня</string>
+    <string name="w_today_sub">Расписание на сегодня с текущей парой</string>
+    <string name="w_next">Следующая пара</string>
+    <string name="w_next_sub">Ближайшая пара, аудитория и время</string>
+    <string name="w_deadlines">Дедлайны</string>
+    <string name="w_deadlines_sub">Ближайшие дедлайны с обратным отсчётом (преподавателю — работы на проверку)</string>
+    <string name="w_stats">Сводка</string>
+    <string name="w_stats_sub">GPA, НБ, дедлайны и следующая пара</string>
+    <string name="s_schedule">Расписание</string>
+    <string name="s_deadlines">Дедлайны</string>
+    <string name="s_grades">Оценки</string>
+</resources>

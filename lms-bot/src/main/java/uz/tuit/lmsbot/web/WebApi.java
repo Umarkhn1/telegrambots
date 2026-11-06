@@ -235,6 +235,9 @@ public class WebApi {
         s.post("/api/upload", this::upload);
 
         s.get("/api/admin/students", this::adminStudents);
+        // Админ-панель Android-приложения: приложение не из Telegram, initData у него нет —
+        // доступ по ключу, который бот выдаёт админам командой /adminapp.
+        s.publicGet("/api/app/admin/students", this::appAdminStudents);
         teacherApi.register(s);
         s.publicGet("/api/diag/net", this::diagNet);
         s.publicGet("/api/diag/oneid", this::diagOneId);
@@ -812,8 +815,32 @@ public class WebApi {
      * Доступ проверяется здесь, на сервере; во фронтенде кнопка лишь скрыта.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
+    /**
+     * Ключ админ-панели Android-приложения. Выводится из STATE_KEY (иначе из токена бота):
+     * стабилен между деплоями, а сменить его — значит сменить STATE_KEY.
+     */
+    public static String appAdminKey(String botToken) {
+        String secret = System.getenv("STATE_KEY");
+        if (secret == null || secret.isBlank()) secret = botToken;
+        return digest("admin-app|" + secret);
+    }
+
+    private Object appAdminStudents(Req r) {
+        String key = r.header("X-Admin-Key");
+        String want = appAdminKey(config.getBot().getToken());
+        if (key == null || !java.security.MessageDigest.isEqual(key.trim().getBytes(StandardCharsets.UTF_8), want.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiError(403, "forbidden");
+        }
+        return adminStudentsData(r);
+    }
+
     private Object adminStudents(Req r) {
         if (!AppConfig.isAdmin(r.uid())) throw new ApiError(403, "forbidden");
+        return adminStudentsData(r);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Object adminStudentsData(Req r) {
 
         List<StudentRegistry.Student> all = bot.students().all();
         long now = System.currentTimeMillis();

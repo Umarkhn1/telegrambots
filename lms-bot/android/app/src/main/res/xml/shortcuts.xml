@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="schedule" android:enabled="true" android:icon="@drawable/ic_s_schedule"
+        android:shortcutShortLabel="@string/s_schedule">
+        <intent android:action="android.intent.action.VIEW" android:data="tuitlms://open/schedule"
+            android:targetPackage="uz.tuit.lms" android:targetClass="uz.tuit.lms.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="deadlines" android:enabled="true" android:icon="@drawable/ic_s_schedule"
+        android:shortcutShortLabel="@string/s_deadlines">
+        <intent android:action="android.intent.action.VIEW" android:data="tuitlms://open/deadlines"
+            android:targetPackage="uz.tuit.lms" android:targetClass="uz.tuit.lms.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="grades" android:enabled="true" android:icon="@drawable/ic_s_grades"
+        android:shortcutShortLabel="@string/s_grades">
+        <intent android:action="android.intent.action.VIEW" android:data="tuitlms://open/grades"
+            android:targetPackage="uz.tuit.lms" android:targetClass="uz.tuit.lms.MainActivity" />
+    </shortcut>
+</shortcuts>

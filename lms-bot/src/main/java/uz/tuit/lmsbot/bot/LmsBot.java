@@ -360,6 +360,8 @@ public class LmsBot extends TelegramLongPollingBot {
             case "🗂 Ҳисобларим":
             case "🗂 My accounts":        autoLoginRetired(chatId, userId); break;
             case "/deletedata":           askEraseData(chatId, userId); break;
+            case "/adminapp":             sendAdminAppCode(chatId, userId); break;
+            case "/sendapp":              sendAppAsk(chatId, userId); break;
             case "/logout":
             case "🚪 Chiqish":
             case "🚪 Выйти":
@@ -411,6 +413,10 @@ public class LmsBot extends TelegramLongPollingBot {
 
         if (data.startsWith("t:") || data.startsWith("tc_") || data.startsWith("tf_")) {
             teacherBot.onCallback(chatId, userId, messageId, data);
+            return;
+        }
+        if ("sendapp_go".equals(data)) {
+            sendAppBroadcast(chatId, userId);
             return;
         }
         if (data.startsWith("lang_")) {
@@ -660,7 +666,7 @@ public class LmsBot extends TelegramLongPollingBot {
     // ─────────────────────────────────────────────
 
     /** Автор бота — подписывается в приветствии и описании. */
-    private static final String AUTHOR = "@umarkhn_1";
+    private static final String AUTHOR = "@umarkhodja_1";
 
     private void sendWelcome(long chatId, long userId, String firstName) {
         boolean in = lmsService.isLoggedIn(userId);
@@ -3646,6 +3652,152 @@ public class LmsBot extends TelegramLongPollingBot {
         } catch (Exception ignored) {
             // Сообщение могли удалить вручную или оно старше 48 часов — не беда.
         }
+    }
+
+    /**
+     * Код для админ-панели Android-приложения: адрес сервиса и ключ доступа одной строкой.
+     * Только администраторам; остальным команда ничего не выдаёт.
+     */
+    private void sendAdminAppCode(long chatId, long userId) {
+        if (!AppConfig.isAdmin(userId)) return;
+        String url = System.getenv("WEBHOOK_URL");
+        if (url == null || url.isBlank()) url = System.getenv("RENDER_EXTERNAL_URL");
+        if (url == null || url.isBlank()) url = System.getenv("WEBAPP_URL");
+        if (url == null || url.isBlank()) {
+            send(chatId, tr(userId,
+                    "Публичный адрес сервиса неизвестен (WEBHOOK_URL / RENDER_EXTERNAL_URL) — админ-панель приложения недоступна.",
+                    "Servis manzili noma'lum (WEBHOOK_URL / RENDER_EXTERNAL_URL) — ilova admin paneli ishlamaydi.",
+                    "Сервис манзили номаълум (WEBHOOK_URL / RENDER_EXTERNAL_URL) — илова админ панели ишламайди.",
+                    "The public URL is unknown (WEBHOOK_URL / RENDER_EXTERNAL_URL) — the app admin panel is unavailable."), null);
+            return;
+        }
+        url = url.trim().replaceAll("/app/?$", "");
+        if (!url.endsWith("/")) url += "/";
+        String code = "LMSADMIN:" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(url.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                + "." + uz.tuit.lmsbot.web.WebApi.appAdminKey(config.getBot().getToken());
+        send(chatId, tr(userId,
+                "🔐 <b>Админ-панель Android-приложения</b>\n\nСкопируйте код и вставьте его в приложении: Настройки → Админ-панель.\n\n<code>" + code + "</code>\n\n⚠️ Не пересылайте код: с ним видны данные всех студентов.",
+                "🔐 <b>Android ilovasining admin paneli</b>\n\nKodni nusxalab, ilovada qo'ying: Sozlamalar → Admin panel.\n\n<code>" + code + "</code>\n\n⚠️ Kodni hech kimga yubormang: u bilan barcha talabalar ma'lumotlari ko'rinadi.",
+                "🔐 <b>Android иловасининг админ панели</b>\n\nКодни нусхалаб, иловада қўйинг: Созламалар → Админ панел.\n\n<code>" + code + "</code>\n\n⚠️ Кодни ҳеч кимга юборманг: у билан барча талабалар маълумотлари кўринади.",
+                "🔐 <b>Android app admin panel</b>\n\nCopy the code and paste it in the app: Settings → Admin panel.\n\n<code>" + code + "</code>\n\n⚠️ Don't forward it: it gives access to all students' data."), null);
+    }
+
+    // ─────────────────────────────────────────────
+    //  РАССЫЛКА ANDROID-ПРИЛОЖЕНИЯ
+    //  /sendapp (только админам): последний APK из релизов GitHub (тег android-<versionCode>)
+    //  уходит всем пользователям бота. Файл загружается в Telegram один раз, остальным —
+    //  по file_id, с паузой между сообщениями, чтобы не упереться в лимиты Telegram.
+    // ─────────────────────────────────────────────
+
+    private static final String APP_REPO = "Umarkhn1/telegrambots";
+    private volatile boolean appBroadcasting;
+
+    private record ReleaseApk(java.io.File file, String version) {}
+
+    private void sendAppAsk(long chatId, long userId) {
+        if (!AppConfig.isAdmin(userId)) return;
+        int n = students().all().size();
+        send(chatId, tr(userId,
+                "📤 Разослать Android-приложение (последний релиз с GitHub) всем пользователям бота: <b>" + n + "</b>?",
+                "📤 Android ilovasini (GitHub'dagi oxirgi reliz) botning barcha foydalanuvchilariga yuborish: <b>" + n + "</b>?",
+                "📤 Android иловасини (GitHub'даги охирги релиз) ботнинг барча фойдаланувчиларига юбориш: <b>" + n + "</b>?",
+                "📤 Send the Android app (latest GitHub release) to all bot users: <b>" + n + "</b>?"),
+                markup(List.of(List.of(inlineBtn(tr(userId, "📤 Отправить всем", "📤 Hammaga yuborish", "📤 Ҳаммага юбориш", "📤 Send to everyone"), "sendapp_go")))));
+    }
+
+    private void sendAppBroadcast(long chatId, long adminId) {
+        if (!AppConfig.isAdmin(adminId)) return;
+        if (appBroadcasting) {
+            send(chatId, tr(adminId, "⏳ Рассылка уже идёт.", "⏳ Yuborish davom etmoqda.", "⏳ Юбориш давом этмоқда.", "⏳ Already sending."), null);
+            return;
+        }
+        appBroadcasting = true;
+        Thread th = new Thread(() -> {
+            ReleaseApk apk = null;
+            try {
+                apk = downloadLatestApk();
+                SendDocument first = new SendDocument(String.valueOf(chatId), new InputFile(apk.file(), "TUIT-LMS.apk"));
+                first.setCaption(appCaption(adminId, apk.version()));
+                first.setParseMode("HTML");
+                Message m = execute(first);
+                String fileId = m.getDocument().getFileId();
+                int ok = 1, failed = 0;
+                for (uz.tuit.lmsbot.service.StudentRegistry.Student st : students().all()) {
+                    if (st.telegramId == chatId) continue;
+                    try {
+                        SendDocument d = new SendDocument(String.valueOf(st.telegramId), new InputFile(fileId));
+                        d.setCaption(appCaption(st.telegramId, apk.version()));
+                        d.setParseMode("HTML");
+                        execute(d);
+                        ok++;
+                    } catch (Exception e) {
+                        failed++;   // заблокировал бота или удалил аккаунт
+                    }
+                    sleepQuietly(80);
+                }
+                send(chatId, tr(adminId,
+                        "✅ Рассылка завершена: доставлено <b>" + ok + "</b>, не доставлено " + failed + " (заблокировали бота).",
+                        "✅ Yuborish tugadi: yetkazildi <b>" + ok + "</b>, yetkazilmadi " + failed + " (botni bloklagan).",
+                        "✅ Юбориш тугади: етказилди <b>" + ok + "</b>, етказилмади " + failed + " (ботни блоклаган).",
+                        "✅ Done: delivered <b>" + ok + "</b>, failed " + failed + " (blocked the bot)."), null);
+            } catch (Exception e) {
+                System.err.println("[LmsBot] sendapp: " + e);
+                send(chatId, "❌ " + esc(String.valueOf(e.getMessage())), null);
+            } finally {
+                appBroadcasting = false;
+                if (apk != null) apk.file().delete();
+            }
+        }, "sendapp");
+        th.setDaemon(true);
+        th.start();
+    }
+
+    private String appCaption(long userId, String version) {
+        return tr(userId,
+                "📱 <b>TUIT LMS для Android</b> · " + esc(version) + "\n\n"
+                        + "Всё из бота в отдельном приложении: расписание, задания, оценки, НБ, уведомления о парах и дедлайнах, виджеты.\n\n"
+                        + "Откройте файл и установите. Если приложение уже стоит — установите поверх, вход сохранится. Дальше обновления придут в самом приложении.",
+                "📱 <b>TUIT LMS Android uchun</b> · " + esc(version) + "\n\n"
+                        + "Botdagi hamma narsa alohida ilovada: dars jadvali, topshiriqlar, baholar, NB, dars va deadline eslatmalari, vidjetlar.\n\n"
+                        + "Faylni ochib, o'rnating. Ilova allaqachon bo'lsa — ustidan o'rnating, kirish saqlanadi. Keyingi yangilanishlar ilovaning o'zida keladi.",
+                "📱 <b>TUIT LMS Android учун</b> · " + esc(version) + "\n\n"
+                        + "Ботдаги ҳамма нарса алоҳида иловада: дарс жадвали, топшириқлар, баҳолар, НБ, дарс ва дедлайн эслатмалари, виджетлар.\n\n"
+                        + "Файлни очиб, ўрнатинг. Илова аллақачон бўлса — устидан ўрнатинг, кириш сақланади. Кейинги янгиланишлар илованинг ўзида келади.",
+                "📱 <b>TUIT LMS for Android</b> · " + esc(version) + "\n\n"
+                        + "Everything from the bot in a standalone app: timetable, tasks, grades, absences, class and deadline reminders, widgets.\n\n"
+                        + "Open the file and install it. If the app is already installed, install over it — you stay signed in. Further updates arrive inside the app.");
+    }
+
+    /** Последний релиз android-<versionCode> из GitHub: APK во временный файл и название версии. */
+    private ReleaseApk downloadLatestApk() throws Exception {
+        java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .connectTimeout(java.time.Duration.ofSeconds(20)).build();
+        java.net.http.HttpRequest list = java.net.http.HttpRequest.newBuilder(java.net.URI.create("https://api.github.com/repos/" + APP_REPO + "/releases?per_page=30"))
+                .header("Accept", "application/vnd.github+json").header("User-Agent", "lms-bot").build();
+        com.fasterxml.jackson.databind.JsonNode arr = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(http.send(list, java.net.http.HttpResponse.BodyHandlers.ofString()).body());
+        int best = -1;
+        String url = null, name = null;
+        for (com.fasterxml.jackson.databind.JsonNode r : arr) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^android-(\\d+)$").matcher(r.path("tag_name").asText(""));
+            if (!m.find() || r.path("draft").asBoolean(false)) continue;
+            int code = Integer.parseInt(m.group(1));
+            if (code <= best) continue;
+            for (com.fasterxml.jackson.databind.JsonNode a : r.path("assets")) {
+                if (a.path("name").asText("").endsWith(".apk")) {
+                    best = code;
+                    url = a.path("browser_download_url").asText();
+                    name = r.path("name").asText("android-" + code);
+                    break;
+                }
+            }
+        }
+        if (url == null) throw new IllegalStateException("На GitHub нет релиза android-* с APK");
+        java.io.File tmp = java.io.File.createTempFile("tuit-lms-", ".apk");
+        java.net.http.HttpRequest get = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).header("User-Agent", "lms-bot").build();
+        http.send(get, java.net.http.HttpResponse.BodyHandlers.ofFile(tmp.toPath()));
+        return new ReleaseApk(tmp, name);
     }
 
     void send(long chatId, String text, Object keyboard) {

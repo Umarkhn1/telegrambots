@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TUIT LMS</string>
+    <string name="w_today">Bugungi darslar</string>
+    <string name="w_today_sub">Bugungi dars jadvali, joriy dars ajratilgan</string>
+    <string name="w_next">Keyingi dars</string>
+    <string name="w_next_sub">Eng yaqin dars, xona va vaqt</string>
+    <string name="w_deadlines">Deadlinelar</string>
+    <string name="w_deadlines_sub">Yaqin deadlinelar va qolgan vaqt (o\'qituvchiga — tekshiriladigan ishlar)</string>
+    <string name="w_stats">Xulosa</string>
+    <string name="w_stats_sub">GPA, NB, deadlinelar va keyingi dars</string>
+    <string name="s_schedule">Dars jadvali</string>
+    <string name="s_deadlines">Deadlinelar</string>
+    <string name="s_grades">Baholar</string>
+</resources>

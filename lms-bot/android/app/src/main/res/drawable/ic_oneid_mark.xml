@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Официальный логотип OneID (id.egov.uz). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="50dp" android:height="50dp" android:viewportWidth="50" android:viewportHeight="50">
+    <group android:translateX="-25">
+        <path android:fillColor="#003399" android:pathData="M49.8535 16.9935C46.4265 16.9935 43.6485 19.7734 43.6485 23.2026V50H50.0168C52.1 50 54.1239 49.7448 56.0585 49.264V23.2026C56.0585 19.7734 53.2804 16.9935 49.8535 16.9935Z" />
+        <path android:fillColor="#003399" android:pathData="M75 25C75 34.3544 69.866 42.5088 62.2634 46.7954V3.20461C69.866 7.49125 75 15.6456 75 25Z" />
+        <path android:fillColor="#003399" android:pathData="M37.4435 0H25.0335V50H37.4435V0Z" />
+        <path android:fillColor="#003399" android:pathData="M56.385 6.37255C56.385 9.89201 53.5339 12.7451 50.0168 12.7451C46.4997 12.7451 43.6485 9.89201 43.6485 6.37255C43.6485 2.85309 46.4997 0 50.0168 0C53.5339 0 56.385 2.85309 56.385 6.37255Z" />
+    </group>
+</vector>

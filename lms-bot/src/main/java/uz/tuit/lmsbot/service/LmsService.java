@@ -428,7 +428,9 @@ public class LmsService {
         if (ONEID_REQUIRED.matcher(html).find()) return true;
         Matcher m = Pattern.compile("\\\\u([0-9a-fA-F]{4})").matcher(html);
         if (!m.find()) return false;
-        StringBuilder sb = new StringBuilder();
+        // StringBuffer, а не StringBuilder: этот же код работает в Android-приложении,
+        // а appendReplacement(StringBuilder) там есть только с Android 14.
+        StringBuffer sb = new StringBuffer();
         m.reset();
         while (m.find()) m.appendReplacement(sb, Matcher.quoteReplacement(String.valueOf((char) Integer.parseInt(m.group(1), 16))));
         m.appendTail(sb);
