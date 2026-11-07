@@ -1,7 +1,7 @@
 {
- "code": 6,
+ "code": 7,
  "name": "TUIT LMS 1.2.1",
- "notes": "Обновления приходят в приложение сразу (без ограничений GitHub). Иконка — эмблема университета, вход OneID через страницу id.egov.uz с паролями Google, код Mobile ID из SMS, не выкидывает из аккаунта.",
- "size": 4555016,
- "apk": "https://github.com/Umarkhn1/telegrambots/releases/download/android-6/TUIT-LMS.apk"
+ "notes": "На главной рядом с НБ показаны часы пропусков (1 НБ = 2 часа). Обновления приходят в приложение сразу. Иконка — эмблема университета, вход OneID через страницу id.egov.uz с паролями Google, код Mobile ID из SMS, не выкидывает из аккаунта.",
+ "size": 4555012,
+ "apk": "https://github.com/Umarkhn1/telegrambots/releases/download/android-7/TUIT-LMS.apk"
 }
