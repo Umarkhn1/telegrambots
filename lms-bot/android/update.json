@@ -1,0 +1,7 @@
+{
+ "code": 6,
+ "name": "TUIT LMS 1.2.1",
+ "notes": "ќбновлени€ приход€т в приложение сразу (без ограничений GitHub). »конка Ч эмблема университета, вход OneID через страницу id.egov.uz с парол€ми Google, код Mobile ID из SMS, не выкидывает из аккаунта.",
+ "size": 4555016,
+ "apk": "https://github.com/Umarkhn1/telegrambots/releases/download/android-6/TUIT-LMS.apk"
+}
